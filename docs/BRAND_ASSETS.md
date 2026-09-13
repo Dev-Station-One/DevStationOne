@@ -1,30 +1,41 @@
 # DevStationOne Brand Assets
 
-## Approved direction
+## Approved identity
 
-The approved identity uses the **Option 5 infinity/flow mark** with the **Option 2 teal/cyan palette**.
+The approved identity is the **DS1 infinity/flow mark** with the **teal/cyan palette**.
 
-Primary brand gradient:
+Primary brand gradient: `#00E5A8 → #00CFEA → #00C2FF`
 
-`#00E5A8 → #00CFEA → #00C2FF`
+Approved palette (from `assets/brand-assets/README.md`):
+
+- Primary: `#00E5A8`
+- Secondary: `#00C2FF`
+- Background: `#0B1220`
+- Text / Muted: `#94A3B8`
 
 ## Application assets
 
-- `assets/logo/devstation-horizontal.svg` — primary top-navigation logo
-- `assets/logo/devstation-horizontal.png` — raster navigation logo
-- `assets/logo/devstation-github.svg` — large GitHub/front-page logo
-- `assets/logo/devstation-github.png` — raster GitHub logo
-- `assets/logo/devstation-mark.svg` — standalone mark
-- `assets/logo/devstation-mark.png` — raster standalone mark
-- `assets/logo/favicon-16.png` — browser favicon
-- `assets/logo/favicon-32.png` — browser favicon
-- `assets/logo/favicon-48.png` — browser favicon
-- `assets/logo/favicon-180.png` — Apple touch icon size
-- `assets/logo/favicon-256.png` — application icon
-- `assets/logo/favicon-512.png` — application/icon source
+Installed in `assets/logo/` (served at `/assets/logo/`):
+
+- `icon-mark-dark.png` — DS1 mark on dark tile; top-navigation logo (used with the "DevStationOne" text link)
+- `icon-mark-light.png` — DS1 mark on light background; light-context use
+- `favicon-16.png` / `favicon-32.png` / `favicon-64.png` / `favicon-128.png` / `favicon-256.png` / `favicon-512.png` — favicon sizes
+- `og-image.png` — social preview (cropped from the approved board's OG image)
+
+Also installed:
+
+- `web/static/favicon.ico` — served at `/favicon.ico`
+- `assets/logo/github-banner-readme-header.png` — GitHub README header banner
+
+Reference board (source crops, not deployed): `assets/brand-assets/` with its own `README.md`.
 
 ## Usage
 
-The navigation logo is optimized for horizontal, compact placement. The GitHub logo is intended for README/project presentation. The standalone mark is the default favicon and compact application identity.
+- Top navigation: `icon-mark-dark.png` at ~26px height next to the "DevStationOne" text, matching the Tabler folded-layout pattern.
+- Favicons: pages link `/favicon.ico`, `favicon-32.png`, `favicon-16.png`, and use `favicon-256.png` as the Apple touch icon (the pack has no 180px asset).
 
-Keep the mark unobstructed and preserve transparent backgrounds for the primary SVG/PNG assets.
+## Known limitation
+
+The brand-assets pack is raster crops from the approved visual board. Production branding should
+recreate/export the DS1 mark and wordmark as clean vector artwork (SVG) from the approved design
+rather than tracing the board screenshot — see `assets/brand-assets/README.md`.

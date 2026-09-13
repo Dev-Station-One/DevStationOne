@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 120" role="img" aria-label="DevStation">
- <defs>
-  <linearGradient id="g" x1="0%" y1="50%" x2="100%" y2="50%">
-   <stop offset="0%" stop-color="#00E5A8"/><stop offset="55%" stop-color="#00CFEA"/><stop offset="100%" stop-color="#00C2FF"/>
-  </linearGradient>
- </defs>
- <path d="M28 60 C28 36 53 30 78 60 C103 90 128 84 128 60 C128 36 103 30 78 60 C53 90 28 84 28 60 Z" fill="none" stroke="url(#g)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
- <text x="155" y="77" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="58" font-weight="700" fill="#FFFFFF" letter-spacing="-2">DevStation</text>
-</svg>
