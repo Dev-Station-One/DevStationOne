@@ -5,12 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · DevStation</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/assets/logo/favicon-180.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
 </head>
 <body class="d-flex flex-column">
   <div class="page page-center">
     <div class="container container-tight py-4">
       <div class="text-center mb-4">
-        <span class="navbar-brand">DevStation</span>
+        <span class="navbar-brand d-inline-flex align-items-center gap-2">
+          <img src="/assets/logo/devstation-mark.svg" alt="" style="height: 26px;"> DevStation
+        </span>
       </div>
       <div class="card card-md">
         <div class="card-body">
@@ -35,6 +42,7 @@
   </div>
   <script src="/vendor/jquery/jquery.min.js"></script>
   <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script src="/js/app.js"></script>
   <script>
     $('#login-form').on('submit', function (e) {
       e.preventDefault();

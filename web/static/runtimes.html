@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Runtimes · DevStation</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/assets/logo/favicon-180.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
 </head>
 <body>
   <div class="page">
@@ -13,8 +18,9 @@
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
-        <h1 class="navbar-brand navbar-brand-autodark">
-          <a href="/">DevStation</a>
+        <h1 class="navbar-brand navbar-brand-autodark d-flex align-items-center gap-2">
+          <a href="/"><img src="/assets/logo/devstation-mark.svg" alt="" class="ds-logo" style="height: 26px;"></a>
+          <a href="/" class="text-reset text-decoration-none">DevStation</a>
         </h1>
         <div class="collapse navbar-collapse" id="sidebar-menu">
           <ul class="navbar-nav pt-lg-3">
@@ -35,11 +41,17 @@
     </aside>
     <div class="page-wrapper">
       <header class="navbar navbar-expand-md navbar-light d-print-none">
-        <div class="container-xl d-flex justify-content-between">
+        <div class="container-xl d-flex justify-content-between align-items-center">
           <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
-          <div>
-            <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
-            <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Log out</button>
+          <div class="d-flex align-items-center gap-2">
+            <button id="theme-toggle" class="btn btn-outline-secondary btn-sm" type="button" aria-label="Switch theme">&#9684;</button>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Account</button>
+              <div class="dropdown-menu dropdown-menu-end">
+                <a class="dropdown-item" href="/account.html">Account</a>
+                <button class="dropdown-item" type="button" id="logout-btn">Log out</button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -97,6 +109,7 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
   </div>
   <script src="/vendor/jquery/jquery.min.js"></script>
   <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script src="/js/app.js"></script>
   <script>
     function escapeHtml(s) {
       return $('<div>').text(s).html();

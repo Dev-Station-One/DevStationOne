@@ -70,6 +70,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Hand
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/move", requireSession(db, fileTransferHandler(db, registry, "move")))
 	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/files", requireSession(db, deleteFileHandler(db, registry)))
 
+	// StripPrefix: FileServer maps the full URL path under the root dir, so
+	// /assets/x must lose the /assets/ prefix before hitting http.Dir.
+	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
+
 	mux.Handle("GET /", http.FileServer(http.Dir(staticDir)))
 
 	return withRequestLogging(logger, mux)

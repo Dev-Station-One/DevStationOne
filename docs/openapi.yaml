@@ -106,16 +106,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [terminal_font]
+              description: Partial update — fields left out are untouched; at least one must be present.
               properties:
                 terminal_font:
                   type: string
                   enum: [system, jetbrainsmono-nerd]
+                theme:
+                  type: string
+                  enum: [dark, light]
       responses:
         "204":
           description: Saved
         "400":
-          description: Unknown terminal_font value
+          description: Unknown value, or no field named
         "401":
           description: Not authenticated
   /api/v1/auth/sessions:
@@ -1373,7 +1376,7 @@ components:
           type: [string, "null"]
     User:
       type: object
-      required: [id, email, is_admin, terminal_font, created_at]
+      required: [id, email, is_admin, terminal_font, theme, created_at]
       properties:
         id:
           type: string
@@ -1385,6 +1388,9 @@ components:
         terminal_font:
           type: string
           enum: [system, jetbrainsmono-nerd]
+        theme:
+          type: string
+          enum: [dark, light]
         created_at:
           type: string
           format: date-time

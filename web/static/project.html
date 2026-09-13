@@ -5,9 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Project · DevStation</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/assets/logo/favicon-180.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
   <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <link rel="stylesheet" href="/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="/vendor/codemirror/addon/dialog/dialog.min.css">
+  <link rel="stylesheet" href="/vendor/codemirror/theme/material-darker.min.css">
   <style>
     /* Nerd Font for the terminal (docs/REQUIREMENTS_NERD_FONT.md). Loaded by
        the browser only once a terminal actually uses it. */
@@ -58,6 +64,15 @@
     .session-tab .status-dot.status-exited,
     .session-tab .status-dot.status-failed,
     .session-tab .status-dot.status-closed { background: var(--tblr-danger); }
+    /* Background-activity marker (VISUAL spec tab anatomy: [status][name][activity][close]). */
+    .session-tab .activity-dot {
+      width: .375rem;
+      height: .375rem;
+      border-radius: 50%;
+      background: var(--ds-secondary);
+      flex-shrink: 0;
+      margin-left: .125rem;
+    }
     .session-tab .close-btn {
       border: none;
       background: none;
@@ -128,8 +143,9 @@
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
         </button>
-        <h1 class="navbar-brand navbar-brand-autodark">
-          <a href="/">DevStation</a>
+        <h1 class="navbar-brand navbar-brand-autodark d-flex align-items-center gap-2">
+          <a href="/"><img src="/assets/logo/devstation-mark.svg" alt="" class="ds-logo" style="height: 26px;"></a>
+          <a href="/" class="text-reset text-decoration-none">DevStation</a>
         </h1>
         <div class="collapse navbar-collapse" id="sidebar-menu">
           <ul class="navbar-nav pt-lg-3">
@@ -150,11 +166,17 @@
     </aside>
     <div class="page-wrapper">
       <header class="navbar navbar-expand-md navbar-light d-print-none">
-        <div class="container-xl d-flex justify-content-between">
+        <div class="container-xl d-flex justify-content-between align-items-center">
           <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
-          <div>
-            <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
-            <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Log out</button>
+          <div class="d-flex align-items-center gap-2">
+            <button id="theme-toggle" class="btn btn-outline-secondary btn-sm" type="button" aria-label="Switch theme">&#9684;</button>
+            <div class="dropdown">
+              <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Account</button>
+              <div class="dropdown-menu dropdown-menu-end">
+                <a class="dropdown-item" href="/account.html">Account</a>
+                <button class="dropdown-item" type="button" id="logout-btn">Log out</button>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -247,9 +269,12 @@
                   <button class="btn btn-outline-secondary" type="submit">Search</button>
                 </form>
               </div>
-              <div id="files-selected-bar" class="d-flex align-items-center gap-2 mb-2 d-none">
+              <div id="files-selected-bar" class="d-flex align-items-center gap-2 mb-2 d-none flex-wrap">
                 <span id="files-selected-count" class="small text-secondary"></span>
                 <button id="files-delete-selected-btn" class="btn btn-sm btn-outline-danger">Delete selected</button>
+                <button id="files-download-selected-btn" class="btn btn-sm btn-outline-secondary">Download</button>
+                <button id="files-copy-selected-btn" class="btn btn-sm btn-outline-secondary">Copy to…</button>
+                <button id="files-move-selected-btn" class="btn btn-sm btn-outline-secondary">Move to…</button>
                 <button id="files-clear-selection-btn" class="btn btn-sm btn-link">Clear</button>
               </div>
               <div id="files-loading" class="text-secondary">Loading files…</div>
@@ -291,6 +316,22 @@
                   <div id="file-editor-error" class="alert alert-danger mb-2" hidden></div>
                   <div id="file-editor-cm"></div>
                   <div id="file-editor-preview" hidden></div>
+                </div>
+              </div>
+
+              <div id="file-properties" class="card mt-3" hidden>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <strong id="file-properties-title">—</strong>
+                  <button id="file-properties-close-btn" class="btn btn-sm btn-outline-secondary" type="button">Close</button>
+                </div>
+                <div class="card-body">
+                  <dl class="row mb-0">
+                    <dt class="col-4 col-md-3">Path</dt><dd class="col-8 col-md-9 text-break" id="fp-path">—</dd>
+                    <dt class="col-4 col-md-3">Type</dt><dd class="col-8 col-md-9" id="fp-type">—</dd>
+                    <dt class="col-4 col-md-3">Size</dt><dd class="col-8 col-md-9" id="fp-size">—</dd>
+                    <dt class="col-4 col-md-3">Modified</dt><dd class="col-8 col-md-9" id="fp-mtime">—</dd>
+                    <dt class="col-4 col-md-3">Mode</dt><dd class="col-8 col-md-9" id="fp-mode">—</dd>
+                  </dl>
                 </div>
               </div>
             </div>
@@ -349,6 +390,7 @@
   </div>
   <script src="/vendor/jquery/jquery.min.js"></script>
   <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script src="/js/app.js"></script>
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>
   <script src="/vendor/codemirror/codemirror.min.js"></script>
@@ -538,7 +580,9 @@
     function statusLabel(status) {
       var labels = {
         requested: 'Requested', starting: 'Starting', running: 'Running',
-        detached: 'Detached (process alive)', exited: 'Exited', failed: 'Failed', closed: 'Closed'
+        detached: 'Detached (process alive)', exited: 'Exited', failed: 'Failed', closed: 'Closed',
+        // Connection-level states (set from the stream socket, not the DB row).
+        'runtime-offline': 'Runtime offline.', 'runtime-revoked': 'Runtime revoked.'
       };
       return labels[status] || status;
     }
@@ -556,6 +600,11 @@
         var $tab = $('<div class="session-tab" role="button" tabindex="0">').toggleClass('active', id === activeSessionID);
         $('<span class="status-dot">').addClass('status-' + st.info.status).appendTo($tab);
         $('<span>').text(st.info.name).appendTo($tab);
+        // Background output arrived since the tab was last selected (VISUAL
+        // spec: the marker clears on select and never steals focus).
+        if (st.activity && id !== activeSessionID) {
+          $('<span class="activity-dot" title="New output">').appendTo($tab);
+        }
         var $close = $('<button type="button" class="close-btn" title="Close session" aria-label="Close session">&times;</button>');
         $close.on('click', function (e) { e.stopPropagation(); closeSession(id); });
         $tab.append($close);
@@ -611,7 +660,9 @@
       if (!st || ['closed', 'exited', 'failed'].indexOf(st.info.status) !== -1) return;
       st.reconnectAttempts = (st.reconnectAttempts || 0) + 1;
       if (st.reconnectAttempts > 5) {
-        setSessionStatusText(id, 'Connection lost.');
+        // The session's process is still alive server-side; the runtime is
+        // just unreachable from here (VISUAL spec "runtime offline").
+        setSessionStatusText(id, statusLabel('runtime-offline'));
         return;
       }
       setSessionStatusText(id, 'Reconnecting…');
@@ -633,6 +684,10 @@
       };
       ws.onmessage = function (evt) {
         st.term.write(new Uint8Array(evt.data));
+        if (id !== activeSessionID && !st.activity) {
+          st.activity = true;
+          renderSessionTabs();
+        }
       };
       ws.onclose = function () {
         st.ws = null;
@@ -644,6 +699,7 @@
     function selectSession(id) {
       var previous = activeSessionID;
       activeSessionID = id;
+      termState[id].activity = false; // selecting clears the activity marker
       paneFor(id); // must exist before the visibility pass below covers it
       Object.keys(termState).forEach(function (otherID) {
         var pane = termState[otherID].pane;
@@ -992,10 +1048,49 @@
         if (!to) return;
         pathAction('move', p, to, function () { loadFiles(); });
       });
+      btn('Properties', 'btn-outline-secondary', function () { showFileProperties(p, entry); });
       btn('Delete', 'btn-outline-danger', function () {
         deletePath(p, function () { loadFiles(); });
       });
       return $actions;
+    }
+
+    function showFileProperties(p, entry) {
+      $('#file-properties-title').text(baseName(p));
+      $('#fp-path').text(p);
+      $('#fp-type').text(entry.type);
+      $('#fp-size').text(entry.type === 'dir' ? '—' : fmtSize(entry.size));
+      $('#fp-mtime').text(fmtTime(entry.mtime));
+      $('#fp-mode').text(entry.mode);
+      $('#file-properties').prop('hidden', false);
+      document.getElementById('file-properties').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    $('#file-properties-close-btn').on('click', function () {
+      $('#file-properties').prop('hidden', true);
+    });
+
+    function batchTransfer(action, paths, toDir, done) {
+      var failures = [];
+      var next = function (i) {
+        if (i >= paths.length) {
+          if (failures.length) {
+            window.alert('Failed to ' + action + ': ' + failures.join(', '));
+          }
+          done();
+          return;
+        }
+        var name = baseName(paths[i]);
+        var to = toDir === '.' ? name : toDir + '/' + name;
+        $.ajax({
+          url: filesURL('/' + action),
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ from: paths[i], to: to })
+        }).fail(function () { failures.push(paths[i]); })
+          .always(function () { next(i + 1); });
+      };
+      next(0);
     }
 
     function renderSelectionBar() {
@@ -1210,6 +1305,36 @@
       next();
     });
 
+    $('#files-download-selected-btn').on('click', function () {
+      var paths = selectedPaths();
+      if (!paths.length) return;
+      paths.forEach(function (p, i) {
+        setTimeout(function () {
+          var a = document.createElement('a');
+          a.href = filesURL('/content', 'path=' + encodeURIComponent(p) + '&download=1');
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }, i * 300);
+      });
+    });
+
+    $('#files-copy-selected-btn').on('click', function () {
+      var paths = selectedPaths();
+      if (!paths.length) return;
+      var toDir = window.prompt('Copy ' + paths.length + ' file(s) into directory:', filesDir);
+      if (!toDir) return;
+      batchTransfer('copy', paths, toDir, function () { loadFiles(); });
+    });
+
+    $('#files-move-selected-btn').on('click', function () {
+      var paths = selectedPaths();
+      if (!paths.length) return;
+      var toDir = window.prompt('Move ' + paths.length + ' file(s) into directory:', filesDir);
+      if (!toDir) return;
+      batchTransfer('move', paths, toDir, function () { loadFiles(); });
+    });
+
     $('#files-tbody').closest('table').find('th[data-sort]').on('click', function () {
       var key = $(this).data('sort');
       if (!key) return;
@@ -1247,6 +1372,7 @@
         lineNumbers: true,
         matchBrackets: true,
         autoCloseBrackets: true,
+        theme: cmThemeName(),
         extraKeys: { 'Ctrl-F': 'findPersistent', 'Cmd-F': 'findPersistent' }
       });
       cmInstance.on('change', function () {
@@ -1256,6 +1382,14 @@
       });
       return cmInstance;
     }
+
+    function cmThemeName() {
+      return document.documentElement.getAttribute('data-bs-theme') === 'light' ? 'default' : 'material-darker';
+    }
+
+    document.addEventListener('ds-theme', function () {
+      if (cmInstance) cmInstance.setOption('theme', cmThemeName());
+    });
 
     function showEditorPane(which) {
       // which: 'cm' | 'preview'
@@ -1335,6 +1469,7 @@
           cm.setValue(new TextDecoder().decode(bytes));
           cm.setOption('mode', cmMode(ext) || 'text/plain');
           cm.setOption('readOnly', editorState.readOnly);
+          cm.setOption('theme', cmThemeName());
           cm.clearHistory();
           cm.markClean();
           editorState.loading = false;

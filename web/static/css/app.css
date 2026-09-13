@@ -1,0 +1,71 @@
+/* DevStation shared theme (docs/BOOTSTRAP_COLORS.md, docs/BRAND_ASSETS.md).
+   Dark workstation palette is the default; light tokens flip under
+   [data-bs-theme="light"]. Loaded by every page. */
+
+:root {
+  --bs-primary: #00E5A8;
+  --bs-primary-rgb: 0, 229, 168;
+  --bs-secondary: #00C2FF;
+  --bs-secondary-rgb: 0, 194, 255;
+  --bs-success: #10B981;
+  --bs-success-rgb: 16, 185, 129;
+  --bs-info: #3B82F6;
+  --bs-info-rgb: 59, 130, 246;
+  --bs-warning: #F59E0B;
+  --bs-warning-rgb: 245, 158, 11;
+  --bs-danger: #EF4444;
+  --bs-danger-rgb: 239, 68, 68;
+  --bs-light: #F8FAFC;
+  --bs-light-rgb: 248, 250, 252;
+  --bs-dark: #0B1220;
+  --bs-dark-rgb: 11, 18, 32;
+
+  --ds-primary: #00E5A8;
+  --ds-secondary: #00C2FF;
+  --ds-success: #10B981;
+  --ds-info: #3B82F6;
+  --ds-warning: #F59E0B;
+  --ds-danger: #EF4444;
+  --ds-accent: #855CF6;
+  --ds-bg: #0B1220;
+  --ds-surface: #1E293B;
+  --ds-surface-elevated: #243449;
+  --ds-border: #64748B;
+  --ds-text: #FFFFFF;
+  --ds-text-muted: #94A3B8;
+  --ds-brand-gradient: linear-gradient(90deg, #00E5A8 0%, #00CFEA 55%, #00C2FF 100%);
+}
+
+[data-bs-theme="light"] {
+  --bs-body-bg: #F8FAFC;
+  --bs-body-color: #0F172A;
+  --bs-emphasis-color: #0F172A;
+  --bs-secondary-color: #475569;
+  --bs-border-color: #CBD5E1;
+
+  --ds-bg: #F8FAFC;
+  --ds-surface: #FFFFFF;
+  --ds-surface-elevated: #F1F5F9;
+  --ds-border: #CBD5E1;
+  --ds-text: #0F172A;
+  --ds-text-muted: #475569;
+}
+
+body {
+  background: var(--ds-bg);
+  color: var(--bs-body-color);
+}
+
+/* Navigation logo sizing (docs/BRAND_ASSETS.md: horizontal logo for nav). */
+.navbar-brand .ds-logo {
+  height: 30px;
+  width: auto;
+  max-width: 200px;
+}
+
+/* Theme toggle button: icon-only, 44px effective target (VISUAL spec). */
+#theme-toggle {
+  min-width: 44px;
+  min-height: 44px;
+  line-height: 1;
+}

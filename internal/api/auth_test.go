@@ -162,6 +162,38 @@ func TestTerminalFontPreference(t *testing.T) {
 		t.Fatalf("terminal_font after rejected put = %q", got)
 	}
 
+	// Theme: default dark, partial update touches only the named field.
+	if got := get().Theme; got != "dark" {
+		t.Fatalf("default theme = %q, want dark", got)
+	}
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"theme":"light"}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("put theme: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	u := get()
+	if u.Theme != "light" || u.TerminalFont != "jetbrainsmono-nerd" {
+		t.Fatalf("after theme put: theme = %q, terminal_font = %q (partial update must not touch the other field)", u.Theme, u.TerminalFont)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"theme":"solarized"}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid theme: status = %d, want 400", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty put: status = %d, want 400", rec.Code)
+	}
+
 	// Per-user: another user's preference is untouched.
 	if _, err := auth.CreateUser(ctx, db.Pool, "otherfont@example.com", "password123", false); err != nil {
 		t.Fatalf("create other user: %v", err)

@@ -258,9 +258,14 @@ Never return secrets in errors.
 Browser authentication: server-side session, identified by a random 256-bit token stored in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The server stores only a SHA-256 hash of the token, never the raw value. Sessions expire 7 days after creation and are individually revocable (`/api/v1/auth/sessions`). See `docs/openapi.yaml` for the concrete contract.
 
 User preferences (docs/REQUIREMENTS_NERD_FONT.md): read through
-`GET /api/v1/auth/session` (`terminal_font`: `system` | `jetbrainsmono-nerd`),
-updated with `PUT /api/v1/auth/preferences {"terminal_font": ...}` → `204`.
-Per-account, server-stored.
+`GET /api/v1/auth/session` (`terminal_font`: `system` | `jetbrainsmono-nerd`;
+`theme`: `dark` | `light`), updated with a partial `PUT
+/api/v1/auth/preferences` (`{"terminal_font": ...}` and/or `{"theme": ...}`)
+→ `204`. Per-account, server-stored. Theme applies the
+`docs/BOOTSTRAP_COLORS.md` dark workstation palette (default) or its light
+variant; `web/static/css/app.css` + `web/static/js/app.js` carry the
+tokens and the toggle. UI design deviations from the docs are tracked in
+`docs/UI_COMPLIANCE.md`.
 
 Runtime device authentication: a bearer token issued at enrollment (`POST
 /api/v1/runtimes`), presented as `Authorization: Bearer <token>` on the
