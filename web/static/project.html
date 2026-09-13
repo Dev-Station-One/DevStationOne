@@ -1031,7 +1031,9 @@
       if (entry.type === 'dir') {
         btn('Open', 'btn-outline-primary', function () { closeEditor(false); loadFiles(p); });
       } else {
-        btn('Edit', 'btn-outline-primary', function () { openFileEditor(p, entry); });
+        btn('Edit', 'btn-outline-primary', async function () {
+          if (await closeEditor(false)) openFileEditor(p, entry);
+        });
       }
       btn('Download', 'btn-outline-secondary', function () {
         window.location.href = filesURL('/content', 'path=' + encodeURIComponent(p) + '&download=1');
