@@ -99,14 +99,18 @@ sudo systemctl enable --now devstationone-server
 
 ```bash
 DEVSTATIONONE_DATABASE_URL=postgres://devstation:password@localhost:5432/devstation?sslmode=disable
-DEVSTATIONONE_ADMIN_EMAIL=you@example.com
-DEVSTATIONONE_ADMIN_PASSWORD=choose-a-strong-password
 DEVSTATIONONE_SERVER_ADDR=:8080        # default
 DEVSTATIONONE_ENV=production
 DEVSTATIONONE_LOG_LEVEL=info           # default
 ```
 
-`ADMIN_EMAIL` / `ADMIN_PASSWORD` create the initial administrator **on first start only** (when no users exist). Change the password from the UI afterward. Open `http://your-server:8080`, log in, and you're in.
+Seed the initial administrator with the `devstationone-admin` CLI (reads `DEVSTATIONONE_DATABASE_URL` the same as the server):
+
+```bash
+echo 'choose-a-strong-password' | sudo -u devstationone devstationone-admin --email you@example.com
+```
+
+Re-running it with the same email resets that account's password (and promotes it to admin if it wasn't already) — use it to recover a lost admin password too. Open `http://your-server:8080`, log in, and you're in.
 
 Behind a reverse proxy with TLS? See [Exposing the Control Server](#exposing-the-control-server).
 
@@ -216,11 +220,15 @@ Also revoke the runtime on the server (**Runtimes → revoke**) so its credentia
 | Variable | Default | Description |
 |---|---|---|
 | `DEVSTATIONONE_DATABASE_URL` | *(required)* | PostgreSQL connection string |
-| `DEVSTATIONONE_ADMIN_EMAIL` | *(first run)* | Initial administrator, created only if no users exist |
-| `DEVSTATIONONE_ADMIN_PASSWORD` | *(first run)* | Initial administrator password |
 | `DEVSTATIONONE_SERVER_ADDR` | `:8080` | Listen address |
 | `DEVSTATIONONE_ENV` | `development` | Set to `production` on real deployments |
 | `DEVSTATIONONE_LOG_LEVEL` | `info` | `debug` · `info` · `warn` · `error` |
+
+Administrator accounts are seeded with the `devstationone-admin` CLI (same `DEVSTATIONONE_DATABASE_URL`), not with server env vars:
+
+```bash
+echo 'the-password' | devstationone-admin --email you@example.com
+```
 
 **Development Runtime** (`~/.config/devstationone/runtime.env`):
 
@@ -291,7 +299,7 @@ Run `loginctl enable-linger $USER` once — without linger, user services stop w
 Check the server log for runtime connection errors: `journalctl -u devstationone-server -f`. If you're behind nginx without the `Upgrade`/`Connection` headers above, WebSockets fail — terminals included.
 
 **Can't log in / forgot admin password**
-Stop the server, reset the password in the database, start again — or wipe the `users` table to trigger fresh bootstrap with new `ADMIN_EMAIL`/`ADMIN_PASSWORD` values on next start. (Set `DEVSTATIONONE_LOG_LEVEL=debug` for detail while diagnosing; never leave debug on in production.)
+Run `devstationone-admin --email you@example.com` again with a new password on stdin — it resets that account's password in place, no need to touch the database or restart the server. (Set `DEVSTATIONONE_LOG_LEVEL=debug` for detail while diagnosing; never leave debug on in production.)
 
 **Database connection fails in the Databases panel**
 Connections are made **by the runtime, from the dev machine** — the database must be reachable from that machine, not from the Control Server. Check host/port/credentials from the dev machine first.

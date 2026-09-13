@@ -30,11 +30,10 @@ taken — check `ss -ltnp | grep 8080` and pick a free port (examples use
 
 ```bash
 go build -o /tmp/devstationone-server ./cmd/devstationone-server
-DEVSTATIONONE_DATABASE_URL='postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable' \
-DEVSTATIONONE_SERVER_ADDR=':18080' \
-DEVSTATIONONE_ADMIN_EMAIL='admin@devstationone.local' \
-DEVSTATIONONE_ADMIN_PASSWORD='smoke-admin-pass' \
-/tmp/devstationone-server
+go build -o /tmp/devstationone-admin ./cmd/devstationone-admin
+export DEVSTATIONONE_DATABASE_URL='postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable'
+DEVSTATIONONE_SERVER_ADDR=':18080' /tmp/devstationone-server &
+echo 'smoke-admin-pass' | /tmp/devstationone-admin --email admin@devstationone.local
 ```
 
 `http://localhost:18080/healthz` and `/readyz` must answer `{"status":"ok"}`.

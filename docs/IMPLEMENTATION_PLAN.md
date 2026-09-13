@@ -33,7 +33,7 @@ Acceptance:
 ## Slice 1 — Authentication and users
 
 Deliver real:
-- initial administrator bootstrap
+- initial administrator seeding (`devstationone-admin` CLI, ADR-019 — supersedes the original env-var bootstrap)
 - login/logout
 - secure browser session
 - password hashing

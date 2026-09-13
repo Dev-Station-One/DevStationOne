@@ -2,17 +2,11 @@ package auth
 
 import (
 	"context"
-	"io"
-	"log/slog"
 	"os"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
-func testLogger() *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
 
 // testPool connects to a real Postgres instance for integration tests, or
 // skips the test if DEVSTATIONONE_DATABASE_URL is not set (e.g. `make db-up`
@@ -106,30 +100,39 @@ func TestSessionLifecycle(t *testing.T) {
 	}
 }
 
-func TestBootstrapAdmin_IdempotentAndRequiresCredentials(t *testing.T) {
+func TestUpsertAdmin_CreatesThenUpdates(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	logger := testLogger()
 
-	if err := BootstrapAdmin(ctx, pool, logger, "", ""); err != nil {
-		t.Fatalf("no-op bootstrap: %v", err)
+	u, created, err := UpsertAdmin(ctx, pool, "admin@example.com", "supersecret")
+	if err != nil {
+		t.Fatalf("create: %v", err)
 	}
-	if n, _ := CountUsers(ctx, pool); n != 0 {
-		t.Fatalf("expected no users created without credentials, got %d", n)
+	if !created {
+		t.Fatal("created = false, want true on first upsert")
 	}
-
-	if err := BootstrapAdmin(ctx, pool, logger, "admin@example.com", "supersecret"); err != nil {
-		t.Fatalf("bootstrap: %v", err)
+	if !u.IsAdmin {
+		t.Fatal("IsAdmin = false, want true")
 	}
 	if n, _ := CountUsers(ctx, pool); n != 1 {
-		t.Fatalf("expected 1 user after bootstrap, got %d", n)
+		t.Fatalf("expected 1 user, got %d", n)
 	}
 
-	// Second call must not create a second admin or error.
-	if err := BootstrapAdmin(ctx, pool, logger, "someone-else@example.com", "supersecret"); err != nil {
-		t.Fatalf("second bootstrap: %v", err)
+	u2, created2, err := UpsertAdmin(ctx, pool, "admin@example.com", "newpassword")
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if created2 {
+		t.Fatal("created = true, want false on second upsert (same email)")
+	}
+	if u2.ID != u.ID {
+		t.Fatalf("ID = %q, want %q (same row updated)", u2.ID, u.ID)
 	}
 	if n, _ := CountUsers(ctx, pool); n != 1 {
-		t.Fatalf("expected bootstrap to stay a no-op once a user exists, got %d users", n)
+		t.Fatalf("expected still 1 user after update, got %d", n)
+	}
+
+	if _, err := Authenticate(ctx, pool, "admin@example.com", "newpassword"); err != nil {
+		t.Fatalf("authenticate with updated password: %v", err)
 	}
 }

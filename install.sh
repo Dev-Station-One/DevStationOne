@@ -69,8 +69,8 @@ fi
 
 mkdir -p "$WORK/bin"
 tar -xzf "$WORK/bundle.tar.gz" -C "$WORK/bin"
-[ -x "$WORK/bin/devstationone-server" ] && [ -x "$WORK/bin/devstationone-runtime" ] ||
-  die "downloaded tarball does not contain both binaries"
+[ -x "$WORK/bin/devstationone-server" ] && [ -x "$WORK/bin/devstationone-runtime" ] && [ -x "$WORK/bin/devstationone-admin" ] ||
+  die "downloaded tarball does not contain all binaries"
 
 install_server() {
   if [ -z "$INSTALL_ROOT" ] && [ "$(id -u)" -ne 0 ]; then
@@ -78,6 +78,7 @@ install_server() {
   fi
 
   install -Dm755 "$WORK/bin/devstationone-server" "$INSTALL_ROOT/usr/local/bin/devstationone-server"
+  install -Dm755 "$WORK/bin/devstationone-admin" "$INSTALL_ROOT/usr/local/bin/devstationone-admin"
 
   local env_file="$INSTALL_ROOT/etc/devstationone/server.env"
   mkdir -p "$(dirname "$env_file")"
@@ -89,9 +90,6 @@ DEVSTATIONONE_ENV=production
 DEVSTATIONONE_LOG_LEVEL=info
 DEVSTATIONONE_SERVER_ADDR=:8080
 DEVSTATIONONE_DATABASE_URL=postgres://devstation:change-me@localhost:5432/devstation?sslmode=disable
-# Set on first run only: creates the initial administrator if no users exist yet.
-DEVSTATIONONE_ADMIN_EMAIL=
-DEVSTATIONONE_ADMIN_PASSWORD=
 EOF
     chmod 600 "$env_file"
     info "wrote $env_file — edit it before starting the service"
@@ -126,6 +124,7 @@ EOF
   else
     systemctl daemon-reload
     info "next steps: sudoedit $env_file && sudo systemctl enable --now devstationone-server"
+    info "then seed an administrator: echo 'your-password' | devstationone-admin --email you@example.com"
   fi
 }
 

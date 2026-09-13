@@ -261,3 +261,32 @@ there.
 acceptable, since a Project's tree lives on one device in practice. HTML
 and SVG are served with an attachment disposition so stored project files
 can never render as documents on the Control Server origin.
+
+## ADR-019 — devstationone-admin CLI replaces env-var admin bootstrap
+
+Date: 2026-09-13
+
+**Decision.** `internal/auth.BootstrapAdmin` and the
+`DEVSTATIONONE_ADMIN_EMAIL`/`DEVSTATIONONE_ADMIN_PASSWORD` server env vars
+are removed. A new binary, `cmd/devstationone-admin`, seeds or resets the
+administrator account instead: it takes `--email` and the password on
+stdin, connects using the same `DEVSTATIONONE_DATABASE_URL` the server
+uses (`config.LoadServer`), and upserts via a new `auth.UpsertAdmin`
+(`INSERT ... ON CONFLICT (email) DO UPDATE`, `xmax = 0` distinguishing
+insert from update for the CLI's "created"/"updated" message). A minimum
+8-character password floor is enforced in the CLI — the first password
+rule in the project; `auth.CreateUser`/`Authenticate` still validate
+nothing beyond bcrypt's own limits.
+
+**Why not env vars.** The env-var path only ever fired once (first boot,
+empty `users` table) and had no story for resetting a lost admin password
+short of manually editing the database or wiping the table. A CLI upsert
+covers both seeding and recovery with one code path, and keeps credential
+material out of a long-lived `server.env` file on disk.
+
+**Consequence.** The Control Server no longer creates any account at
+startup; an operator must run `devstationone-admin` after first deploy
+before anyone can log in. No transition period — this is a pre-1.0
+project with no installed base to migrate. Release tarball
+(`.github/workflows/release.yml`) and `install.sh` now build/ship/install
+three binaries instead of two.

@@ -68,6 +68,30 @@ func CreateUser(ctx context.Context, pool *pgxpool.Pool, email, password string,
 	return u, nil
 }
 
+// UpsertAdmin creates an administrator account for email, or promotes an
+// existing account with that email to administrator and resets its
+// password. Returns whether a new account was created (false means an
+// existing account was updated).
+func UpsertAdmin(ctx context.Context, pool *pgxpool.Pool, email, password string) (User, bool, error) {
+	hash, err := HashPassword(password)
+	if err != nil {
+		return User{}, false, err
+	}
+
+	var u User
+	var created bool
+	err = pool.QueryRow(ctx, `
+		INSERT INTO users (email, password_hash, is_admin)
+		VALUES ($1, $2, true)
+		ON CONFLICT (email) DO UPDATE SET password_hash = $2, is_admin = true
+		RETURNING id, email, is_admin, created_at, terminal_font, theme, (xmax = 0) AS inserted
+	`, email, hash).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &created)
+	if err != nil {
+		return User{}, false, err
+	}
+	return u, created, nil
+}
+
 // CountUsers returns the total number of user accounts.
 func CountUsers(ctx context.Context, pool *pgxpool.Pool) (int, error) {
 	var n int

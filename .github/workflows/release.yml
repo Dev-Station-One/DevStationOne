@@ -24,9 +24,9 @@ jobs:
           for arch in amd64 arm64; do
             CGO_ENABLED=0 GOOS=linux GOARCH=$arch \
               go build -trimpath -ldflags "-s -w" \
-              -o "dist/$arch/" ./cmd/devstationone-server ./cmd/devstationone-runtime
+              -o "dist/$arch/" ./cmd/devstationone-server ./cmd/devstationone-runtime ./cmd/devstationone-admin
             tar -czf "dist/devstationone_${VER}_linux_${arch}.tar.gz" \
-              -C "dist/$arch" devstationone-server devstationone-runtime
+              -C "dist/$arch" devstationone-server devstationone-runtime devstationone-admin
           done
           (cd dist && sha256sum *.tar.gz > checksums.txt)
 
