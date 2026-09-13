@@ -118,6 +118,27 @@ func GetByTokenHash(ctx context.Context, pool *pgxpool.Pool, tokenHash string) (
 	return rt, nil
 }
 
+// GetByID looks up a runtime by its ID.
+func GetByID(ctx context.Context, pool *pgxpool.Pool, id string) (Runtime, error) {
+	var rt Runtime
+	err := pool.QueryRow(ctx, `
+		SELECT id, name, token_hash, hostname, os, arch, runtime_version,
+			capabilities, status, created_by, enrolled_at, last_seen_at, revoked_at, created_at
+		FROM runtimes
+		WHERE id = $1
+	`, id).Scan(
+		&rt.ID, &rt.Name, &rt.TokenHash, &rt.Hostname, &rt.OS, &rt.Arch, &rt.RuntimeVersion,
+		capabilitiesScanner(&rt.Capabilities), &rt.Status, &rt.CreatedBy, &rt.EnrolledAt, &rt.LastSeenAt, &rt.RevokedAt, &rt.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Runtime{}, ErrNotFound
+	}
+	if err != nil {
+		return Runtime{}, err
+	}
+	return rt, nil
+}
+
 // MarkOnline records a runtime's hello payload and transitions it to online.
 // enrolled_at is set the first time this happens and never overwritten.
 func MarkOnline(ctx context.Context, pool *pgxpool.Pool, id string, hello protocol.HelloPayload) error {

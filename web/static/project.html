@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Project · DevStation</title>
+  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+</head>
+<body>
+  <div class="page">
+    <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+      <div class="container-fluid">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <h1 class="navbar-brand navbar-brand-autodark">
+          <a href="/">DevStation</a>
+        </h1>
+        <div class="collapse navbar-collapse" id="sidebar-menu">
+          <ul class="navbar-nav pt-lg-3">
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>
+            <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+            <li class="nav-item active"><a class="nav-link" href="/projects.html">Projects</a></li>
+            <li class="nav-item"><a class="nav-link" href="/runtimes.html">Runtimes</a></li>
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Tools</div></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Files</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Databases</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Services</a></li>
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Activity</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Settings</a></li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+    <div class="page-wrapper">
+      <header class="navbar navbar-expand-md navbar-light d-print-none">
+        <div class="container-xl d-flex justify-content-between">
+          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
+          <div>
+            <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
+            <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Log out</button>
+          </div>
+        </div>
+      </header>
+      <div class="page-body">
+        <div class="container-xl">
+          <div id="load-error" class="alert alert-danger" hidden></div>
+
+          <div id="project-content" hidden>
+            <div class="page-header d-print-none mb-3">
+              <div class="row align-items-center">
+                <div class="col">
+                  <div class="page-pretitle">
+                    <a href="/projects.html">&larr; Projects</a>
+                  </div>
+                  <h2 class="page-title" id="project-name">—</h2>
+                  <div class="text-secondary" id="project-summary">—</div>
+                </div>
+                <div class="col-auto">
+                  <button id="edit-btn" class="btn btn-outline-secondary btn-sm">Edit</button>
+                  <button id="delete-btn" class="btn btn-outline-danger btn-sm">Delete</button>
+                </div>
+              </div>
+            </div>
+
+            <ul class="nav nav-tabs mb-3">
+              <li class="nav-item"><a class="nav-link active" href="#">Overview</a></li>
+              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Terminal</a></li>
+              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Files</a></li>
+              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Databases</a></li>
+              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Services</a></li>
+            </ul>
+
+            <div id="view-card" class="card">
+              <div class="card-body">
+                <dl class="row mb-0">
+                  <dt class="col-3">Runtime</dt><dd class="col-9" id="view-runtime">—</dd>
+                  <dt class="col-3">OS user</dt><dd class="col-9" id="view-os-user">—</dd>
+                  <dt class="col-3">Shell</dt><dd class="col-9" id="view-shell">—</dd>
+                  <dt class="col-3">Working directory</dt><dd class="col-9" id="view-cwd">—</dd>
+                  <dt class="col-3">Environment</dt><dd class="col-9"><pre class="mb-0" id="view-env">—</pre></dd>
+                </dl>
+              </div>
+            </div>
+
+            <div id="edit-card" class="card" hidden>
+              <div class="card-body">
+                <div class="row g-2">
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">Name</label>
+                    <input id="edit-name" type="text" class="form-control">
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">Runtime</label>
+                    <select id="edit-runtime" class="form-select"></select>
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">OS user</label>
+                    <input id="edit-os-user" type="text" class="form-control">
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">Shell</label>
+                    <input id="edit-shell" type="text" class="form-control">
+                  </div>
+                  <div class="col-12 col-md-4">
+                    <label class="form-label">Working directory</label>
+                    <input id="edit-cwd" type="text" class="form-control">
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label">Environment <span class="text-secondary">(one KEY=VALUE per line)</span></label>
+                    <textarea id="edit-env" class="form-control" rows="2"></textarea>
+                  </div>
+                </div>
+                <div id="edit-error" class="alert alert-danger mt-3" hidden></div>
+                <button id="save-btn" class="btn btn-primary mt-3">Save</button>
+                <button id="cancel-btn" class="btn btn-link mt-3">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/vendor/jquery/jquery.min.js"></script>
+  <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script>
+    function escapeHtml(s) {
+      return $('<div>').text(s).html();
+    }
+
+    function parseEnvironment(text) {
+      var env = {};
+      text.split('\n').forEach(function (line) {
+        line = line.trim();
+        if (!line) return;
+        var i = line.indexOf('=');
+        if (i < 1) return;
+        env[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      });
+      return env;
+    }
+
+    function formatEnvironment(env) {
+      return Object.keys(env || {}).map(function (k) { return k + '=' + env[k]; }).join('\n');
+    }
+
+    var projectID = new URLSearchParams(window.location.search).get('id');
+    if (!projectID) {
+      window.location.href = '/projects.html';
+    }
+
+    var project = null;
+    var runtimesById = {};
+
+    function render() {
+      $('#project-name').text(project.name);
+      $('#project-summary').text(
+        project.name + ' · ' + (runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id) +
+        ' · ' + project.os_user + ' · ' + project.working_directory
+      );
+      $('#view-runtime').text(runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id);
+      $('#view-os-user').text(project.os_user);
+      $('#view-shell').text(project.shell);
+      $('#view-cwd').text(project.working_directory);
+      $('#view-env').text(formatEnvironment(project.environment) || '—');
+    }
+
+    function loadRuntimes() {
+      return $.get('/api/v1/runtimes').done(function (runtimes) {
+        var $select = $('#edit-runtime').empty();
+        runtimesById = {};
+        runtimes.forEach(function (rt) {
+          runtimesById[rt.id] = rt;
+          if (rt.status === 'revoked' && rt.id !== (project && project.runtime_id)) return;
+          $select.append($('<option>').val(rt.id).text(rt.name + ' (' + rt.status + ')'));
+        });
+      });
+    }
+
+    function load() {
+      $.get('/api/v1/projects/' + projectID).done(function (p) {
+        project = p;
+        loadRuntimes().always(render);
+        $('#project-content').prop('hidden', false);
+      }).fail(function (xhr) {
+        if (xhr.status === 401) {
+          window.location.href = '/login.html';
+          return;
+        }
+        $('#load-error').text(xhr.status === 404 ? 'Project not found.' : 'Failed to load project.').prop('hidden', false);
+      });
+    }
+
+    $('#edit-btn').on('click', function () {
+      $('#edit-name').val(project.name);
+      $('#edit-runtime').val(project.runtime_id);
+      $('#edit-os-user').val(project.os_user);
+      $('#edit-shell').val(project.shell);
+      $('#edit-cwd').val(project.working_directory);
+      $('#edit-env').val(formatEnvironment(project.environment));
+      $('#view-card').prop('hidden', true);
+      $('#edit-card').prop('hidden', false);
+    });
+
+    $('#cancel-btn').on('click', function () {
+      $('#edit-card').prop('hidden', true);
+      $('#view-card').prop('hidden', false);
+    });
+
+    $('#save-btn').on('click', function () {
+      $('#edit-error').prop('hidden', true);
+      var body = {
+        name: $('#edit-name').val().trim(),
+        runtime_id: $('#edit-runtime').val(),
+        os_user: $('#edit-os-user').val().trim(),
+        working_directory: $('#edit-cwd').val().trim(),
+        shell: $('#edit-shell').val().trim(),
+        environment: parseEnvironment($('#edit-env').val())
+      };
+      $.ajax({
+        url: '/api/v1/projects/' + projectID,
+        method: 'PATCH',
+        contentType: 'application/json',
+        data: JSON.stringify(body)
+      }).done(function (p) {
+        project = p;
+        render();
+        $('#edit-card').prop('hidden', true);
+        $('#view-card').prop('hidden', false);
+      }).fail(function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save project.';
+        $('#edit-error').text(msg).prop('hidden', false);
+      });
+    });
+
+    $('#delete-btn').on('click', function () {
+      if (!window.confirm('Delete this project?')) return;
+      $.ajax({ url: '/api/v1/projects/' + projectID, method: 'DELETE' }).done(function () {
+        window.location.href = '/projects.html';
+      });
+    });
+
+    $('#logout-btn').on('click', function () {
+      $.ajax({ url: '/api/v1/auth/logout', method: 'POST' }).always(function () {
+        window.location.href = '/login.html';
+      });
+    });
+
+    load();
+  </script>
+</body>
+</html>

@@ -36,10 +36,12 @@ POST   /api/v1/runtimes/{runtimeID}/revoke
 WSS    /api/v1/runtimes/connect
 ```
 
-`POST`/`GET`/`revoke` require an authenticated administrator session (cookie
-auth). `POST /api/v1/runtimes` returns the created runtime plus its raw
-enrollment token; the token is shown exactly once and only its SHA-256 hash
-is stored.
+`POST /api/v1/runtimes` (register) and the `revoke` action require an
+authenticated administrator session. `GET /api/v1/runtimes` (list) only
+requires an authenticated session, since a non-admin user needs it to select
+a runtime when creating a Project (see Projects below). `POST
+/api/v1/runtimes` returns the created runtime plus its raw enrollment token;
+the token is shown exactly once and only its SHA-256 hash is stored.
 
 `GET /api/v1/runtimes/connect` is where a Development Runtime opens its
 outbound WebSocket connection, authenticating with `Authorization: Bearer
@@ -58,6 +60,16 @@ DELETE /api/v1/projects/{projectID}
 GET    /api/v1/projects/{projectID}/sessions
 POST   /api/v1/projects/{projectID}/sessions
 ```
+
+CRUD requires an authenticated session; the session sub-resource routes
+above are defined by the contract but implemented in Slice 4 alongside PTYs
+(they are not yet wired up). CRUD is scoped by ownership (ADR-013):
+administrators see and manage every project, other users only ones they
+created (`created_by`). A project the caller does not own responds `404`,
+the same as one that does not exist, so the response never confirms another
+user's project. `runtime_id` is validated server-side against
+`GET /api/v1/runtimes` and rejected (`400`) if the runtime does not exist or
+is revoked.
 
 ## Sessions
 

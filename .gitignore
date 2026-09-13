@@ -32,3 +32,6 @@ tmp/
 
 # CodeGraph generated data
 .codegraph/
+
+# Playwright MCP smoke-test artifacts
+.playwright-mcp/

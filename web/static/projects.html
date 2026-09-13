@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Projects · DevStation</title>
+  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+</head>
+<body>
+  <div class="page">
+    <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+      <div class="container-fluid">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <h1 class="navbar-brand navbar-brand-autodark">
+          <a href="/">DevStation</a>
+        </h1>
+        <div class="collapse navbar-collapse" id="sidebar-menu">
+          <ul class="navbar-nav pt-lg-3">
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>
+            <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
+            <li class="nav-item active"><a class="nav-link" href="/projects.html">Projects</a></li>
+            <li class="nav-item"><a class="nav-link" href="/runtimes.html">Runtimes</a></li>
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Tools</div></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Files</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Databases</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Services</a></li>
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Activity</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Settings</a></li>
+          </ul>
+        </div>
+      </div>
+    </aside>
+    <div class="page-wrapper">
+      <header class="navbar navbar-expand-md navbar-light d-print-none">
+        <div class="container-xl d-flex justify-content-between">
+          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
+          <div>
+            <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
+            <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Log out</button>
+          </div>
+        </div>
+      </header>
+      <div class="page-body">
+        <div class="container-xl">
+          <h2 class="mb-3">Projects</h2>
+
+          <div class="card mb-4">
+            <div class="card-body">
+              <h3 class="card-title">New project</h3>
+              <div class="row g-2">
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Name</label>
+                  <input id="new-name" type="text" class="form-control" placeholder="My Application">
+                </div>
+                <div class="col-12 col-md-6">
+                  <label class="form-label">Runtime</label>
+                  <select id="new-runtime" class="form-select">
+                    <option value="">Select a runtime…</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label">OS user</label>
+                  <input id="new-os-user" type="text" class="form-control" placeholder="brian">
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label">Shell</label>
+                  <input id="new-shell" type="text" class="form-control" placeholder="/bin/bash">
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label">Working directory</label>
+                  <input id="new-cwd" type="text" class="form-control" placeholder="/home/brian/src/my-application">
+                </div>
+                <div class="col-12">
+                  <label class="form-label">Environment <span class="text-secondary">(optional, one KEY=VALUE per line)</span></label>
+                  <textarea id="new-env" class="form-control" rows="2" placeholder="NODE_ENV=development"></textarea>
+                </div>
+              </div>
+              <div id="create-error" class="alert alert-danger mt-3" hidden></div>
+              <button id="create-btn" class="btn btn-primary mt-3">Create project</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="table-responsive">
+              <table class="table card-table table-vcenter">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Runtime</th>
+                    <th>OS user</th>
+                    <th>Working directory</th>
+                    <th>Updated</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="projects-body"></tbody>
+              </table>
+            </div>
+            <div id="projects-empty" class="empty" hidden>
+              <div class="empty-title">No projects yet</div>
+              <div class="empty-subtitle text-secondary">Create a project above to get started.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/vendor/jquery/jquery.min.js"></script>
+  <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script>
+    function escapeHtml(s) {
+      return $('<div>').text(s).html();
+    }
+
+    var runtimesById = {};
+
+    function parseEnvironment(text) {
+      var env = {};
+      text.split('\n').forEach(function (line) {
+        line = line.trim();
+        if (!line) return;
+        var i = line.indexOf('=');
+        if (i < 1) return;
+        env[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+      });
+      return env;
+    }
+
+    function loadRuntimes() {
+      return $.get('/api/v1/runtimes').done(function (runtimes) {
+        var $select = $('#new-runtime');
+        runtimesById = {};
+        runtimes.forEach(function (rt) {
+          runtimesById[rt.id] = rt;
+          if (rt.status === 'revoked') return;
+          $select.append($('<option>').val(rt.id).text(rt.name + ' (' + rt.status + ')'));
+        });
+      });
+    }
+
+    function loadProjects() {
+      $.get('/api/v1/projects').done(function (list) {
+        var $body = $('#projects-body').empty();
+        $('#projects-empty').prop('hidden', list.length > 0);
+        list.forEach(function (p) {
+          var rt = runtimesById[p.runtime_id];
+          $body.append(
+            '<tr class="project-row" data-id="' + p.id + '" style="cursor:pointer">' +
+            '<td>' + escapeHtml(p.name) + '</td>' +
+            '<td>' + escapeHtml(rt ? rt.name : p.runtime_id) + '</td>' +
+            '<td>' + escapeHtml(p.os_user) + '</td>' +
+            '<td>' + escapeHtml(p.working_directory) + '</td>' +
+            '<td>' + new Date(p.updated_at).toLocaleString() + '</td>' +
+            '<td><button class="btn btn-sm btn-outline-danger delete-btn" data-id="' + p.id + '">Delete</button></td></tr>'
+          );
+        });
+      }).fail(function (xhr) {
+        if (xhr.status === 401) window.location.href = '/login.html';
+      });
+    }
+
+    $('#create-btn').on('click', function () {
+      $('#create-error').prop('hidden', true);
+      var body = {
+        name: $('#new-name').val().trim(),
+        runtime_id: $('#new-runtime').val(),
+        os_user: $('#new-os-user').val().trim(),
+        working_directory: $('#new-cwd').val().trim(),
+        shell: $('#new-shell').val().trim(),
+        environment: parseEnvironment($('#new-env').val())
+      };
+      $.ajax({
+        url: '/api/v1/projects',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(body)
+      }).done(function () {
+        $('#new-name, #new-os-user, #new-cwd, #new-shell, #new-env').val('');
+        $('#new-runtime').val('');
+        loadProjects();
+      }).fail(function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create project.';
+        $('#create-error').text(msg).prop('hidden', false);
+      });
+    });
+
+    $('#projects-body').on('click', '.project-row', function (e) {
+      if ($(e.target).is('.delete-btn')) return;
+      window.location.href = '/project.html?id=' + $(this).data('id');
+    });
+
+    $('#projects-body').on('click', '.delete-btn', function (e) {
+      e.stopPropagation();
+      var id = $(this).data('id');
+      if (!window.confirm('Delete this project?')) return;
+      $.ajax({ url: '/api/v1/projects/' + id, method: 'DELETE' }).always(loadProjects);
+    });
+
+    $('#logout-btn').on('click', function () {
+      $.ajax({ url: '/api/v1/auth/logout', method: 'POST' }).always(function () {
+        window.location.href = '/login.html';
+      });
+    });
+
+    loadRuntimes().always(loadProjects);
+  </script>
+</body>
+</html>

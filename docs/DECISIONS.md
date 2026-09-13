@@ -78,3 +78,20 @@ Server would need a shared broker (e.g. Postgres `LISTEN/NOTIFY` or a
 message bus) so any instance can reach a runtime connected to another
 instance; that is out of scope until multi-instance deployment is a
 requirement.
+
+## ADR-013 — Project ownership: `created_by`, not a shared workspace
+
+Projects are scoped by `created_by` (the DevStation account that created
+them), separate from `os_user` (the OS account the runtime executes the
+Project's sessions as, e.g. "brian" in PRD §3). A non-admin user's project
+list/get/patch/delete only ever sees rows they created; an unauthorized
+lookup returns 404, not 403, so a non-owner cannot use the response code to
+confirm another user's project exists (SECURITY.md "never rely solely on
+IDs supplied by the browser"). Administrators can see and manage every
+project, mirroring the existing `is_admin` gate already used for runtime
+management (Slice 2), which is useful for a self-hosted operator managing
+projects on behalf of other accounts on the same installation.
+
+Runtimes themselves remain unscoped by owner (Slice 2 already allows any
+admin to see all runtimes); a Project may reference any existing,
+non-revoked runtime regardless of who registered it.

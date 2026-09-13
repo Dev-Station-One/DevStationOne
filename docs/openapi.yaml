@@ -133,6 +133,7 @@ paths:
   /api/v1/runtimes:
     get:
       summary: List registered runtimes
+      description: Open to any authenticated user, so a Project can be created with a runtime selected from this list.
       tags: [Runtimes]
       operationId: listRuntimes
       security:
@@ -148,8 +149,6 @@ paths:
                   $ref: "#/components/schemas/Runtime"
         "401":
           description: Not authenticated
-        "403":
-          description: Administrator access required
     post:
       summary: Register a new runtime and issue its enrollment token
       tags: [Runtimes]
@@ -201,6 +200,122 @@ paths:
           description: Administrator access required
         "404":
           description: Runtime not found
+  /api/v1/projects:
+    get:
+      summary: List projects visible to the current user
+      description: Administrators see every project; other users see only projects they created.
+      tags: [Projects]
+      operationId: listProjects
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Visible projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          description: Not authenticated
+    post:
+      summary: Create a project
+      tags: [Projects]
+      operationId: createProject
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectFields"
+      responses:
+        "201":
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid request body, or the referenced runtime does not exist or is revoked
+        "401":
+          description: Not authenticated
+  /api/v1/projects/{projectID}:
+    get:
+      summary: Get a project
+      tags: [Projects]
+      operationId: getProject
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+    patch:
+      summary: Update a project
+      tags: [Projects]
+      operationId: updateProject
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPatch"
+      responses:
+        "200":
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid request body, or the referenced runtime does not exist or is revoked
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+    delete:
+      summary: Delete a project
+      tags: [Projects]
+      operationId: deleteProject
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project deleted
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
 components:
   securitySchemes:
     cookieAuth:
@@ -311,3 +426,60 @@ components:
             token:
               type: string
               description: Raw enrollment token, shown exactly once.
+    ProjectFields:
+      type: object
+      required: [name, runtime_id, os_user, working_directory, shell]
+      properties:
+        name:
+          type: string
+        runtime_id:
+          type: string
+        os_user:
+          type: string
+          description: OS user the runtime executes this Project's sessions as.
+        working_directory:
+          type: string
+          description: Absolute path used as the authoritative session working directory.
+        shell:
+          type: string
+          description: Absolute path to the shell binary used for interactive sessions.
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+          description: Environment variables applied to the Project's sessions.
+    ProjectPatch:
+      type: object
+      description: Same properties as ProjectFields; only the fields present in the request are changed.
+      properties:
+        name:
+          type: string
+        runtime_id:
+          type: string
+        os_user:
+          type: string
+        working_directory:
+          type: string
+        shell:
+          type: string
+        environment:
+          type: object
+          additionalProperties:
+            type: string
+    Project:
+      allOf:
+        - $ref: "#/components/schemas/ProjectFields"
+        - type: object
+          required: [id, created_by, created_at, updated_at]
+          properties:
+            id:
+              type: string
+            created_by:
+              type: string
+              description: ID of the user who owns this project.
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time

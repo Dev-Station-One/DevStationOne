@@ -8,22 +8,50 @@
 </head>
 <body>
   <div class="page">
-    <header class="navbar navbar-expand-md navbar-light d-print-none">
-      <div class="container-xl d-flex justify-content-between">
-        <a href="/" class="navbar-brand">DevStation</a>
-        <div>
-          <a href="/runtimes.html" class="btn btn-outline-secondary btn-sm">Runtimes</a>
-          <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
+    <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark">
+      <div class="container-fluid">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <h1 class="navbar-brand navbar-brand-autodark">
+          <a href="/">DevStation</a>
+        </h1>
+        <div class="collapse navbar-collapse" id="sidebar-menu">
+          <ul class="navbar-nav pt-lg-3">
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>
+            <li class="nav-item active"><a class="nav-link" href="/">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link" href="/projects.html">Projects</a></li>
+            <li class="nav-item"><a class="nav-link" href="/runtimes.html">Runtimes</a></li>
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Tools</div></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Files</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Databases</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Services</a></li>
+            <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Activity</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Settings</a></li>
+          </ul>
         </div>
       </div>
-    </header>
+    </aside>
     <div class="page-wrapper">
+      <header class="navbar navbar-expand-md navbar-light d-print-none">
+        <div class="container-xl d-flex justify-content-between">
+          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
+          <div>
+            <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
+            <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Log out</button>
+          </div>
+        </div>
+      </header>
       <div class="page-body">
         <div class="container-xl">
           <div class="empty">
             <div class="empty-title">DevStation Control Server</div>
             <div class="empty-subtitle text-secondary">
-              Projects, Runtimes, and the rest of the workspace arrive in later implementation slices.
+              Create a Project to get started. Files, Databases, and Services arrive in later implementation slices.
+            </div>
+            <div class="empty-action">
+              <a href="/projects.html" class="btn btn-primary">Go to Projects</a>
             </div>
           </div>
         </div>
@@ -35,6 +63,12 @@
   <script>
     $.get('/api/v1/auth/session').fail(function () {
       window.location.href = '/login.html';
+    });
+
+    $('#logout-btn').on('click', function () {
+      $.ajax({ url: '/api/v1/auth/logout', method: 'POST' }).always(function () {
+        window.location.href = '/login.html';
+      });
     });
   </script>
 </body>

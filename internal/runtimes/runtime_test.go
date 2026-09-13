@@ -21,7 +21,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if _, err := pool.Exec(context.Background(), "TRUNCATE runtimes, sessions, users CASCADE"); err != nil {
+	if _, err := pool.Exec(context.Background(), "TRUNCATE projects, runtimes, sessions, users CASCADE"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(pool.Close)

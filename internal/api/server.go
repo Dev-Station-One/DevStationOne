@@ -24,9 +24,15 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Hand
 	mux.HandleFunc("DELETE /api/v1/auth/sessions/{sessionID}", requireSession(db, revokeSessionHandler(db)))
 
 	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
-	mux.HandleFunc("GET /api/v1/runtimes", requireAdmin(db, listRuntimesHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, logger))
+
+	mux.HandleFunc("POST /api/v1/projects", requireSession(db, createProjectHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects", requireSession(db, listProjectsHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}", requireSession(db, getProjectHandler(db)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}", requireSession(db, patchProjectHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}", requireSession(db, deleteProjectHandler(db)))
 
 	mux.Handle("GET /", http.FileServer(http.Dir(staticDir)))
 

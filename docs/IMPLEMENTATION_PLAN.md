@@ -86,6 +86,8 @@ Acceptance:
 - view/edit project
 - authorization prevents cross-user access
 
+**Status: Complete.**
+
 ## Slice 4 — Persistent PTY sessions
 
 Deliver:

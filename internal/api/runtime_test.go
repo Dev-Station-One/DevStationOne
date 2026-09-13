@@ -54,12 +54,14 @@ func TestRuntimeHTTP_RequiresAdmin(t *testing.T) {
 		t.Fatalf("non-admin create: status = %d, want 403", rec.Code)
 	}
 
+	// Listing runtimes is intentionally open to any authenticated user: a
+	// non-admin needs it to select a runtime when creating a Project.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/runtimes", nil)
 	req.AddCookie(userCookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("non-admin list: status = %d, want 403", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("non-admin list: status = %d, want 200", rec.Code)
 	}
 }
 
