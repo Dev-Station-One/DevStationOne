@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"devstationone/internal/auth"
@@ -75,25 +76,35 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 	}
 }
 
-func setSessionCookie(w http.ResponseWriter, token string) {
+// requestIsSecure reports whether the request arrived over TLS, either
+// directly or terminated at a trusted proxy. Browsers drop Secure cookies on
+// plain http:// (except localhost), so the flag must follow the actual scheme.
+func requestIsSecure(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.CookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   requestIsSecure(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(auth.SessionTTL.Seconds()),
 	})
 }
 
-func clearSessionCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     auth.CookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
+		Secure:   requestIsSecure(r),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -123,7 +134,7 @@ func loginHandler(db *database.DB) http.HandlerFunc {
 			return
 		}
 
-		setSessionCookie(w, token)
+		setSessionCookie(w, r, token)
 		writeJSON(w, http.StatusOK, toUserResponse(user))
 	}
 }
@@ -133,7 +144,7 @@ func logoutHandler(db *database.DB) http.HandlerFunc {
 		if cookie, err := r.Cookie(auth.CookieName); err == nil {
 			_ = auth.DeleteSessionByToken(r.Context(), db.Pool, cookie.Value)
 		}
-		clearSessionCookie(w)
+		clearSessionCookie(w, r)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

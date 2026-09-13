@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -104,6 +105,52 @@ func TestLoginLogoutFlow(t *testing.T) {
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("after logout: status = %d, want 401", rec.Code)
+	}
+}
+
+func TestSessionCookieSecureFlagFollowsRequestScheme(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	if _, err := auth.CreateUser(ctx, db.Pool, "cookie-scheme@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router := NewRouter(db, logger, t.TempDir())
+	body, _ := json.Marshal(map[string]string{"email": "cookie-scheme@example.com", "password": "password123"})
+
+	cookieFrom := func(mutate func(*http.Request)) *http.Cookie {
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+		mutate(req)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("login: status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == auth.CookieName {
+				return c
+			}
+		}
+		t.Fatalf("no %s cookie in response", auth.CookieName)
+		return nil
+	}
+
+	// Plain HTTP (LAN IP over http://): Secure cookie would be dropped by the
+	// browser, so the flag must be off.
+	if c := cookieFrom(func(r *http.Request) {}); c.Secure {
+		t.Error("plain http: cookie Secure = true, want false")
+	}
+
+	// Direct TLS: Secure on.
+	if c := cookieFrom(func(r *http.Request) { r.TLS = &tls.ConnectionState{} }); !c.Secure {
+		t.Error("https: cookie Secure = false, want true")
+	}
+
+	// Behind a TLS-terminating proxy: Secure on.
+	if c := cookieFrom(func(r *http.Request) { r.Header.Set("X-Forwarded-Proto", "https") }); !c.Secure {
+		t.Error("X-Forwarded-Proto https: cookie Secure = false, want true")
 	}
 }
 

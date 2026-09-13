@@ -255,7 +255,7 @@ Never return secrets in errors.
 
 ## Authentication
 
-Browser authentication: server-side session, identified by a random 256-bit token stored in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The server stores only a SHA-256 hash of the token, never the raw value. Sessions expire 7 days after creation and are individually revocable (`/api/v1/auth/sessions`). See `docs/openapi.yaml` for the concrete contract.
+Browser authentication: server-side session, identified by a random 256-bit token stored in an `HttpOnly`, `SameSite=Lax` cookie. The cookie carries the `Secure` attribute only when the request arrived over TLS (directly or via `X-Forwarded-Proto: https`), because browsers drop `Secure` cookies on plain-`http` origins other than localhost. The server stores only a SHA-256 hash of the token, never the raw value. Sessions expire 7 days after creation and are individually revocable (`/api/v1/auth/sessions`). See `docs/openapi.yaml` for the concrete contract.
 
 User preferences (docs/REQUIREMENTS_NERD_FONT.md): read through
 `GET /api/v1/auth/session` (`terminal_font`: `system` | `jetbrainsmono-nerd`;
