@@ -20,6 +20,15 @@
   --bs-dark: #0B1220;
   --bs-dark-rgb: 11, 18, 32;
 
+  --bs-body-bg: #0B1220;
+  --bs-body-color: #E2E8F0;
+  --bs-emphasis-color: #FFFFFF;
+  --bs-secondary-color: #94A3B8;
+  --bs-tertiary-color: #64748B;
+  --bs-border-color: #334155;
+  --bs-link-color: #00C2FF;
+  --bs-link-hover-color: #00E5A8;
+
   --ds-primary: #00E5A8;
   --ds-secondary: #00C2FF;
   --ds-success: #10B981;
@@ -54,6 +63,46 @@
 body {
   background: var(--ds-bg);
   color: var(--bs-body-color);
+}
+
+/* Bootstrap 5.3 buttons compile literal colors; --bs-primary does not reach
+   them, and Tabler paints .btn-primary with its own literal blue. Override
+   the button vars AND the painted properties so primary actions use brand
+   teal (docs/BOOTSTRAP_COLORS.md). ponytail: fixed hover/active shades. */
+.btn-primary {
+  --bs-btn-bg: var(--ds-primary);
+  --bs-btn-border-color: var(--ds-primary);
+  --bs-btn-color: #0B1220;
+  --bs-btn-hover-bg: #00CF95;
+  --bs-btn-hover-border-color: #00CF95;
+  --bs-btn-hover-color: #0B1220;
+  --bs-btn-active-bg: #00B884;
+  --bs-btn-active-border-color: #00B884;
+  --bs-btn-active-color: #0B1220;
+  --bs-btn-disabled-bg: var(--ds-primary);
+  --bs-btn-disabled-border-color: var(--ds-primary);
+  --bs-btn-disabled-color: #0B1220;
+  --bs-btn-focus-shadow-rgb: 0, 229, 168;
+  background-color: var(--bs-btn-bg);
+  border-color: var(--bs-btn-border-color);
+  color: var(--bs-btn-color);
+}
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  background-color: var(--bs-btn-hover-bg);
+  border-color: var(--bs-btn-hover-border-color);
+  color: var(--bs-btn-hover-color);
+}
+.btn-primary:active,
+.btn-primary.show {
+  background-color: var(--bs-btn-active-bg);
+  border-color: var(--bs-btn-active-border-color);
+  color: var(--bs-btn-active-color);
+}
+.btn-primary:disabled {
+  background-color: var(--bs-btn-disabled-bg);
+  border-color: var(--bs-btn-disabled-border-color);
+  color: var(--bs-btn-disabled-color);
 }
 
 /* Navigation logo sizing (docs/BRAND_ASSETS.md: horizontal logo for nav). */

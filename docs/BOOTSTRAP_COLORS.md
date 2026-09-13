@@ -110,3 +110,10 @@ Suggested light tokens:
   --ds-text-muted: #475569;
 }
 ```
+
+## Button theming note
+
+Bootstrap 5.3 compiles `.btn-primary` with literal colors and Tabler paints it with its own
+literal blue, so `--bs-primary` alone never reaches buttons. `web/static/css/app.css` overrides
+the `--bs-btn-*` variables **and** the painted `background-color`/`border-color`/`color`
+properties (base, hover, focus-visible, active, disabled) to apply brand teal with dark text.
