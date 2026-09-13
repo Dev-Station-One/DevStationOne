@@ -24,7 +24,7 @@ func testDB(t *testing.T) *database.DB {
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	if _, err := db.Pool.Exec(context.Background(), "TRUNCATE sessions, users CASCADE"); err != nil {
+	if _, err := db.Pool.Exec(context.Background(), "TRUNCATE runtimes, sessions, users CASCADE"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(db.Close)

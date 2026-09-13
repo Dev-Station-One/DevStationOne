@@ -25,7 +25,16 @@ func TestLoadServer_Defaults(t *testing.T) {
 
 func TestLoadRuntime_RequiresServerURL(t *testing.T) {
 	t.Setenv("DEVSTATION_SERVER_URL", "")
+	t.Setenv("DEVSTATION_RUNTIME_TOKEN", "sometoken")
 	if _, err := LoadRuntime(); err == nil {
 		t.Fatal("expected error when DEVSTATION_SERVER_URL is unset")
+	}
+}
+
+func TestLoadRuntime_RequiresToken(t *testing.T) {
+	t.Setenv("DEVSTATION_SERVER_URL", "https://example.com")
+	t.Setenv("DEVSTATION_RUNTIME_TOKEN", "")
+	if _, err := LoadRuntime(); err == nil {
+		t.Fatal("expected error when DEVSTATION_RUNTIME_TOKEN is unset")
 	}
 }

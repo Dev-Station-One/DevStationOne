@@ -1,8 +1,4 @@
 // Command devstation-runtime runs the DevStation Development Runtime agent.
-//
-// Slice 0 scope: process startup, configuration, logging, and graceful
-// shutdown only. The outbound Control Server connection is implemented in
-// Slice 2.
 package main
 
 import (
@@ -12,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"devstation/internal/agent"
 	"devstation/internal/config"
 	"devstation/internal/logging"
 )
@@ -35,8 +32,8 @@ func run() error {
 
 	logger.Info("runtime starting", "server_url", cfg.ServerURL, "env", cfg.Environment)
 
-	<-ctx.Done()
+	err = agent.Run(ctx, cfg, logger)
 
 	logger.Info("runtime stopped")
-	return nil
+	return err
 }

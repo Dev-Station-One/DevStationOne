@@ -26,6 +26,26 @@ docs/openapi.yaml
 /settings
 ```
 
+## Runtimes
+
+```text
+POST   /api/v1/runtimes
+GET    /api/v1/runtimes
+POST   /api/v1/runtimes/{runtimeID}/revoke
+
+WSS    /api/v1/runtimes/connect
+```
+
+`POST`/`GET`/`revoke` require an authenticated administrator session (cookie
+auth). `POST /api/v1/runtimes` returns the created runtime plus its raw
+enrollment token; the token is shown exactly once and only its SHA-256 hash
+is stored.
+
+`GET /api/v1/runtimes/connect` is where a Development Runtime opens its
+outbound WebSocket connection, authenticating with `Authorization: Bearer
+<enrollment token>` instead of a session cookie. See `docs/PROTOCOL.md` for
+the message envelope exchanged on that connection.
+
 ## Projects
 
 ```text
@@ -109,4 +129,7 @@ Never return secrets in errors.
 
 Browser authentication: server-side session, identified by a random 256-bit token stored in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The server stores only a SHA-256 hash of the token, never the raw value. Sessions expire 7 days after creation and are individually revocable (`/api/v1/auth/sessions`). See `docs/openapi.yaml` for the concrete contract.
 
-Runtime device authentication is defined in the runtime registration slice (Slice 2).
+Runtime device authentication: a bearer token issued at enrollment (`POST
+/api/v1/runtimes`), presented as `Authorization: Bearer <token>` on the
+`/api/v1/runtimes/connect` WebSocket upgrade. The server stores only a
+SHA-256 hash of the token, the same pattern as browser sessions.

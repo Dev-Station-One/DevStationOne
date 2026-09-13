@@ -38,3 +38,16 @@ func requireSession(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
 		next(w, r.WithContext(ctx))
 	}
 }
+
+// requireAdmin builds on requireSession, additionally rejecting the request
+// with 403 if the authenticated user is not an administrator.
+func requireAdmin(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
+	return requireSession(db, func(w http.ResponseWriter, r *http.Request) {
+		user, _ := userFromContext(r.Context())
+		if !user.IsAdmin {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "administrator access required"})
+			return
+		}
+		next(w, r)
+	})
+}

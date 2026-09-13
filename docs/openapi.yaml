@@ -130,6 +130,77 @@ paths:
           description: Not authenticated
         "404":
           description: Session not found
+  /api/v1/runtimes:
+    get:
+      summary: List registered runtimes
+      tags: [Runtimes]
+      operationId: listRuntimes
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Registered runtimes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Runtime"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+    post:
+      summary: Register a new runtime and issue its enrollment token
+      tags: [Runtimes]
+      operationId: createRuntime
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: Runtime registered; token shown exactly once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeWithToken"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+  /api/v1/runtimes/{runtimeID}/revoke:
+    post:
+      summary: Revoke a runtime, preventing further connections
+      tags: [Runtimes]
+      operationId: revokeRuntime
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: runtimeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Runtime revoked
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: Runtime not found
 components:
   securitySchemes:
     cookieAuth:
@@ -182,3 +253,61 @@ components:
           format: date-time
         current:
           type: boolean
+    RuntimeCapabilities:
+      type: object
+      properties:
+        terminal:
+          type: boolean
+        filesystem:
+          type: boolean
+        services:
+          type: boolean
+        databases:
+          type: array
+          items:
+            type: string
+    Runtime:
+      type: object
+      required: [id, name, hostname, os, arch, runtime_version, capabilities, status, online, enrolled_at, last_seen_at, revoked_at, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+        capabilities:
+          $ref: "#/components/schemas/RuntimeCapabilities"
+        status:
+          type: string
+          enum: [pending, online, offline, revoked]
+        online:
+          type: boolean
+          description: Whether the runtime currently has a live connection.
+        enrolled_at:
+          type: [string, "null"]
+          format: date-time
+        last_seen_at:
+          type: [string, "null"]
+          format: date-time
+        revoked_at:
+          type: [string, "null"]
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    RuntimeWithToken:
+      allOf:
+        - $ref: "#/components/schemas/Runtime"
+        - type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: Raw enrollment token, shown exactly once.

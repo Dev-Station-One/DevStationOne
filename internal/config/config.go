@@ -19,6 +19,7 @@ type Server struct {
 // Runtime holds configuration for the devstation-runtime binary.
 type Runtime struct {
 	ServerURL   string
+	Token       string
 	LogLevel    string
 	Environment string
 }
@@ -43,11 +44,15 @@ func LoadServer() (Server, error) {
 func LoadRuntime() (Runtime, error) {
 	cfg := Runtime{
 		ServerURL:   getenv("DEVSTATION_SERVER_URL", ""),
+		Token:       getenv("DEVSTATION_RUNTIME_TOKEN", ""),
 		LogLevel:    getenv("DEVSTATION_LOG_LEVEL", "info"),
 		Environment: getenv("DEVSTATION_ENV", "development"),
 	}
 	if cfg.ServerURL == "" {
 		return Runtime{}, fmt.Errorf("DEVSTATION_SERVER_URL is required")
+	}
+	if cfg.Token == "" {
+		return Runtime{}, fmt.Errorf("DEVSTATION_RUNTIME_TOKEN is required")
 	}
 	return cfg, nil
 }

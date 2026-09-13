@@ -6,11 +6,13 @@ import (
 	"net/http"
 
 	"devstation/internal/database"
+	"devstation/internal/runtimes"
 )
 
 // NewRouter builds the top-level HTTP handler for the Control Server.
 func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Handler {
 	mux := http.NewServeMux()
+	registry := runtimes.NewRegistry()
 
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler(db))
@@ -20,6 +22,11 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Hand
 	mux.HandleFunc("GET /api/v1/auth/session", requireSession(db, currentSessionHandler))
 	mux.HandleFunc("GET /api/v1/auth/sessions", requireSession(db, listSessionsHandler(db)))
 	mux.HandleFunc("DELETE /api/v1/auth/sessions/{sessionID}", requireSession(db, revokeSessionHandler(db)))
+
+	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
+	mux.HandleFunc("GET /api/v1/runtimes", requireAdmin(db, listRuntimesHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, logger))
 
 	mux.Handle("GET /", http.FileServer(http.Dir(staticDir)))
 

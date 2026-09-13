@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Runtimes · DevStation</title>
+  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+</head>
+<body>
+  <div class="page">
+    <header class="navbar navbar-expand-md navbar-light d-print-none">
+      <div class="container-xl d-flex justify-content-between">
+        <a href="/" class="navbar-brand">DevStation</a>
+        <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-body">
+        <div class="container-xl">
+          <h2 class="mb-3">Runtimes</h2>
+
+          <div class="card mb-4">
+            <div class="card-body">
+              <h3 class="card-title">Register a new runtime</h3>
+              <div class="row g-2 align-items-end">
+                <div class="col-auto">
+                  <label class="form-label">Name</label>
+                  <input id="new-runtime-name" type="text" class="form-control" placeholder="dev01">
+                </div>
+                <div class="col-auto">
+                  <button id="register-btn" class="btn btn-primary">Register</button>
+                </div>
+              </div>
+              <div id="register-error" class="alert alert-danger mt-3" hidden></div>
+              <div id="register-token" class="alert alert-warning mt-3" hidden>
+                <strong>Enrollment token (shown once):</strong>
+                <pre class="mb-2" id="register-token-value"></pre>
+                Set this on the runtime machine and start it:
+                <pre class="mb-0">DEVSTATION_SERVER_URL=&lt;this server's URL&gt;
+DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="table-responsive">
+              <table class="table card-table table-vcenter">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Status</th>
+                    <th>Host</th>
+                    <th>OS / Arch</th>
+                    <th>Last seen</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="runtimes-body"></tbody>
+              </table>
+            </div>
+            <div id="runtimes-empty" class="empty" hidden>
+              <div class="empty-title">No runtimes registered</div>
+              <div class="empty-subtitle text-secondary">Register a Development Runtime above to get started.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/vendor/jquery/jquery.min.js"></script>
+  <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script>
+    function escapeHtml(s) {
+      return $('<div>').text(s).html();
+    }
+
+    function statusBadge(rt) {
+      if (rt.status === 'revoked') return '<span class="badge bg-red-lt">revoked</span>';
+      if (rt.status === 'pending') return '<span class="badge bg-secondary-lt">pending enrollment</span>';
+      if (rt.online) return '<span class="badge bg-green-lt">online</span>';
+      return '<span class="badge bg-yellow-lt">offline</span>';
+    }
+
+    function loadRuntimes() {
+      $.get('/api/v1/runtimes').done(function (runtimes) {
+        var $body = $('#runtimes-body').empty();
+        $('#runtimes-empty').prop('hidden', runtimes.length > 0);
+        runtimes.forEach(function (rt) {
+          var revokeBtn = rt.status === 'revoked'
+            ? ''
+            : '<button class="btn btn-sm btn-outline-danger revoke-btn" data-id="' + rt.id + '">Revoke</button>';
+          $body.append(
+            '<tr><td>' + escapeHtml(rt.name) + '</td>' +
+            '<td>' + statusBadge(rt) + '</td>' +
+            '<td>' + escapeHtml(rt.hostname || '—') + '</td>' +
+            '<td>' + escapeHtml([rt.os, rt.arch].filter(Boolean).join(' / ') || '—') + '</td>' +
+            '<td>' + (rt.last_seen_at ? new Date(rt.last_seen_at).toLocaleString() : '—') + '</td>' +
+            '<td>' + revokeBtn + '</td></tr>'
+          );
+        });
+      }).fail(function (xhr) {
+        if (xhr.status === 401) {
+          window.location.href = '/login.html';
+        } else if (xhr.status === 403) {
+          $('#runtimes-body').empty();
+          $('#runtimes-empty').prop('hidden', false)
+            .find('.empty-title').text('Administrator access required');
+        }
+      });
+    }
+
+    $('#register-btn').on('click', function () {
+      var name = $('#new-runtime-name').val().trim();
+      $('#register-error').prop('hidden', true);
+      if (!name) return;
+
+      $.ajax({
+        url: '/api/v1/runtimes',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ name: name })
+      }).done(function (rt) {
+        $('#new-runtime-name').val('');
+        $('#register-token-value').text(rt.token);
+        $('#register-token-inline').text(rt.token);
+        $('#register-token').prop('hidden', false);
+        loadRuntimes();
+      }).fail(function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to register runtime.';
+        $('#register-error').text(msg).prop('hidden', false);
+      });
+    });
+
+    $('#runtimes-body').on('click', '.revoke-btn', function () {
+      var id = $(this).data('id');
+      if (!window.confirm('Revoke this runtime? It will lose access immediately.')) return;
+      $.ajax({ url: '/api/v1/runtimes/' + id + '/revoke', method: 'POST' }).always(loadRuntimes);
+    });
+
+    loadRuntimes();
+  </script>
+</body>
+</html>

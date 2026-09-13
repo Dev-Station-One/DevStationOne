@@ -65,6 +65,8 @@ Acceptance:
 - killing/restarting runtime reconnects
 - revocation prevents access
 
+**Status: Complete.**
+
 ## Slice 3 — Projects
 
 Deliver:
