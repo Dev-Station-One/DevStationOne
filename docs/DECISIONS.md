@@ -35,3 +35,9 @@ Terminal byte streams are latency-sensitive and binary. WebSocket is used for li
 ## ADR-008 — systemd --user
 
 User services are managed through the normal user's systemd instance where available. Root is not required for normal development-service operations.
+
+## ADR-009 — Server-side browser sessions, not JWT
+
+Browser authentication uses an opaque, high-entropy session token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The server stores only a SHA-256 hash of the token, keyed to a `sessions` row (user, expiry, last-seen, user agent, IP).
+
+JWTs were rejected for this slice: DevStation is a single self-hosted Control Server, not a distributed set of services needing stateless verification, so JWT's main advantage does not apply here. A server-side session gives immediate, per-session revocation (required by PRD §4/§5 "account/session management" and by runtime/device revocation elsewhere in the product) without token-blocklist workarounds, and keeps the WebSocket terminal transport (ADR-007) authenticating the same way as the REST API.

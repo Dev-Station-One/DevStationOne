@@ -71,14 +71,14 @@ For every slice:
 18. Run API contract validation.
 19. Run a real smoke test.
 20. Inspect logs.
-21. Update documentation.
-22. Update CodeGraph.
+21. Update documentation now, in this pass — API.md, ARCHITECTURE.md, DECISIONS.md (new ADRs), IMPLEMENTATION_PLAN.md status, any doc the slice touched. Do not defer this to a follow-up turn after CodeGraph or the commit.
+22. Update CodeGraph only after step 21 is done — CodeGraph must index docs that are already current, not stale ones.
 23. Review git diff.
 24. Search for accidental stubs/TODOs.
 25. Verify acceptance criteria.
-26. Commit the completed slice.
+26. Commit the completed slice — documentation changes are part of the slice's commit, never a separate later one.
 
-Never claim a slice is complete because it merely compiles.
+Never claim a slice is complete because it merely compiles. A slice is also not complete while its documentation update is still pending.
 
 ### CodeGraph is mandatory
 
@@ -106,12 +106,15 @@ The CodeGraph index is part of repository maintenance and must never be intentio
 
 ### Testing
 
+**Local dev environment note:** this machine runs many other projects — ports 5432/5433/8080 are frequently already taken (check `ss -ltnp` before picking a port for a manual smoke test; DevStation's own Postgres uses 55432, see `docker-compose.yml`). Before any manual smoke test, check for and kill leftover `devstation-server`/`devstation-runtime` processes from a prior run (`ps aux | grep devstation-`) — a stale process silently holding the port makes a new test appear to pass or fail against old code instead of erroring.
+
 For Go:
 - `gofmt`
 - `go vet`
 - project-appropriate lint/static analysis
 - unit tests
 - integration tests
+- integration tests share one dev Postgres (`make db-up`) — always run `go test -p 1 ./...` (already the `make test` target), never bare `go test ./...`, or cross-package `TRUNCATE`s race
 - race tests for concurrency-sensitive packages where practical
 
 For web:

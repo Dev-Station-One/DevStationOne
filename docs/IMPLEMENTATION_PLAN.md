@@ -28,6 +28,8 @@ Acceptance:
 - tests pass
 - CodeGraph index works
 
+**Status: Complete.**
+
 ## Slice 1 — Authentication and users
 
 Deliver real:
@@ -41,6 +43,8 @@ Deliver real:
 - auth tests
 - OpenAPI definitions
 - UI login/account screens
+
+**Status: Complete.**
 
 ## Slice 2 — Runtime registration and secure connection
 
