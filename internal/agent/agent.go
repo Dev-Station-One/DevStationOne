@@ -31,13 +31,15 @@ func Run(ctx context.Context, cfg config.Runtime, logger *slog.Logger) error {
 		OS:             goruntime.GOOS,
 		Arch:           goruntime.GOARCH,
 		RuntimeVersion: Version,
-		// Filesystem and database capabilities flip to true once the
-		// slices implementing them land. Services reflects real, current
-		// availability rather than "this build supports it" — a runtime
-		// with no reachable systemd --user instance must not advertise it.
+		// Services reflects real, current availability rather than "this
+		// build supports it" — a runtime with no reachable systemd --user
+		// instance must not advertise it. Filesystem is always available in
+		// a build that contains it. Database capability flips to true once
+		// the slices implementing it land.
 		Capabilities: protocol.Capabilities{
-			Terminal: true,
-			Services: services.Available(ctx),
+			Terminal:   true,
+			Filesystem: true,
+			Services:   services.Available(ctx),
 		},
 	}
 

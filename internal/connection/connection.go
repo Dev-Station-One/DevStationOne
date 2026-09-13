@@ -106,6 +106,11 @@ func connectOnce(ctx context.Context, dialURL, token string, hello protocol.Hell
 	if err != nil {
 		return false, fmt.Errorf("dial: %w", err)
 	}
+	// The runtime reads the largest legal control-plane envelopes, including
+	// file.command payloads carrying up to protocol.MaxFileBytes.
+	// coder/websocket's own default is far smaller (~32 KiB), which would
+	// reject large file transfers.
+	conn.SetReadLimit(protocol.MaxMessageBytes)
 	defer conn.CloseNow()
 
 	sender := &wsSender{conn: conn}

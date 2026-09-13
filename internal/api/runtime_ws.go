@@ -178,7 +178,9 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 	if !ok {
 		return false
 	}
-	if env.Type == protocol.MessageServiceError {
+	// Every RPC error type carries the same {"error": ...} shape; see
+	// ServiceErrorPayload's reuse by file.error.
+	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError {
 		var e protocol.ServiceErrorPayload
 		_ = json.Unmarshal(env.Payload, &e)
 		ch <- rpcResponse{err: errors.New(e.Error)}
@@ -190,7 +192,11 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 
 func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger, rt runtimes.Runtime) {
 	defer conn.CloseNow()
-	conn.SetReadLimit(1 << 20)
+	// The control connection carries the largest legal envelopes, including
+	// file.command/file.result payloads transferring up to
+	// protocol.MaxFileBytes (base64-encoded). Binary terminal frames are far
+	// smaller, so the raised limit affects only the RPC path.
+	conn.SetReadLimit(protocol.MaxMessageBytes)
 
 	helloCtx, cancel := context.WithTimeout(ctx, heartbeatTimeout)
 	_, data, err := conn.Read(helloCtx)

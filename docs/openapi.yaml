@@ -885,6 +885,449 @@ paths:
           description: systemctl failed on the runtime
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files:
+    get:
+      summary: List a directory's entries
+      description: Every call is a live RPC to the runtime; the path is resolved inside the Project's working directory. See docs/API.md "Files".
+      tags: [Files]
+      operationId: listFiles
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          description: Directory to list, relative to the Project's working directory. "." lists the root.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The directory's entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileInfo"
+        "400":
+          description: Invalid path (empty, absolute, or escaping the project root)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not read the directory
+        "504":
+          description: The runtime did not respond within the timeout
+    delete:
+      summary: Delete a file or directory tree
+      description: Directories are removed recursively. The project root itself cannot be deleted.
+      tags: [Files]
+      operationId: deleteFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          description: Entry to delete, relative to the Project's working directory.
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Invalid path (empty, absolute, or escaping the project root)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not delete the entry
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/search:
+    get:
+      summary: Search entry names by substring
+      description: Case-insensitive name-substring search over the subtree rooted at path. Bounded by depth/match caps on the runtime.
+      tags: [Files]
+      operationId: searchFiles
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          description: Subtree to search, relative to the Project's working directory.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Root-relative paths of matching entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "400":
+          description: Invalid path or empty q
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The search exceeded its entry limit
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/stat:
+    get:
+      summary: Stat one entry
+      tags: [Files]
+      operationId: statFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The entry's metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileInfo"
+        "400":
+          description: Invalid path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not stat the entry
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/content:
+    get:
+      summary: Read a file's bytes
+      description: Returns the raw file with a Content-Type derived from the extension. `download=1` forces a Content-Disposition attachment; HTML/SVG always get an attachment disposition. Files larger than the 24 MB transfer limit are rejected.
+      tags: [Files]
+      operationId: readFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: download
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: The file's bytes
+          content:
+            application/octet-stream: {}
+        "400":
+          description: Invalid path, or the path names a directory
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not read the file, or it exceeds the transfer limit
+        "504":
+          description: The runtime did not respond within the timeout
+    put:
+      summary: Write or upload a file
+      description: The raw request body is the file's bytes. Creates the file (0644) when absent, replaces it when present. Limited to 24 MB.
+      tags: [Files]
+      operationId: writeFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Written
+        "400":
+          description: Invalid path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "413":
+          description: Body exceeds the 24 MB upload limit
+        "502":
+          description: The runtime could not write the file
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/create:
+    post:
+      summary: Create an empty file
+      description: Fails if the file already exists.
+      tags: [Files]
+      operationId: createFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        "204":
+          description: Created
+        "400":
+          description: Invalid or missing path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not create the file (e.g. it already exists)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/mkdir:
+    post:
+      summary: Create a directory
+      description: Fails if the directory already exists.
+      tags: [Files]
+      operationId: mkdir
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        "204":
+          description: Created
+        "400":
+          description: Invalid or missing path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not create the directory
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/rename:
+    post:
+      summary: Rename an entry
+      description: Replaces the destination if it exists (POSIX semantics).
+      tags: [Files]
+      operationId: renameFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                to:
+                  type: string
+      responses:
+        "204":
+          description: Renamed
+        "400":
+          description: Invalid or missing from/to
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not rename the entry
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/copy:
+    post:
+      summary: Copy a file or directory tree
+      description: Fails if the destination exists.
+      tags: [Files]
+      operationId: copyFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                to:
+                  type: string
+      responses:
+        "204":
+          description: Copied
+        "400":
+          description: Invalid or missing from/to
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not copy the entry
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/move:
+    post:
+      summary: Move an entry
+      description: Same-filesystem rename; replaces the destination if it exists.
+      tags: [Files]
+      operationId: moveFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                to:
+                  type: string
+      responses:
+        "204":
+          description: Moved
+        "400":
+          description: Invalid or missing from/to
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not move the entry
+        "504":
+          description: The runtime did not respond within the timeout
 components:
   securitySchemes:
     cookieAuth:
@@ -1115,3 +1558,22 @@ components:
         enabled:
           type: string
           enum: [enabled, disabled, static, unknown]
+    FileInfo:
+      type: object
+      description: One filesystem entry inside the Project's working directory. Not a stored resource — see docs/API.md "Files".
+      required: [name, type, size, mode, mtime]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [file, dir, symlink, other]
+        size:
+          type: integer
+          format: int64
+        mode:
+          type: string
+          description: POSIX mode string, e.g. "-rw-r--r--"
+        mtime:
+          type: string
+          format: date-time

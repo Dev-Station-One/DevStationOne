@@ -200,6 +200,36 @@ Runtime-side, `internal/services` runs real `systemctl --user`/`journalctl
 `systemd --user` instance is actually reachable at connect time, not merely
 whether this runtime build supports the capability.
 
+## Implementation (Slice 6): file commands
+
+Slice 6 adds three message types, reusing the Slice 5 correlated
+request/response machinery unchanged:
+
+- `file.command` (server→runtime): `{action, root, path, to, data, query}`.
+  `action` is one of `list`, `stat`, `read`, `write`, `create`, `mkdir`,
+  `rename`, `copy`, `move`, `delete`, `search`.
+- `file.result` (runtime→server): exactly one of `{entries}`, `{info}`,
+  `{data}`, `{matches}` populated, matching the action.
+- `file.error` (runtime→server): `{error}` — the same payload shape as
+  `service.error`; the correlation resolver (`wsConn.tryResolve`) treats
+  both types as failures.
+
+Containment: the Control Server fills `root` from the Project record (its
+working directory) — `root` is never accepted from a client. `path`/`to`
+are root-relative and validated with the same `filesystem.Clean` rule on
+both sides (reject empty/absolute/`..`), then the runtime performs every
+operation through an `os.Root` opened at `root`, which also refuses
+symlinks escaping the root (SECURITY.md, ADR-018).
+
+Transfer encoding: `data` (write payloads and read results) is the file's
+bytes base64-encoded inside the JSON envelope by `encoding/json`. A file is
+capped at `protocol.MaxFileBytes` (24 MB); both ends of the control
+connection enforce a read limit of `protocol.MaxMessageBytes` (48 MB),
+which comfortably bounds the base64-encoded worst case (~33 MB).
+If the 24 MB cap proves too small for real projects, the
+upgrade path is chunked streaming messages, not raising the envelope
+further.
+
 ## Security
 
 Every runtime connection is authenticated.

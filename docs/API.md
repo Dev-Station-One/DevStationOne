@@ -145,19 +145,32 @@ live status or the runtime is offline.
 
 ## Files
 
-The final OpenAPI contract must define safe operations for:
-- list
-- stat
-- read
-- write
-- create
-- rename
-- copy
-- move
-- delete
-- upload
-- download
-- search
+All file operations are live RPCs to the Project's runtime, scoped to the
+Project's working directory (the authorized root). Every path argument is
+**root-relative** (`.` is the root itself); absolute paths and `..`
+traversal are rejected with `400` before dispatch, and the runtime
+re-checks containment independently via `os.Root` (symlink escapes included)
+and replies `502`. The runtime is offline → `409`; RPC timeout → `504`;
+oversized transfer (> 24 MB) → `413` on upload, `502` on read.
+
+| Operation | Endpoint |
+|---|---|
+| list | `GET /api/v1/projects/{projectID}/files?path=` |
+| stat | `GET /api/v1/projects/{projectID}/files/stat?path=` |
+| read | `GET /api/v1/projects/{projectID}/files/content?path=` |
+| download | same as read with `&download=1` (Content-Disposition attachment) |
+| write / upload | `PUT /api/v1/projects/{projectID}/files/content?path=` (raw body = file bytes) |
+| create | `POST /api/v1/projects/{projectID}/files/create` `{"path"}` — fails if it exists |
+| mkdir | `POST /api/v1/projects/{projectID}/files/mkdir` `{"path"}` — fails if it exists |
+| rename | `POST /api/v1/projects/{projectID}/files/rename` `{"from","to"}` — replaces destination |
+| copy | `POST /api/v1/projects/{projectID}/files/copy` `{"from","to"}` — fails if destination exists; directories copied recursively |
+| move | `POST /api/v1/projects/{projectID}/files/move` `{"from","to"}` — same-filesystem rename |
+| delete | `DELETE /api/v1/projects/{projectID}/files?path=` — recursive for directories |
+| search | `GET /api/v1/projects/{projectID}/files/search?q=&path=` — case-insensitive name substring, depth/match capped |
+
+The canonical request/response shapes are `docs/openapi.yaml` (tag `Files`).
+HTML/SVG content is always served with an attachment disposition so it can
+never render as a document on the DevStation origin.
 
 ## Databases
 

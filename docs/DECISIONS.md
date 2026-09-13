@@ -227,3 +227,37 @@ to the `list-units`-only result rather than failing the whole listing over
 one bad entry — found necessary the same way: a real unit
 (`gnome-session-manager@.service`) on this dev machine's own systemd
 instance broke a naive "error on any exec failure" implementation.
+
+## ADR-018 — Files: os.Root containment, root-relative paths, whole-file base64 transfers (Slice 6)
+
+Date: 2026-09-13
+
+**Decision.** The runtime's filesystem capability (Slice 6) is built on
+Go's `os.Root` (`internal/filesystem`). Every file.command is executed
+against a Root opened at the Project's working directory; paths travel as
+root-relative strings, never absolute, and are validated by
+`filesystem.Clean` on the Control Server (early 400) *and* re-checked by
+the runtime before the Root call (SECURITY.md's independent containment).
+`os.Root` supplies the actual guarantee: it resolves every path under the
+root fd and refuses both `..` traversal and symlinks that escape the root —
+including symlinks planted inside the root pointing outside it, which
+plain `filepath`-based checks miss. Transfers (read results, write
+payloads) carry the file's bytes base64-encoded inside the JSON envelope,
+capped at `protocol.MaxFileBytes` (24 MB), with the control connection's
+WebSocket read limit raised to `protocol.MaxMessageBytes` (48 MB) on both
+ends to bound the encoded worst case.
+
+**Why not alternatives.** Validating paths with `filepath.Clean` +
+prefix checks is the classic approach but is a known source of
+containment CVEs (symlink races, mixed separators); `os.Root` is the
+stdlib answer to exactly this. A separate upload/download HTTP channel
+(e.g. the runtime exposing a local port) would break the outbound-only,
+single-connection transport model. Chunked transfer messages would triple
+the protocol surface before any project needed >24 MB files over this
+path; the cap is documented in PROTOCOL.md and the upgrade path is noted
+there.
+
+**Consequence.** Copy/move are confined to one filesystem (the root) —
+acceptable, since a Project's tree lives on one device in practice. HTML
+and SVG are served with an attachment disposition so stored project files
+can never render as documents on the Control Server origin.

@@ -148,6 +148,8 @@ Acceptance:
 - upload/download a file
 - traversal attacks rejected
 
+**Status: Complete.**
+
 ## Slice 7 — Database foundation
 
 Deliver:

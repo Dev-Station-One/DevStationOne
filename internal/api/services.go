@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"devstation/internal/database"
+	"devstation/internal/projects"
 	"devstation/internal/protocol"
 	"devstation/internal/runtimes"
 	"devstation/internal/services"
@@ -23,17 +24,17 @@ const maxLogLines = 2000
 // runtimeConnForProject resolves projectID's runtime connection, writing a
 // response and returning ok=false if the caller isn't authorized, the
 // project doesn't exist, or the runtime isn't currently connected.
-func runtimeConnForProject(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry, projectID string) (runtimes.Conn, bool) {
+func runtimeConnForProject(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry, projectID string) (runtimes.Conn, projects.Project, bool) {
 	project, ok := authorizedProject(w, r, db, projectID)
 	if !ok {
-		return nil, false
+		return nil, projects.Project{}, false
 	}
 	conn, online := registry.Get(project.RuntimeID)
 	if !online {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "runtime is offline"})
-		return nil, false
+		return nil, projects.Project{}, false
 	}
-	return conn, true
+	return conn, project, true
 }
 
 // serviceCommand issues a service.command RPC to the project's runtime and
@@ -62,7 +63,7 @@ func serviceCommand(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, 
 
 func listServicesHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, ok := runtimeConnForProject(w, r, db, registry, r.PathValue("projectID"))
+		conn, _, ok := runtimeConnForProject(w, r, db, registry, r.PathValue("projectID"))
 		if !ok {
 			return
 		}
@@ -81,7 +82,7 @@ func listServicesHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 // the {unit} path value, writing an error response and returning ok=false
 // on failure.
 func authorizedUnit(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry) (runtimes.Conn, string, bool) {
-	conn, ok := runtimeConnForProject(w, r, db, registry, r.PathValue("projectID"))
+	conn, _, ok := runtimeConnForProject(w, r, db, registry, r.PathValue("projectID"))
 	if !ok {
 		return nil, "", false
 	}

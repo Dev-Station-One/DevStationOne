@@ -4,7 +4,10 @@
 // slices that implement them.
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Version is the current control-plane protocol version.
 const Version = "1"
@@ -58,6 +61,18 @@ const (
 	// MessageServiceError is sent runtime->server when a service.command
 	// fails, carrying the same Envelope.ID as the request.
 	MessageServiceError MessageType = "service.error"
+
+	// MessageFileCommand is sent server->runtime to perform a filesystem
+	// operation inside a Project's authorized root directory. Like
+	// service.command, it uses Envelope.ID for request/response correlation.
+	MessageFileCommand MessageType = "file.command"
+	// MessageFileResult is sent runtime->server with a successful
+	// file.command result, carrying the same Envelope.ID as the request.
+	MessageFileResult MessageType = "file.result"
+	// MessageFileError is sent runtime->server when a file.command fails,
+	// carrying the same Envelope.ID as the request. Its payload shape is
+	// identical to ServiceErrorPayload, which is reused for it.
+	MessageFileError MessageType = "file.error"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
@@ -182,6 +197,63 @@ type ServiceResultPayload struct {
 // ServiceErrorPayload is the payload of a MessageServiceError envelope.
 type ServiceErrorPayload struct {
 	Error string `json:"error"`
+}
+
+// MaxFileBytes caps the size of one file transferred in a file.command
+// read/write payload (base64-encoded inside the JSON envelope).
+// ponytail: whole-file-in-envelope transfer; if this cap bites real
+// projects, add chunked streaming (see docs/PROTOCOL.md Slice 6).
+const MaxFileBytes = 24 << 20
+
+// MaxMessageBytes is the WebSocket read limit applied on both ends of the
+// control-plane connection. It bounds the largest legal envelope — a
+// file.command/file.result carrying MaxFileBytes base64-encoded is ~33 MiB
+// after encoding, so the limit is set above that.
+const MaxMessageBytes = 48 << 20
+
+// FileCommandPayload is the payload of a MessageFileCommand envelope.
+//
+// Root is the absolute directory every operation is contained in, resolved
+// by the Control Server from the Project record — never taken from a client
+// request. Path and To are always relative to Root; the runtime re-validates
+// them and re-checks containment via os.Root regardless of what the Control
+// Server already checked (docs/SECURITY.md, defense in depth).
+type FileCommandPayload struct {
+	// Action is one of: list, stat, read, write, create, mkdir, rename,
+	// copy, move, delete, search.
+	Action string `json:"action"`
+	Root   string `json:"root"`
+	// Path is the target entry, relative to Root. "." refers to the root
+	// itself (used by "list" for directory navigation).
+	Path string `json:"path,omitempty"`
+	// To is the destination for rename/copy/move, relative to the same Root.
+	To string `json:"to,omitempty"`
+	// Data carries the file bytes for a "write" action (base64-encoded on
+	// the wire by encoding/json).
+	Data []byte `json:"data,omitempty"`
+	// Query is the name substring for a "search" action.
+	Query string `json:"query,omitempty"`
+}
+
+// FileInfo describes one filesystem entry.
+type FileInfo struct {
+	Name string `json:"name"`
+	// Type is "file", "dir", "symlink", or "other".
+	Type string `json:"type"`
+	Size int64  `json:"size"`
+	// Mode is the POSIX mode string, e.g. "-rw-r--r--".
+	Mode    string    `json:"mode"`
+	ModTime time.Time `json:"mtime"`
+}
+
+// FileResultPayload is the payload of a MessageFileResult envelope.
+// Exactly one of Entries, Info, Data, or Matches is populated, matching the
+// request's Action.
+type FileResultPayload struct {
+	Entries []FileInfo `json:"entries,omitempty"`
+	Info    *FileInfo  `json:"info,omitempty"`
+	Data    []byte     `json:"data,omitempty"`
+	Matches []string   `json:"matches,omitempty"`
 }
 
 // sessionIDFrameLen is the fixed width of the session ID prefix on a binary

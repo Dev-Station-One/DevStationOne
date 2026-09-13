@@ -144,7 +144,12 @@ The client cannot replace the authoritative cwd.
 
 ## Files
 
-Filesystem operations are performed on the runtime.
+Filesystem operations are performed on the runtime (`internal/filesystem`,
+Slice 6), executed through `os.Root` opened at the Project's working
+directory: all paths are root-relative, the Control Server validates them
+for an early `400`, and the runtime re-checks containment independently
+(ADR-018). Transfers are base64-encoded inside `file.command`/`file.result`
+envelopes, capped at 24 MB per file (PROTOCOL.md).
 
 Both Control Server authorization and runtime containment checks are required.
 

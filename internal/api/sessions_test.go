@@ -44,6 +44,15 @@ func startFakeRuntime(t *testing.T, ctx context.Context, serverURL, token string
 
 func sessionsTestSetup(t *testing.T) (router http.Handler, server *httptest.Server, adminCookie *http.Cookie, projectID string, db *database.DB) {
 	t.Helper()
+	return sessionsTestSetupIn(t, os.TempDir())
+}
+
+// sessionsTestSetupIn is sessionsTestSetup with the Project's working
+// directory (and therefore the file manager's containment root) chosen by
+// the caller. sessions_test uses os.TempDir(); file-manager tests pass a
+// dedicated t.TempDir().
+func sessionsTestSetupIn(t *testing.T, workingDir string) (router http.Handler, server *httptest.Server, adminCookie *http.Cookie, projectID string, db *database.DB) {
+	t.Helper()
 	db = testDB(t)
 	ctx := context.Background()
 
@@ -94,7 +103,7 @@ func sessionsTestSetup(t *testing.T) (router http.Handler, server *httptest.Serv
 
 	projReq, _ := json.Marshal(projectRequest{
 		Name: "App", RuntimeID: created.ID, OSUser: cur.Username,
-		WorkingDirectory: os.TempDir(), Shell: "/bin/sh",
+		WorkingDirectory: workingDir, Shell: "/bin/sh",
 	})
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projReq))
 	req.AddCookie(adminCookie)
