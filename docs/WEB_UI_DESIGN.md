@@ -1,8 +1,8 @@
-# DevStation Web UI Design
+# DevStationOne Web UI Design
 
 ## Purpose
 
-This is the authoritative web UI design direction for DevStation. The browser client is a responsive remote development workstation, not a dashboard-heavy SaaS application.
+This is the authoritative web UI design direction for DevStationOne. The browser client is a responsive remote development workstation, not a dashboard-heavy SaaS application.
 
 ## Visual Direction
 
@@ -23,7 +23,7 @@ Sidebar sections:
 Top navbar:
 
 - sidebar toggle
-- DevStation branding
+- DevStationOne branding
 - global search
 - notifications
 - help

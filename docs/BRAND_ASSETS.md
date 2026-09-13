@@ -1,4 +1,4 @@
-# DevStation Brand Assets
+# DevStationOne Brand Assets
 
 ## Approved direction
 

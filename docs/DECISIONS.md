@@ -40,7 +40,7 @@ User services are managed through the normal user's systemd instance where avail
 
 Browser authentication uses an opaque, high-entropy session token in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The server stores only a SHA-256 hash of the token, keyed to a `sessions` row (user, expiry, last-seen, user agent, IP).
 
-JWTs were rejected for this slice: DevStation is a single self-hosted Control Server, not a distributed set of services needing stateless verification, so JWT's main advantage does not apply here. A server-side session gives immediate, per-session revocation (required by PRD §4/§5 "account/session management" and by runtime/device revocation elsewhere in the product) without token-blocklist workarounds, and keeps the WebSocket terminal transport (ADR-007) authenticating the same way as the REST API.
+JWTs were rejected for this slice: DevStationOne is a single self-hosted Control Server, not a distributed set of services needing stateless verification, so JWT's main advantage does not apply here. A server-side session gives immediate, per-session revocation (required by PRD §4/§5 "account/session management" and by runtime/device revocation elsewhere in the product) without token-blocklist workarounds, and keeps the WebSocket terminal transport (ADR-007) authenticating the same way as the REST API.
 
 ## ADR-010 — Runtime identity reuses the bearer-token/hash pattern
 
@@ -81,7 +81,7 @@ requirement.
 
 ## ADR-013 — Project ownership: `created_by`, not a shared workspace
 
-Projects are scoped by `created_by` (the DevStation account that created
+Projects are scoped by `created_by` (the DevStationOne account that created
 them), separate from `os_user` (the OS account the runtime executes the
 Project's sessions as, e.g. "brian" in PRD §3). A non-admin user's project
 list/get/patch/delete only ever sees rows they created; an unauthorized

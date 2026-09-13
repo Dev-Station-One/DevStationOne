@@ -1,4 +1,4 @@
-# DevStation Architecture
+# DevStationOne Architecture
 
 ## High-level
 
@@ -40,7 +40,7 @@
 
 Suggested Go packages:
 ```text
-cmd/devstation-server
+cmd/devstationone-server
 internal/
   api/
   auth/
@@ -67,7 +67,7 @@ The exact structure may change if a stronger Go architecture is justified.
 
 Suggested:
 ```text
-cmd/devstation-runtime
+cmd/devstationone-runtime
 internal/
   agent/
   connection/

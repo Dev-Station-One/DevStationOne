@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"devstation/internal/auth"
-	"devstation/internal/protocol"
+	"devstationone/internal/auth"
+	"devstationone/internal/protocol"
 )
 
 // ErrNotFound is returned when a lookup finds no matching runtime.

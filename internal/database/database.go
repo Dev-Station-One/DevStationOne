@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
-	"devstation/migrations"
+	"devstationone/migrations"
 )
 
 // DB wraps a PostgreSQL connection pool.

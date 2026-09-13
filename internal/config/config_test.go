@@ -3,14 +3,14 @@ package config
 import "testing"
 
 func TestLoadServer_RequiresDatabaseURL(t *testing.T) {
-	t.Setenv("DEVSTATION_DATABASE_URL", "")
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "")
 	if _, err := LoadServer(); err == nil {
-		t.Fatal("expected error when DEVSTATION_DATABASE_URL is unset")
+		t.Fatal("expected error when DEVSTATIONONE_DATABASE_URL is unset")
 	}
 }
 
 func TestLoadServer_Defaults(t *testing.T) {
-	t.Setenv("DEVSTATION_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
 	cfg, err := LoadServer()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -24,17 +24,17 @@ func TestLoadServer_Defaults(t *testing.T) {
 }
 
 func TestLoadRuntime_RequiresServerURL(t *testing.T) {
-	t.Setenv("DEVSTATION_SERVER_URL", "")
-	t.Setenv("DEVSTATION_RUNTIME_TOKEN", "sometoken")
+	t.Setenv("DEVSTATIONONE_SERVER_URL", "")
+	t.Setenv("DEVSTATIONONE_RUNTIME_TOKEN", "sometoken")
 	if _, err := LoadRuntime(); err == nil {
-		t.Fatal("expected error when DEVSTATION_SERVER_URL is unset")
+		t.Fatal("expected error when DEVSTATIONONE_SERVER_URL is unset")
 	}
 }
 
 func TestLoadRuntime_RequiresToken(t *testing.T) {
-	t.Setenv("DEVSTATION_SERVER_URL", "https://example.com")
-	t.Setenv("DEVSTATION_RUNTIME_TOKEN", "")
+	t.Setenv("DEVSTATIONONE_SERVER_URL", "https://example.com")
+	t.Setenv("DEVSTATIONONE_RUNTIME_TOKEN", "")
 	if _, err := LoadRuntime(); err == nil {
-		t.Fatal("expected error when DEVSTATION_RUNTIME_TOKEN is unset")
+		t.Fatal("expected error when DEVSTATIONONE_RUNTIME_TOKEN is unset")
 	}
 }

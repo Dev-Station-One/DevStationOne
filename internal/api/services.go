@@ -7,11 +7,11 @@ import (
 	"strconv"
 	"time"
 
-	"devstation/internal/database"
-	"devstation/internal/projects"
-	"devstation/internal/protocol"
-	"devstation/internal/runtimes"
-	"devstation/internal/services"
+	"devstationone/internal/database"
+	"devstationone/internal/projects"
+	"devstationone/internal/protocol"
+	"devstationone/internal/runtimes"
+	"devstationone/internal/services"
 )
 
 // serviceRPCTimeout bounds how long a service REST request waits for the

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"devstation/internal/connection"
-	"devstation/internal/protocol"
-	"devstation/internal/services"
+	"devstationone/internal/connection"
+	"devstationone/internal/protocol"
+	"devstationone/internal/services"
 )
 
 // serviceCommandTimeout bounds a single systemctl/journalctl invocation.

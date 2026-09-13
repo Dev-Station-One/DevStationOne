@@ -1,4 +1,4 @@
-// Command devstation-runtime runs the DevStation Development Runtime agent.
+// Command devstationone-runtime runs the DevStationOne Development Runtime agent.
 package main
 
 import (
@@ -8,9 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"devstation/internal/agent"
-	"devstation/internal/config"
-	"devstation/internal/logging"
+	"devstationone/internal/agent"
+	"devstationone/internal/config"
+	"devstationone/internal/logging"
 )
 
 func main() {

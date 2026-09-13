@@ -8,16 +8,16 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"devstation/internal/auth"
-	"devstation/internal/projects"
-	"devstation/internal/runtimes"
+	"devstationone/internal/auth"
+	"devstationone/internal/projects"
+	"devstationone/internal/runtimes"
 )
 
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DEVSTATION_DATABASE_URL")
+	url := os.Getenv("DEVSTATIONONE_DATABASE_URL")
 	if url == "" {
-		t.Skip("DEVSTATION_DATABASE_URL not set; skipping integration test")
+		t.Skip("DEVSTATIONONE_DATABASE_URL not set; skipping integration test")
 	}
 	pool, err := pgxpool.New(context.Background(), url)
 	if err != nil {

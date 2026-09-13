@@ -1,4 +1,4 @@
-module devstation
+module devstationone
 
 go 1.26.0
 

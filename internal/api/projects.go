@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"devstation/internal/database"
-	"devstation/internal/projects"
-	"devstation/internal/runtimes"
+	"devstationone/internal/database"
+	"devstationone/internal/projects"
+	"devstationone/internal/runtimes"
 )
 
 type projectRequest struct {

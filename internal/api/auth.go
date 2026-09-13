@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"time"
 
-	"devstation/internal/auth"
-	"devstation/internal/database"
+	"devstationone/internal/auth"
+	"devstationone/internal/database"
 )
 
 type loginRequest struct {

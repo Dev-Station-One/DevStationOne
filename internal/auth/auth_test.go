@@ -15,13 +15,13 @@ func testLogger() *slog.Logger {
 }
 
 // testPool connects to a real Postgres instance for integration tests, or
-// skips the test if DEVSTATION_DATABASE_URL is not set (e.g. `make db-up`
+// skips the test if DEVSTATIONONE_DATABASE_URL is not set (e.g. `make db-up`
 // was not run). Each test truncates users/sessions so runs are isolated.
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DEVSTATION_DATABASE_URL")
+	url := os.Getenv("DEVSTATIONONE_DATABASE_URL")
 	if url == "" {
-		t.Skip("DEVSTATION_DATABASE_URL not set; skipping integration test")
+		t.Skip("DEVSTATIONONE_DATABASE_URL not set; skipping integration test")
 	}
 	pool, err := pgxpool.New(context.Background(), url)
 	if err != nil {

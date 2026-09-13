@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"devstation/internal/auth"
+	"devstationone/internal/auth"
 )
 
 func loginAs(t *testing.T, router http.Handler, email, password string) *http.Cookie {

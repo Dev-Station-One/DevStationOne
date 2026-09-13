@@ -25,7 +25,7 @@ db-down:
 	docker compose down
 
 run-server:
-	go run ./cmd/devstation-server
+	go run ./cmd/devstationone-server
 
 run-runtime:
-	go run ./cmd/devstation-runtime
+	go run ./cmd/devstationone-runtime

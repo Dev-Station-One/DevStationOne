@@ -1,4 +1,4 @@
-# DevStation Runtime and Terminal Protocol
+# DevStationOne Runtime and Terminal Protocol
 
 This document defines the protocol boundary between Control Server and Development Runtime.
 

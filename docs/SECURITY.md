@@ -1,4 +1,4 @@
-# DevStation Security Model
+# DevStationOne Security Model
 
 ## Threat model
 

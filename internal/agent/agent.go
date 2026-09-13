@@ -8,10 +8,10 @@ import (
 	"os"
 	goruntime "runtime"
 
-	"devstation/internal/config"
-	"devstation/internal/connection"
-	"devstation/internal/protocol"
-	"devstation/internal/services"
+	"devstationone/internal/config"
+	"devstationone/internal/connection"
+	"devstationone/internal/protocol"
+	"devstationone/internal/services"
 )
 
 // Version is the Development Runtime build version advertised to the

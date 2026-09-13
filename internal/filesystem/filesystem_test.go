@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"devstation/internal/protocol"
+	"devstationone/internal/protocol"
 )
 
 func openTestFS(t *testing.T) *FS {

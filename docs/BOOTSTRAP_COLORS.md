@@ -1,6 +1,6 @@
-# DevStation Bootstrap 5.3 Color System
+# DevStationOne Bootstrap 5.3 Color System
 
-DevStation uses a dark developer-workstation visual language built around a teal → cyan gradient. Bootstrap 5.3 should be themed through CSS custom properties rather than scattered component-specific colors.
+DevStationOne uses a dark developer-workstation visual language built around a teal → cyan gradient. Bootstrap 5.3 should be themed through CSS custom properties rather than scattered component-specific colors.
 
 ## Core palette
 
@@ -52,7 +52,7 @@ DevStation uses a dark developer-workstation visual language built around a teal
 }
 ```
 
-## DevStation-specific variables
+## DevStationOne-specific variables
 
 ```css
 :root {

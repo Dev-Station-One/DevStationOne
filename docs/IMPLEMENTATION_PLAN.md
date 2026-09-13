@@ -1,4 +1,4 @@
-# DevStation Implementation Plan
+# DevStationOne Implementation Plan
 
 The project is implemented as complete vertical slices. Claude Code must not jump ahead.
 

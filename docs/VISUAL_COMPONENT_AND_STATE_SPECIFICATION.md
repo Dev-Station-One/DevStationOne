@@ -1,4 +1,4 @@
-# DevStation Visual Component & State Specification
+# DevStationOne Visual Component & State Specification
 
 This document defines the visual anatomy and required states for the Terminal, File Manager, Database Manager, and responsive/mobile layouts.
 
@@ -203,4 +203,4 @@ Interactive controls should generally have at least a 44x44px effective touch ta
 
 ## Final Visual Principle
 
-DevStation should feel like a remote development workstation. Terminal, files, databases, and services are integrated views of the same Project context. Workspace content takes priority over application chrome, and every meaningful operational state is visible and actionable.
+DevStationOne should feel like a remote development workstation. Terminal, files, databases, and services are integrated views of the same Project context. Workspace content takes priority over application chrome, and every meaningful operational state is visible and actionable.

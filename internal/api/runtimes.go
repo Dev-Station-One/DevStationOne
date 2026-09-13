@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"devstation/internal/database"
-	"devstation/internal/protocol"
-	"devstation/internal/runtimes"
+	"devstationone/internal/database"
+	"devstationone/internal/protocol"
+	"devstationone/internal/runtimes"
 )
 
 type createRuntimeRequest struct {

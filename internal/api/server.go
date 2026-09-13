@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"devstation/internal/database"
-	"devstation/internal/runtimes"
-	"devstation/internal/sessions"
+	"devstationone/internal/database"
+	"devstationone/internal/runtimes"
+	"devstationone/internal/sessions"
 )
 
 // NewRouter builds the top-level HTTP handler for the Control Server.

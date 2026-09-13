@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"devstation/internal/protocol"
+	"devstationone/internal/protocol"
 )
 
 // Conn is the subset of a runtime's live connection the registry needs: to

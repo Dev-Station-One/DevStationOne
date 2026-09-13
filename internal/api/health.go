@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"devstation/internal/database"
+	"devstationone/internal/database"
 )
 
 func healthHandler(w http.ResponseWriter, r *http.Request) {

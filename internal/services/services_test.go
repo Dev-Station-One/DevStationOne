@@ -31,9 +31,9 @@ func testUnit(t *testing.T) string {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
 
-	name := fmt.Sprintf("devstation-test-%d.service", time.Now().UnixNano())
+	name := fmt.Sprintf("devstationone-test-%d.service", time.Now().UnixNano())
 	path := filepath.Join(dir, name)
-	unitFile := "[Unit]\nDescription=DevStation Slice 5 test service\n\n" +
+	unitFile := "[Unit]\nDescription=DevStationOne Slice 5 test service\n\n" +
 		"[Service]\nExecStart=/bin/sh -c 'while true; do sleep 1; done'\n\n" +
 		"[Install]\nWantedBy=default.target\n"
 	if err := os.WriteFile(path, []byte(unitFile), 0o644); err != nil {
@@ -161,7 +161,7 @@ func TestStatus_UnknownUnit(t *testing.T) {
 	if !Available(ctx) {
 		t.Skip("systemd --user not available; skipping integration test")
 	}
-	if _, err := Status(ctx, "devstation-definitely-not-a-real-unit.service"); err == nil {
+	if _, err := Status(ctx, "devstationone-definitely-not-a-real-unit.service"); err == nil {
 		t.Fatal("expected an error for a nonexistent unit")
 	}
 }

@@ -6,9 +6,9 @@ import (
 	"sync"
 	"syscall"
 
-	"devstation/internal/connection"
-	"devstation/internal/protocol"
-	"devstation/internal/pty"
+	"devstationone/internal/connection"
+	"devstationone/internal/protocol"
+	"devstationone/internal/pty"
 )
 
 // posixSignal maps the POSIX signal names the Control Server may send in a

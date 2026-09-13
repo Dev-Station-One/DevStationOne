@@ -1,6 +1,6 @@
-# CLAUDE.md — DevStation
+# CLAUDE.md — DevStationOne
 
-You are the primary implementation agent for DevStation.
+You are the primary implementation agent for DevStationOne.
 
 Read these files before implementing anything:
 - `docs/PRD.md`
@@ -22,7 +22,7 @@ deviation and preserve the product intent.
 
 Build a production-quality self-hosted remote development environment platform.
 
-DevStation has two server-side applications:
+DevStationOne has two server-side applications:
 
 1. **Control Server** — Internet-facing Go application containing the REST/OpenAPI API, authentication, authorization, PostgreSQL persistence, WebSocket gateway, runtime connection manager, and Tabler web UI.
 2. **Development Runtime** — Go application installed on a development machine and running as the normal development user. It establishes an outbound authenticated connection and provides PTYs, filesystem access, systemd user services, and database connectors.
@@ -106,7 +106,7 @@ The CodeGraph index is part of repository maintenance and must never be intentio
 
 ### Testing
 
-**Local dev environment note:** this machine runs many other projects — ports 5432/5433/8080 are frequently already taken (check `ss -ltnp` before picking a port for a manual smoke test; DevStation's own Postgres uses 55432, see `docker-compose.yml`). Before any manual smoke test, check for and kill leftover `devstation-server`/`devstation-runtime` processes from a prior run (`ps aux | grep devstation-`) — a stale process silently holding the port makes a new test appear to pass or fail against old code instead of erroring.
+**Local dev environment note:** this machine runs many other projects — ports 5432/5433/8080 are frequently already taken (check `ss -ltnp` before picking a port for a manual smoke test; DevStationOne's own Postgres uses 55432, see `docker-compose.yml`). Before any manual smoke test, check for and kill leftover `devstationone-server`/`devstationone-runtime` processes from a prior run (`ps aux | grep devstation-`) — a stale process silently holding the port makes a new test appear to pass or fail against old code instead of erroring.
 
 For Go:
 - `gofmt`
@@ -279,7 +279,7 @@ Before any frontend implementation or modification, read:
 - `docs/BRAND_ASSETS.md`
 - `docs/BOOTSTRAP_COLORS.md`
 
-Brand assets and Bootstrap color tokens are authoritative for DevStation visual branding. Do not substitute unrelated colors or logo treatments.
+Brand assets and Bootstrap color tokens are authoritative for DevStationOne visual branding. Do not substitute unrelated colors or logo treatments.
 
 Use current Tabler 1.5.x and Bootstrap 5.3-compatible patterns.
 

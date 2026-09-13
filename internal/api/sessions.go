@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"devstation/internal/database"
-	"devstation/internal/projects"
-	"devstation/internal/protocol"
-	"devstation/internal/runtimes"
-	"devstation/internal/sessions"
+	"devstationone/internal/database"
+	"devstationone/internal/projects"
+	"devstationone/internal/protocol"
+	"devstationone/internal/runtimes"
+	"devstationone/internal/sessions"
 )
 
 // openTimeout bounds how long a session-create request waits for the

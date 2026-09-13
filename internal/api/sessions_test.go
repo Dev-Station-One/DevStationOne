@@ -15,11 +15,11 @@ import (
 
 	"github.com/coder/websocket"
 
-	"devstation/internal/agent"
-	"devstation/internal/auth"
-	"devstation/internal/connection"
-	"devstation/internal/database"
-	"devstation/internal/protocol"
+	"devstationone/internal/agent"
+	"devstationone/internal/auth"
+	"devstationone/internal/connection"
+	"devstationone/internal/database"
+	"devstationone/internal/protocol"
 )
 
 // startFakeRuntime dials the Control Server's runtime WebSocket endpoint

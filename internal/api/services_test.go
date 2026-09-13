@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"devstation/internal/auth"
-	"devstation/internal/protocol"
-	"devstation/internal/services"
+	"devstationone/internal/auth"
+	"devstationone/internal/protocol"
+	"devstationone/internal/services"
 )
 
 // testServiceUnit installs a small, disposable unit file under the real
@@ -37,9 +37,9 @@ func testServiceUnit(t *testing.T) string {
 		t.Fatalf("mkdir %s: %v", dir, err)
 	}
 
-	name := fmt.Sprintf("devstation-apitest-%d.service", time.Now().UnixNano())
+	name := fmt.Sprintf("devstationone-apitest-%d.service", time.Now().UnixNano())
 	path := filepath.Join(dir, name)
-	unitFile := "[Unit]\nDescription=DevStation Slice 5 API test service\n\n" +
+	unitFile := "[Unit]\nDescription=DevStationOne Slice 5 API test service\n\n" +
 		"[Service]\nExecStart=/bin/sh -c 'while true; do sleep 1; done'\n\n" +
 		"[Install]\nWantedBy=default.target\n"
 	if err := os.WriteFile(path, []byte(unitFile), 0o644); err != nil {
@@ -184,7 +184,7 @@ func TestServiceHTTP_UnknownUnitReturnsBadGateway(t *testing.T) {
 		t.Skip("systemd --user not available; skipping integration test")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services/devstation-definitely-not-a-real-unit.service", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services/devstationone-definitely-not-a-real-unit.service", nil)
 	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

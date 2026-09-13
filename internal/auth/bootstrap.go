@@ -20,7 +20,7 @@ func BootstrapAdmin(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger
 		return nil
 	}
 	if email == "" || password == "" {
-		logger.Warn("no admin account exists and no bootstrap credentials were provided; set DEVSTATION_ADMIN_EMAIL and DEVSTATION_ADMIN_PASSWORD")
+		logger.Warn("no admin account exists and no bootstrap credentials were provided; set DEVSTATIONONE_ADMIN_EMAIL and DEVSTATIONONE_ADMIN_PASSWORD")
 		return nil
 	}
 

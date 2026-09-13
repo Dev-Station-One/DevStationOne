@@ -17,7 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"devstation/internal/protocol"
+	"devstationone/internal/protocol"
 )
 
 const (

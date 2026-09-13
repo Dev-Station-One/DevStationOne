@@ -3,8 +3,8 @@ package agent
 import (
 	"log/slog"
 
-	"devstation/internal/connection"
-	"devstation/internal/protocol"
+	"devstationone/internal/connection"
+	"devstationone/internal/protocol"
 )
 
 // dispatcher implements connection.Manager by routing each control-plane
@@ -21,7 +21,7 @@ type dispatcher struct {
 // real PTY sessions (Slice 4), systemd --user services (Slice 5), and
 // contained filesystem operations (Slice 6) from control-plane messages.
 // Exported so integration tests can run the real runtime-side logic against
-// a real PTY/systemd, without exec'ing the devstation-runtime binary as a
+// a real PTY/systemd, without exec'ing the devstationone-runtime binary as a
 // subprocess.
 func NewManager(logger *slog.Logger) connection.Manager {
 	return &dispatcher{

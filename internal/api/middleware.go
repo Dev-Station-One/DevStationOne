@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"devstation/internal/auth"
-	"devstation/internal/database"
+	"devstationone/internal/auth"
+	"devstationone/internal/database"
 )
 
 type contextKey int

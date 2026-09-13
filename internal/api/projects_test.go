@@ -10,7 +10,7 @@ import (
 	"os"
 	"testing"
 
-	"devstation/internal/auth"
+	"devstationone/internal/auth"
 )
 
 func createRuntimeAs(t *testing.T, router http.Handler, cookie *http.Cookie, name string) string {

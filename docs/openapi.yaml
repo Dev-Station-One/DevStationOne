@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: DevStation API
+  title: DevStationOne API
   version: 0.1.0
   description: |
-    OpenAPI contract for the DevStation self-hosted remote development platform.
+    OpenAPI contract for the DevStationOne self-hosted remote development platform.
     This file is intentionally minimal at repository creation. Each implementation
     slice must expand it with the real contract before that slice is marked complete.
 servers:
@@ -1362,7 +1362,7 @@ components:
     cookieAuth:
       type: apiKey
       in: cookie
-      name: devstation_session
+      name: devstationone_session
   schemas:
     Error:
       type: object

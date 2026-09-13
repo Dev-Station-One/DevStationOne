@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"devstation/internal/database"
-	"devstation/internal/filesystem"
-	"devstation/internal/protocol"
-	"devstation/internal/runtimes"
+	"devstationone/internal/database"
+	"devstationone/internal/filesystem"
+	"devstationone/internal/protocol"
+	"devstationone/internal/runtimes"
 )
 
 // fileRPCTimeout bounds how long a files REST request waits for the runtime
@@ -341,7 +341,7 @@ func contentTypeFor(p string) string {
 }
 
 // renderableOnOrigin reports whether a content type would execute script or
-// render as a document if served inline on the DevStation origin.
+// render as a document if served inline on the DevStationOne origin.
 func renderableOnOrigin(ct string) bool {
 	base, _, _ := mime.ParseMediaType(ct)
 	switch base {

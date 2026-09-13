@@ -15,9 +15,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"devstation/internal/auth"
-	"devstation/internal/protocol"
-	"devstation/internal/runtimes"
+	"devstationone/internal/auth"
+	"devstationone/internal/protocol"
+	"devstationone/internal/runtimes"
 )
 
 func wsURLFor(httpURL string) string {

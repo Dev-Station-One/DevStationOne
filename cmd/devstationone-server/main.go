@@ -1,4 +1,4 @@
-// Command devstation-server runs the DevStation Control Server.
+// Command devstationone-server runs the DevStationOne Control Server.
 package main
 
 import (
@@ -11,11 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"devstation/internal/api"
-	"devstation/internal/auth"
-	"devstation/internal/config"
-	"devstation/internal/database"
-	"devstation/internal/logging"
+	"devstationone/internal/api"
+	"devstationone/internal/auth"
+	"devstationone/internal/config"
+	"devstationone/internal/database"
+	"devstationone/internal/logging"
 )
 
 func main() {

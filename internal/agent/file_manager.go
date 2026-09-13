@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"devstation/internal/connection"
-	"devstation/internal/filesystem"
-	"devstation/internal/protocol"
+	"devstationone/internal/connection"
+	"devstationone/internal/filesystem"
+	"devstationone/internal/protocol"
 )
 
 // fileCommandTimeout bounds a single filesystem operation, including a

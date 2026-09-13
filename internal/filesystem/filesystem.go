@@ -18,7 +18,7 @@ import (
 	"path"
 	"strings"
 
-	"devstation/internal/protocol"
+	"devstationone/internal/protocol"
 )
 
 // searchCaps bound a "search" walk.

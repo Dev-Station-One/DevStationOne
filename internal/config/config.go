@@ -6,7 +6,7 @@ import (
 	"os"
 )
 
-// Server holds configuration for the devstation-server binary.
+// Server holds configuration for the devstationone-server binary.
 type Server struct {
 	Addr          string
 	DatabaseURL   string
@@ -16,7 +16,7 @@ type Server struct {
 	AdminPassword string
 }
 
-// Runtime holds configuration for the devstation-runtime binary.
+// Runtime holds configuration for the devstationone-runtime binary.
 type Runtime struct {
 	ServerURL   string
 	Token       string
@@ -27,15 +27,15 @@ type Runtime struct {
 // LoadServer reads Server config from the environment, applying defaults.
 func LoadServer() (Server, error) {
 	cfg := Server{
-		Addr:          getenv("DEVSTATION_SERVER_ADDR", ":8080"),
-		DatabaseURL:   getenv("DEVSTATION_DATABASE_URL", ""),
-		LogLevel:      getenv("DEVSTATION_LOG_LEVEL", "info"),
-		Environment:   getenv("DEVSTATION_ENV", "development"),
-		AdminEmail:    getenv("DEVSTATION_ADMIN_EMAIL", ""),
-		AdminPassword: getenv("DEVSTATION_ADMIN_PASSWORD", ""),
+		Addr:          getenv("DEVSTATIONONE_SERVER_ADDR", ":8080"),
+		DatabaseURL:   getenv("DEVSTATIONONE_DATABASE_URL", ""),
+		LogLevel:      getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
+		Environment:   getenv("DEVSTATIONONE_ENV", "development"),
+		AdminEmail:    getenv("DEVSTATIONONE_ADMIN_EMAIL", ""),
+		AdminPassword: getenv("DEVSTATIONONE_ADMIN_PASSWORD", ""),
 	}
 	if cfg.DatabaseURL == "" {
-		return Server{}, fmt.Errorf("DEVSTATION_DATABASE_URL is required")
+		return Server{}, fmt.Errorf("DEVSTATIONONE_DATABASE_URL is required")
 	}
 	return cfg, nil
 }
@@ -43,16 +43,16 @@ func LoadServer() (Server, error) {
 // LoadRuntime reads Runtime config from the environment, applying defaults.
 func LoadRuntime() (Runtime, error) {
 	cfg := Runtime{
-		ServerURL:   getenv("DEVSTATION_SERVER_URL", ""),
-		Token:       getenv("DEVSTATION_RUNTIME_TOKEN", ""),
-		LogLevel:    getenv("DEVSTATION_LOG_LEVEL", "info"),
-		Environment: getenv("DEVSTATION_ENV", "development"),
+		ServerURL:   getenv("DEVSTATIONONE_SERVER_URL", ""),
+		Token:       getenv("DEVSTATIONONE_RUNTIME_TOKEN", ""),
+		LogLevel:    getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
+		Environment: getenv("DEVSTATIONONE_ENV", "development"),
 	}
 	if cfg.ServerURL == "" {
-		return Runtime{}, fmt.Errorf("DEVSTATION_SERVER_URL is required")
+		return Runtime{}, fmt.Errorf("DEVSTATIONONE_SERVER_URL is required")
 	}
 	if cfg.Token == "" {
-		return Runtime{}, fmt.Errorf("DEVSTATION_RUNTIME_TOKEN is required")
+		return Runtime{}, fmt.Errorf("DEVSTATIONONE_RUNTIME_TOKEN is required")
 	}
 	return cfg, nil
 }

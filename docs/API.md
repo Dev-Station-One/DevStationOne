@@ -1,4 +1,4 @@
-# DevStation API
+# DevStationOne API
 
 Base path:
 ```text
@@ -170,7 +170,7 @@ oversized transfer (> 24 MB) → `413` on upload, `502` on read.
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag `Files`).
 HTML/SVG content is always served with an attachment disposition so it can
-never render as a document on the DevStation origin.
+never render as a document on the DevStationOne origin.
 
 ## Databases
 

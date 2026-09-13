@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"devstation/internal/auth"
-	"devstation/internal/database"
+	"devstationone/internal/auth"
+	"devstationone/internal/database"
 )
 
 // filesTestSetup is sessionsTestSetup with the Project rooted at a dedicated

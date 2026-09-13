@@ -12,11 +12,11 @@ import (
 
 	"github.com/coder/websocket"
 
-	"devstation/internal/auth"
-	"devstation/internal/database"
-	"devstation/internal/protocol"
-	"devstation/internal/runtimes"
-	"devstation/internal/sessions"
+	"devstationone/internal/auth"
+	"devstationone/internal/database"
+	"devstationone/internal/protocol"
+	"devstationone/internal/runtimes"
+	"devstationone/internal/sessions"
 )
 
 // heartbeatTimeout is how long the server waits for any message (heartbeat

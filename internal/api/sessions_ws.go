@@ -9,9 +9,9 @@ import (
 
 	"github.com/coder/websocket"
 
-	"devstation/internal/database"
-	"devstation/internal/runtimes"
-	"devstation/internal/sessions"
+	"devstationone/internal/database"
+	"devstationone/internal/runtimes"
+	"devstationone/internal/sessions"
 )
 
 // idleReadTimeout bounds how long the server waits for a browser to send

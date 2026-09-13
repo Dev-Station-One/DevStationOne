@@ -10,15 +10,15 @@ import (
 	"os"
 	"testing"
 
-	"devstation/internal/auth"
-	"devstation/internal/database"
+	"devstationone/internal/auth"
+	"devstationone/internal/database"
 )
 
 func testDB(t *testing.T) *database.DB {
 	t.Helper()
-	url := os.Getenv("DEVSTATION_DATABASE_URL")
+	url := os.Getenv("DEVSTATIONONE_DATABASE_URL")
 	if url == "" {
-		t.Skip("DEVSTATION_DATABASE_URL not set; skipping integration test")
+		t.Skip("DEVSTATIONONE_DATABASE_URL not set; skipping integration test")
 	}
 	db, err := database.Connect(context.Background(), url)
 	if err != nil {

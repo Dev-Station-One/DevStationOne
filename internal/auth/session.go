@@ -13,7 +13,7 @@ import (
 )
 
 // CookieName is the browser session cookie name.
-const CookieName = "devstation_session"
+const CookieName = "devstationone_session"
 
 // SessionTTL is how long a session stays valid since creation.
 const SessionTTL = 7 * 24 * time.Hour

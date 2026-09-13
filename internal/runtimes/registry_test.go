@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"devstation/internal/protocol"
+	"devstationone/internal/protocol"
 )
 
 type fakeConn struct {

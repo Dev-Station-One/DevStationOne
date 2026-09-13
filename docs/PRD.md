@@ -1,8 +1,8 @@
-# DevStation Product Requirements
+# DevStationOne Product Requirements
 
 ## 1. Vision
 
-DevStation is a self-hosted remote development environment platform.
+DevStationOne is a self-hosted remote development environment platform.
 
 A user installs the Control Server on an Internet-accessible server and installs Development Runtime on one or more development machines. The user opens the Control Server in a browser and can operate development environments remotely.
 
