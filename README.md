@@ -118,6 +118,8 @@ Run this on each machine you develop on, **as your normal user**. The runtime ne
 curl -fsSL https://raw.githubusercontent.com/Dev-Station-One/DevStationOne/main/install.sh | bash -s -- --runtime
 ```
 
+The binary installs to `~/.local/bin` — no root needed. Make sure `~/.local/bin` is on your `PATH`.
+
 Next, create a runtime on the server and get an enrollment token:
 
 1. Log in to the web UI → **Runtimes** → **Add runtime**.
@@ -196,7 +198,8 @@ Updates never require re-enrollment; the runtime keeps its credentials across up
 ```bash
 # Runtime (on the dev machine)
 systemctl --user disable --now devstationone-runtime
-sudo rm /usr/local/bin/devstationone-runtime ~/.config/systemd/user/devstationone-runtime.service
+rm ~/.local/bin/devstationone-runtime ~/.config/systemd/user/devstationone-runtime.service
+rm -r ~/.config/devstationone
 
 # Server
 sudo systemctl disable --now devstationone-server
