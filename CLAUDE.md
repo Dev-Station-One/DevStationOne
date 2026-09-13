@@ -324,6 +324,18 @@ git diff --check
 
 Keep commits coherent. Do not mix unrelated refactors into feature commits.
 
+## Dev instance
+
+A persistent development Control Server runs on this machine as a systemd
+user service (`devstationone-dev.service`, enabled with linger — survives
+logout and reboot):
+
+- Upstream: `http://192.168.25.165:18091` (LAN)
+- Public: `https://ds1.premadev.com` (external TLS-terminating proxy pointed at the upstream)
+- Binary: `bin/devstationone-server` (gitignored). The service does not rebuild itself — after changing server code run `go build -o bin/devstationone-server ./cmd/devstationone-server && systemctl --user restart devstationone-dev.service`
+- Logs: `journalctl --user -u devstationone-dev.service -f`
+- Seeded dev user: `dev@local.test` (re-create it via `DEVSTATIONONE_ADMIN_EMAIL`/`DEVSTATIONONE_ADMIN_PASSWORD` on an empty `users` table if a test run wiped it — API tests `TRUNCATE users CASCADE` on the shared dev Postgres)
+
 ## Definition of Done
 
 A slice is complete only when:
