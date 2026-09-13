@@ -115,6 +115,56 @@ they must remain binary-safe and are not JSON-wrapped.
    sends `revoked` and closes the connection. Any subsequent connection
    attempt with that token is rejected with `403` at step 2.
 
+## Implementation (Slice 4): terminal sessions
+
+Terminal sessions multiplex over the same control-plane connection used for
+`hello`/`heartbeat`/`revoked` (no second connection to the runtime). Two
+kinds of messages travel on it:
+
+**Control messages** — JSON `Envelope`s on WebSocket text frames, same
+shape as Slice 2:
+
+```text
+session.open    server -> runtime   {session_id, shell, dir, os_user, env, cols, rows}
+session.ready    runtime -> server  {session_id}
+session.error    runtime -> server  {session_id, error}
+session.resize   server -> runtime  {session_id, cols, rows}
+session.signal   server -> runtime  {session_id, signal}
+session.close    server -> runtime  {session_id}
+session.closed    runtime -> server {session_id}
+session.exit      runtime -> server {session_id, exit_code}
+```
+
+`session.open` correlates its `session.ready`/`session.error` response by
+`session_id` alone (the payload's own field) rather than the envelope's
+`id` — one is already unique per session, so a second correlation
+identifier would be redundant.
+
+**Terminal bytes** — binary WebSocket frames, never JSON-wrapped:
+
+```text
+[36-byte session ID][raw payload bytes]
+```
+
+The session ID is a Postgres `uuid` in its canonical 36-character string
+form, so the prefix is fixed-width — no length delimiter needed
+(`protocol.EncodeFrame`/`DecodeFrame`). Direction is implicit: a frame the
+server sends is input, a frame the runtime sends is output. This satisfies
+the "binary-safe, must not JSON-escape" requirement above while reusing the
+single connection from Slice 2.
+
+The Control Server's WSS `/api/v1/sessions/{sessionID}/stream` (browser
+side, see `docs/API.md`) is a separate, simpler connection: one session
+per socket, so it carries binary terminal bytes with no framing at all —
+the Control Server's `internal/sessions.Hub` is what translates between
+that per-session socket and the runtime's multiplexed frames.
+
+Runtime-side, a real OS PTY per session (`internal/pty`, wrapping
+`github.com/creack/pty` — ADR-006) is started for `session.open` and its
+output is streamed back via a `pump` goroutine per session until the
+process exits. A `session.open` whose `os_user` does not match the
+runtime's actual OS user is rejected with `session.error` (ADR-014).
+
 ## Security
 
 Every runtime connection is authenticated.

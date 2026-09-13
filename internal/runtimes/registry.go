@@ -1,11 +1,18 @@
 package runtimes
 
-import "sync"
+import (
+	"sync"
 
-// Conn is the subset of a runtime's live connection the registry needs in
-// order to notify it of revocation and close it.
+	"devstation/internal/protocol"
+)
+
+// Conn is the subset of a runtime's live connection the registry needs: to
+// notify it of revocation and close it, and (Slice 4) to dispatch terminal
+// session control messages and binary byte frames to it.
 type Conn interface {
 	Revoke() error
+	SendEnvelope(msgType protocol.MessageType, payload any) error
+	SendFrame(sessionID string, data []byte) error
 }
 
 // Registry tracks currently-connected runtimes in memory. It is scoped to a
@@ -40,10 +47,16 @@ func (r *Registry) Unregister(runtimeID string, c Conn) {
 
 // IsOnline reports whether runtimeID currently has a live connection.
 func (r *Registry) IsOnline(runtimeID string) bool {
+	_, ok := r.Get(runtimeID)
+	return ok
+}
+
+// Get returns runtimeID's live connection, if any.
+func (r *Registry) Get(runtimeID string) (Conn, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	_, ok := r.conns[runtimeID]
-	return ok
+	c, ok := r.conns[runtimeID]
+	return c, ok
 }
 
 // Revoke notifies and closes runtimeID's live connection, if any, reporting

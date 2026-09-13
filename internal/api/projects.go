@@ -80,6 +80,8 @@ func validateProjectFields(f projects.Fields) string {
 		return "working_directory must be an absolute path"
 	case strings.TrimSpace(f.Shell) == "":
 		return "shell is required"
+	case !strings.HasPrefix(f.Shell, "/"):
+		return "shell must be an absolute path"
 	}
 	return ""
 }

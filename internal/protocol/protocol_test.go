@@ -55,3 +55,27 @@ func TestEnvelope_HeartbeatHasNoPayload(t *testing.T) {
 		t.Fatalf("env = %+v, want heartbeat with no payload", env)
 	}
 }
+
+func TestEncodeDecodeFrame_RoundTrip(t *testing.T) {
+	sessionID := "123e4567-e89b-12d3-a456-426614174000"
+	payload := []byte{0x00, 0x1b, '[', '2', 'J', 0xff, 0x80}
+
+	frame := EncodeFrame(sessionID, payload)
+
+	gotID, gotPayload, ok := DecodeFrame(frame)
+	if !ok {
+		t.Fatal("DecodeFrame reported ok=false")
+	}
+	if gotID != sessionID {
+		t.Fatalf("sessionID = %q, want %q", gotID, sessionID)
+	}
+	if !reflect.DeepEqual(gotPayload, payload) {
+		t.Fatalf("payload = %v, want %v", gotPayload, payload)
+	}
+}
+
+func TestDecodeFrame_TooShort(t *testing.T) {
+	if _, _, ok := DecodeFrame([]byte("short")); ok {
+		t.Fatal("expected ok=false for a frame shorter than the session ID prefix")
+	}
+}

@@ -316,6 +316,276 @@ paths:
           description: Not authenticated
         "404":
           description: Project not found, or not owned by the current user
+  /api/v1/projects/{projectID}/sessions:
+    get:
+      summary: List a project's terminal sessions
+      tags: [Sessions]
+      operationId: listProjectSessions
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The project's sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TerminalSession"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+    post:
+      summary: Create a terminal session (starts a real PTY on the project's runtime)
+      description: |
+        Synchronously sends session.open to the project's runtime and waits
+        up to 10s for it to start. See docs/API.md "Sessions" for the
+        status lifecycle and error responses.
+      tags: [Sessions]
+      operationId: createSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TerminalSessionFields"
+      responses:
+        "201":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalSession"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime rejected session.open, or it could not be dispatched
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/sessions/{sessionID}:
+    get:
+      summary: Get a terminal session
+      tags: [Sessions]
+      operationId: getSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalSession"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+    patch:
+      summary: Rename a terminal session
+      tags: [Sessions]
+      operationId: renameSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: Session renamed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalSession"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+    delete:
+      summary: Close a terminal session
+      description: Sends session.close to the runtime (best-effort) and marks the session closed, a terminal status.
+      tags: [Sessions]
+      operationId: closeSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Session closed
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+  /api/v1/sessions/{sessionID}/attach:
+    post:
+      summary: Confirm a session can be attached to
+      description: Does not itself stream bytes — opening the WSS stream is what attaches a browser. This just validates the session is still live before a client opens it.
+      tags: [Sessions]
+      operationId: attachSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session is live and can be attached to
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalSession"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+        "409":
+          description: Session is exited, failed, or closed
+  /api/v1/sessions/{sessionID}/detach:
+    post:
+      summary: Force-disconnect whichever browser is currently attached
+      description: The session (and its process) is unaffected; a future attach still sees buffered scrollback.
+      tags: [Sessions]
+      operationId: detachSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Detached
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+  /api/v1/sessions/{sessionID}/resize:
+    post:
+      summary: Resize a session's PTY
+      tags: [Sessions]
+      operationId: resizeSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cols, rows]
+              properties:
+                cols:
+                  type: integer
+                rows:
+                  type: integer
+      responses:
+        "204":
+          description: Resized
+        "400":
+          description: cols/rows must be positive integers
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: Failed to reach the runtime
+  /api/v1/sessions/{sessionID}/signal:
+    post:
+      summary: Send a POSIX signal to a session's process
+      description: For explicit process control (e.g. a "Force stop" action). Normal input, including Ctrl+C/Ctrl+D as bytes, goes through the WSS stream instead.
+      tags: [Sessions]
+      operationId: signalSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signal]
+              properties:
+                signal:
+                  type: string
+                  enum: [SIGINT, SIGTERM, SIGKILL, SIGHUP, SIGQUIT, SIGTSTP, SIGCONT]
+      responses:
+        "204":
+          description: Signal sent
+        "400":
+          description: Unsupported signal
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found, or its project is not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: Failed to reach the runtime
 components:
   securitySchemes:
     cookieAuth:
@@ -483,3 +753,48 @@ components:
             updated_at:
               type: string
               format: date-time
+    TerminalSessionFields:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        cols:
+          type: integer
+          default: 80
+        rows:
+          type: integer
+          default: 24
+    TerminalSession:
+      type: object
+      description: |
+        A persistent PTY session running on its project's runtime. Named
+        "TerminalSession" (not "Session") to avoid confusion with the
+        unrelated browser-auth Session schema above (see ADR-015).
+      required: [id, project_id, name, status, cols, rows, exit_code, created_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [requested, starting, running, detached, exited, failed, closed]
+        cols:
+          type: integer
+        rows:
+          type: integer
+        exit_code:
+          type: [integer, "null"]
+        error:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time

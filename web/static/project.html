@@ -5,6 +5,80 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Project · DevStation</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+  <style>
+    /* Terminal session tabs and app tabs scroll horizontally instead of
+       wrapping, per docs/WEB_UI_DESIGN.md "Mobile" and
+       VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md mobile terminal priority. */
+    .app-tabs, .session-tabs {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    .app-tabs .nav-link, .session-tab {
+      white-space: nowrap;
+    }
+    .session-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: .375rem;
+      padding: .375rem .75rem;
+      border: 1px solid var(--tblr-border-color);
+      border-bottom: none;
+      border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;
+      background: var(--tblr-bg-surface-secondary);
+      cursor: pointer;
+      min-height: 44px;
+    }
+    .session-tab.active {
+      background: var(--tblr-bg-surface);
+      font-weight: 600;
+    }
+    .session-tab .status-dot {
+      width: .5rem;
+      height: .5rem;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .session-tab .status-dot.status-running { background: var(--tblr-success); }
+    .session-tab .status-dot.status-detached { background: var(--tblr-warning); }
+    .session-tab .status-dot.status-starting,
+    .session-tab .status-dot.status-requested { background: var(--tblr-info); }
+    .session-tab .status-dot.status-exited,
+    .session-tab .status-dot.status-failed,
+    .session-tab .status-dot.status-closed { background: var(--tblr-danger); }
+    .session-tab .close-btn {
+      border: none;
+      background: none;
+      line-height: 1;
+      padding: 0 .125rem;
+      min-width: 44px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .terminal-toolbar .btn {
+      min-height: 44px;
+    }
+    #terminal-canvas {
+      position: relative;
+      background: #000;
+      border-radius: 0 var(--tblr-border-radius) var(--tblr-border-radius) var(--tblr-border-radius);
+      /* Terminal canvas gets the majority of workspace height (WEB_UI_DESIGN.md). */
+      height: 60vh;
+      min-height: 320px;
+      padding: .5rem;
+    }
+    .session-term-pane {
+      position: absolute;
+      inset: 0;
+      padding: .5rem;
+    }
+    @media (min-width: 992px) {
+      #terminal-canvas { height: 70vh; }
+    }
+  </style>
 </head>
 <body>
   <div class="page">
@@ -57,64 +131,91 @@
                   <h2 class="page-title" id="project-name">—</h2>
                   <div class="text-secondary" id="project-summary">—</div>
                 </div>
-                <div class="col-auto">
+                <div class="col-auto" id="overview-actions">
                   <button id="edit-btn" class="btn btn-outline-secondary btn-sm">Edit</button>
                   <button id="delete-btn" class="btn btn-outline-danger btn-sm">Delete</button>
                 </div>
               </div>
             </div>
 
-            <ul class="nav nav-tabs mb-3">
-              <li class="nav-item"><a class="nav-link active" href="#">Overview</a></li>
-              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Terminal</a></li>
+            <ul class="nav nav-tabs mb-3 app-tabs">
+              <li class="nav-item"><a class="nav-link active" href="#" data-app-tab="overview">Overview</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="terminal">Terminal</a></li>
               <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Files</a></li>
               <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Databases</a></li>
               <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Services</a></li>
             </ul>
 
-            <div id="view-card" class="card">
-              <div class="card-body">
-                <dl class="row mb-0">
-                  <dt class="col-3">Runtime</dt><dd class="col-9" id="view-runtime">—</dd>
-                  <dt class="col-3">OS user</dt><dd class="col-9" id="view-os-user">—</dd>
-                  <dt class="col-3">Shell</dt><dd class="col-9" id="view-shell">—</dd>
-                  <dt class="col-3">Working directory</dt><dd class="col-9" id="view-cwd">—</dd>
-                  <dt class="col-3">Environment</dt><dd class="col-9"><pre class="mb-0" id="view-env">—</pre></dd>
-                </dl>
+            <div id="terminal-panel" hidden>
+              <div class="d-flex align-items-end session-tabs mb-0">
+                <div id="session-tabs" class="d-flex align-items-stretch flex-nowrap"></div>
+                <button id="new-session-btn" class="btn btn-sm btn-outline-secondary ms-2 mb-1" title="New terminal session">+ New</button>
+              </div>
+              <div id="terminal-empty" class="card">
+                <div class="card-body text-secondary">No terminal sessions yet. Click "+ New" to start one.</div>
+              </div>
+              <div id="terminal-active" hidden>
+                <div class="d-flex justify-content-between align-items-center bg-dark-subtle px-2 py-1 terminal-toolbar" style="border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;">
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Terminal control keys">
+                    <button type="button" class="btn btn-outline-secondary" data-send-key="ctrl-c" title="Send Ctrl+C">Ctrl+C</button>
+                    <button type="button" class="btn btn-outline-secondary" data-send-key="ctrl-d" title="Send Ctrl+D">Ctrl+D</button>
+                    <button type="button" class="btn btn-outline-secondary" data-send-key="tab" title="Send Tab">Tab</button>
+                    <button type="button" class="btn btn-outline-secondary" data-send-key="esc" title="Send Escape">Esc</button>
+                  </div>
+                  <div>
+                    <span id="session-status-text" class="text-secondary small me-2">—</span>
+                    <button id="force-stop-btn" class="btn btn-sm btn-outline-danger" title="Send SIGTERM to this session's process">Force stop</button>
+                  </div>
+                </div>
+                <div id="terminal-canvas"></div>
               </div>
             </div>
 
-            <div id="edit-card" class="card" hidden>
-              <div class="card-body">
-                <div class="row g-2">
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Name</label>
-                    <input id="edit-name" type="text" class="form-control">
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Runtime</label>
-                    <select id="edit-runtime" class="form-select"></select>
-                  </div>
-                  <div class="col-12 col-md-4">
-                    <label class="form-label">OS user</label>
-                    <input id="edit-os-user" type="text" class="form-control">
-                  </div>
-                  <div class="col-12 col-md-4">
-                    <label class="form-label">Shell</label>
-                    <input id="edit-shell" type="text" class="form-control">
-                  </div>
-                  <div class="col-12 col-md-4">
-                    <label class="form-label">Working directory</label>
-                    <input id="edit-cwd" type="text" class="form-control">
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label">Environment <span class="text-secondary">(one KEY=VALUE per line)</span></label>
-                    <textarea id="edit-env" class="form-control" rows="2"></textarea>
-                  </div>
+            <div id="overview-panel">
+              <div id="view-card" class="card">
+                <div class="card-body">
+                  <dl class="row mb-0">
+                    <dt class="col-3">Runtime</dt><dd class="col-9" id="view-runtime">—</dd>
+                    <dt class="col-3">OS user</dt><dd class="col-9" id="view-os-user">—</dd>
+                    <dt class="col-3">Shell</dt><dd class="col-9" id="view-shell">—</dd>
+                    <dt class="col-3">Working directory</dt><dd class="col-9" id="view-cwd">—</dd>
+                    <dt class="col-3">Environment</dt><dd class="col-9"><pre class="mb-0" id="view-env">—</pre></dd>
+                  </dl>
                 </div>
-                <div id="edit-error" class="alert alert-danger mt-3" hidden></div>
-                <button id="save-btn" class="btn btn-primary mt-3">Save</button>
-                <button id="cancel-btn" class="btn btn-link mt-3">Cancel</button>
+              </div>
+
+              <div id="edit-card" class="card" hidden>
+                <div class="card-body">
+                  <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Name</label>
+                      <input id="edit-name" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Runtime</label>
+                      <select id="edit-runtime" class="form-select"></select>
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">OS user</label>
+                      <input id="edit-os-user" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Shell</label>
+                      <input id="edit-shell" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-4">
+                      <label class="form-label">Working directory</label>
+                      <input id="edit-cwd" type="text" class="form-control">
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Environment <span class="text-secondary">(one KEY=VALUE per line)</span></label>
+                      <textarea id="edit-env" class="form-control" rows="2"></textarea>
+                    </div>
+                  </div>
+                  <div id="edit-error" class="alert alert-danger mt-3" hidden></div>
+                  <button id="save-btn" class="btn btn-primary mt-3">Save</button>
+                  <button id="cancel-btn" class="btn btn-link mt-3">Cancel</button>
+                </div>
               </div>
             </div>
           </div>
@@ -124,6 +225,8 @@
   </div>
   <script src="/vendor/jquery/jquery.min.js"></script>
   <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script src="/vendor/xterm/xterm.js"></script>
+  <script src="/vendor/xterm/addon-fit.js"></script>
   <script>
     function escapeHtml(s) {
       return $('<div>').text(s).html();
@@ -245,6 +348,221 @@
       $.ajax({ url: '/api/v1/auth/logout', method: 'POST' }).always(function () {
         window.location.href = '/login.html';
       });
+    });
+
+    // --- Terminal sessions (docs/PROTOCOL.md session lifecycle, docs/WEB_UI_DESIGN.md Terminal) ---
+
+    var termState = {}; // sessionID -> { info, term, fit, pane, ws, reconnectAttempts, reconnectTimer }
+    var activeSessionID = null;
+    var sessionsLoaded = false;
+
+    function statusLabel(status) {
+      var labels = {
+        requested: 'Requested', starting: 'Starting', running: 'Running',
+        detached: 'Detached (process alive)', exited: 'Exited', failed: 'Failed', closed: 'Closed'
+      };
+      return labels[status] || status;
+    }
+
+    function sendInput(ws, str) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(new TextEncoder().encode(str));
+      }
+    }
+
+    function renderSessionTabs() {
+      var $tabs = $('#session-tabs').empty();
+      Object.keys(termState).forEach(function (id) {
+        var st = termState[id];
+        var $tab = $('<div class="session-tab" role="button" tabindex="0">').toggleClass('active', id === activeSessionID);
+        $('<span class="status-dot">').addClass('status-' + st.info.status).appendTo($tab);
+        $('<span>').text(st.info.name).appendTo($tab);
+        var $close = $('<button type="button" class="close-btn" title="Close session" aria-label="Close session">&times;</button>');
+        $close.on('click', function (e) { e.stopPropagation(); closeSession(id); });
+        $tab.append($close);
+        $tab.on('click', function () { selectSession(id); });
+        $tabs.append($tab);
+      });
+      var any = Object.keys(termState).length > 0;
+      $('#terminal-empty').prop('hidden', any);
+      $('#terminal-active').prop('hidden', !any);
+    }
+
+    function setSessionStatusText(id, text) {
+      if (id === activeSessionID) $('#session-status-text').text(text);
+    }
+
+    function fetchSessionInfo(id) {
+      $.get('/api/v1/sessions/' + id).done(function (info) {
+        if (!termState[id]) return;
+        termState[id].info = info;
+        renderSessionTabs();
+        setSessionStatusText(id, statusLabel(info.status));
+      });
+    }
+
+    function paneFor(id) {
+      var st = termState[id];
+      if (st.pane) return st.pane;
+      var $pane = $('<div class="session-term-pane" hidden>').appendTo('#terminal-canvas');
+      st.pane = $pane[0];
+      st.term = new Terminal({ convertEol: true, cursorBlink: true, fontSize: 13, theme: { background: '#000000' } });
+      st.fit = new FitAddon.FitAddon();
+      st.term.loadAddon(st.fit);
+      st.term.open(st.pane);
+      st.term.onData(function (data) { sendInput(st.ws, data); });
+
+      var resizeTimer = null;
+      st.term.onResize(function (size) {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function () {
+          $.ajax({
+            url: '/api/v1/sessions/' + id + '/resize', method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ cols: size.cols, rows: size.rows })
+          });
+        }, 200);
+      });
+      return st.pane;
+    }
+
+    function scheduleReconnect(id) {
+      var st = termState[id];
+      if (!st || ['closed', 'exited', 'failed'].indexOf(st.info.status) !== -1) return;
+      st.reconnectAttempts = (st.reconnectAttempts || 0) + 1;
+      if (st.reconnectAttempts > 5) {
+        setSessionStatusText(id, 'Connection lost.');
+        return;
+      }
+      setSessionStatusText(id, 'Reconnecting…');
+      var delay = Math.min(1000 * Math.pow(2, st.reconnectAttempts - 1), 10000);
+      st.reconnectTimer = setTimeout(function () { connectSession(id); }, delay);
+    }
+
+    function connectSession(id) {
+      var st = termState[id];
+      if (!st || ['closed', 'exited', 'failed'].indexOf(st.info.status) !== -1) return;
+      var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var ws = new WebSocket(proto + '//' + window.location.host + '/api/v1/sessions/' + id + '/stream');
+      ws.binaryType = 'arraybuffer';
+      st.ws = ws;
+      setSessionStatusText(id, st.reconnectAttempts ? 'Reconnecting…' : 'Connecting…');
+      ws.onopen = function () {
+        st.reconnectAttempts = 0;
+        fetchSessionInfo(id);
+      };
+      ws.onmessage = function (evt) {
+        st.term.write(new Uint8Array(evt.data));
+      };
+      ws.onclose = function () {
+        st.ws = null;
+        fetchSessionInfo(id);
+        scheduleReconnect(id);
+      };
+    }
+
+    function selectSession(id) {
+      var previous = activeSessionID;
+      activeSessionID = id;
+      paneFor(id); // must exist before the visibility pass below covers it
+      Object.keys(termState).forEach(function (otherID) {
+        var pane = termState[otherID].pane;
+        if (pane) $(pane).prop('hidden', otherID !== id);
+      });
+      renderSessionTabs();
+      var st = termState[id];
+      $('#session-status-text').text(statusLabel(st.info.status));
+      setTimeout(function () { st.fit.fit(); if (previous !== id) st.term.focus(); }, 0);
+      if (!st.ws && ['exited', 'failed', 'closed'].indexOf(st.info.status) === -1) {
+        connectSession(id);
+      }
+    }
+
+    function addSession(info) {
+      termState[info.id] = { info: info, reconnectAttempts: 0 };
+      renderSessionTabs();
+      selectSession(info.id);
+    }
+
+    function closeSession(id) {
+      if (!window.confirm('Close this terminal session? The process will be terminated.')) return;
+      var st = termState[id];
+      if (st.reconnectTimer) clearTimeout(st.reconnectTimer);
+      if (st.ws) st.ws.close();
+      $.ajax({ url: '/api/v1/sessions/' + id, method: 'DELETE' }).always(function () {
+        if (st.pane) $(st.pane).remove();
+        if (st.term) st.term.dispose();
+        delete termState[id];
+        if (activeSessionID === id) {
+          activeSessionID = null;
+          var remaining = Object.keys(termState);
+          if (remaining.length) selectSession(remaining[0]);
+        }
+        renderSessionTabs();
+      });
+    }
+
+    function loadSessions() {
+      $.get('/api/v1/projects/' + projectID + '/sessions').done(function (list) {
+        list.slice().reverse().forEach(function (info) {
+          if (info.status === 'closed') return;
+          termState[info.id] = { info: info, reconnectAttempts: 0 };
+        });
+        renderSessionTabs();
+        var ids = Object.keys(termState);
+        if (ids.length) selectSession(ids[0]);
+      });
+    }
+
+    $('#new-session-btn').on('click', function () {
+      var name = window.prompt('Session name', 'bash');
+      if (!name) return;
+      $.ajax({
+        url: '/api/v1/projects/' + projectID + '/sessions', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ name: name, cols: 80, rows: 24 })
+      }).done(function (info) {
+        addSession(info);
+      }).fail(function (xhr) {
+        window.alert((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create session.');
+      });
+    });
+
+    $('#force-stop-btn').on('click', function () {
+      if (!activeSessionID) return;
+      if (!window.confirm("Send SIGTERM to this session's process?")) return;
+      $.ajax({
+        url: '/api/v1/sessions/' + activeSessionID + '/signal', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ signal: 'SIGTERM' })
+      });
+    });
+
+    var keyBytes = { 'ctrl-c': '', 'ctrl-d': '', tab: '	', esc: '' };
+    $('[data-send-key]').on('click', function () {
+      if (!activeSessionID) return;
+      sendInput(termState[activeSessionID].ws, keyBytes[$(this).data('send-key')]);
+    });
+
+    $(window).on('resize', function () {
+      if (activeSessionID && termState[activeSessionID] && termState[activeSessionID].fit) {
+        termState[activeSessionID].fit.fit();
+      }
+    });
+
+    $('[data-app-tab]').on('click', function (e) {
+      e.preventDefault();
+      var tab = $(this).data('app-tab');
+      $('[data-app-tab]').removeClass('active');
+      $(this).addClass('active');
+      $('#overview-panel').prop('hidden', tab !== 'overview');
+      $('#overview-actions').prop('hidden', tab !== 'overview');
+      $('#terminal-panel').prop('hidden', tab !== 'terminal');
+      if (tab === 'terminal') {
+        if (!sessionsLoaded) {
+          sessionsLoaded = true;
+          loadSessions();
+        } else if (activeSessionID && termState[activeSessionID]) {
+          setTimeout(function () { termState[activeSessionID].fit.fit(); }, 0);
+        }
+      }
     });
 
     load();

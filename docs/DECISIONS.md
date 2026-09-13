@@ -95,3 +95,60 @@ projects on behalf of other accounts on the same installation.
 Runtimes themselves remain unscoped by owner (Slice 2 already allows any
 admin to see all runtimes); a Project may reference any existing,
 non-revoked runtime regardless of who registered it.
+
+## ADR-014 — Session `os_user` must match the runtime's actual OS user
+
+A Project's `os_user` (Slice 3) names the OS account its sessions should
+run as. The Development Runtime process itself always runs as one normal
+user and never as root (PRD §8, SECURITY.md "never requires root for
+ordinary operation") — it has no `setuid`/`sudo`/privilege-escalation path
+to actually become a different OS user. Slice 4's `session.open` therefore
+compares the requested `os_user` against the runtime's own
+`os/user.Current()` and rejects the session with `session.error` on
+mismatch (`internal/pty.Start`), rather than silently running as whichever
+user the runtime process happens to be, or pretending to support
+multi-user impersonation it cannot deliver. This is a real containment
+check enforced at the runtime (SECURITY.md "Runtime must validate
+command/resource IDs against its own known state"), not a stub: a Project
+misconfigured for a different machine's user fails loudly at session
+creation instead of silently running as the wrong (or coincidentally
+matching) user.
+
+A future multi-user runtime host would need a real privilege boundary
+(e.g. a small root-owned setuid helper, or per-user runtime processes) to
+lift this restriction; that is out of scope for the MVP's single-dev-user
+deployment model.
+
+## ADR-015 — Terminal sessions: table name, binary framing, and scrollback
+
+Three related Slice 4 design choices:
+
+**Table name.** The PRD and UI call PTY sessions "Sessions," but a
+`sessions` table already exists for browser authentication (ADR-009,
+`0002_users_sessions.up.sql`). The new table is named `terminal_sessions`
+to avoid colliding with that unrelated, pre-existing concept; the Go
+package is still `internal/sessions`, matching ARCHITECTURE.md's suggested
+package layout — only the SQL table name differs from the product-level
+term.
+
+**Binary framing over the existing runtime connection.** Rather than open
+a second connection per session between Control Server and Runtime, all
+sessions multiplex over the one control-plane WebSocket from Slice 2
+(ADR-011/ADR-012). Terminal bytes travel as binary WebSocket frames
+prefixed with a fixed-36-byte session ID (`protocol.EncodeFrame`); this
+keeps ADR-007's "no JSON-escaping" requirement without inventing a new
+transport, and reuses `runtimes.Registry`'s existing per-runtime
+connection lookup to route commands. The browser-facing
+`/api/v1/sessions/{id}/stream` socket, by contrast, is already scoped to
+one session per connection, so it carries raw bytes with no framing at
+all — the frame prefix only exists where multiplexing is actually needed.
+
+**Bounded server-side scrollback.** `internal/sessions.Hub` keeps the last
+256KB of each session's output in memory (per Control Server process,
+matching ADR-012's single-instance scope) and replays it when a browser
+(re)attaches, so "browser refresh/reconnect preserves process" (PRD §4)
+also means the reattaching terminal isn't blank. This is an in-memory
+convenience, not a durability guarantee: output produced while the Control
+Server is restarted, or while the runtime's own connection is down, is
+lost — PTY bytes are still deliberately not persisted to PostgreSQL
+(ADR-007).

@@ -98,21 +98,26 @@ Browser:
 ```text
 Browser xterm.js
       |
-      | WSS
+      | WSS (binary terminal bytes, one session per socket)
       v
-Control Server
-      |
-      | runtime protocol
+Control Server   -- internal/sessions.Hub routes bytes <-> the runtime's
+      |              multiplexed connection, and replays a bounded
+      | runtime      scrollback buffer to a (re)attaching browser
+      | protocol     (Slice 4; see docs/PROTOCOL.md "Implementation:
+      | (multiplexed terminal sessions" for the binary frame format)
+      | binary
+      | frames)
       v
-Development Runtime
-      |
+Development Runtime  -- internal/pty (github.com/creack/pty), one real
+      |                 OS PTY per session, output pumped back per-session
       v
 PTY
 ```
 
 PTY bytes are not persisted to PostgreSQL by default.
 
-Persist session metadata only.
+Persist session metadata only (`terminal_sessions` table: status,
+dimensions, exit code — never terminal content).
 
 ## Project execution
 
@@ -167,7 +172,8 @@ PostgreSQL stores:
 - runtimes
 - runtime capabilities
 - projects
-- sessions
+- terminal sessions (`terminal_sessions`; the browser-auth `sessions` table
+  is a distinct, pre-existing concept — see ADR-015)
 - database connection metadata
 - audit events
 - settings

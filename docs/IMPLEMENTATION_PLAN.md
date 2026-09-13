@@ -109,6 +109,8 @@ Acceptance:
 - browser refresh/reconnect preserves process
 - Project cwd is correct
 
+**Status: Complete.**
+
 ## Slice 5 — Services / systemd user
 
 Deliver:

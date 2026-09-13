@@ -1,6 +1,7 @@
 // Package connection maintains the Development Runtime's outbound
 // authenticated WebSocket connection to the Control Server, including
-// reconnect-with-backoff and periodic heartbeats.
+// reconnect-with-backoff, periodic heartbeats, and dispatch of control
+// messages and binary terminal frames to a Manager.
 package connection
 
 import (
@@ -11,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -24,9 +26,27 @@ const (
 	maxBackoff        = 30 * time.Second
 )
 
+// Sender lets a Manager push control messages and terminal byte frames back
+// to the Control Server over the currently active connection.
+type Sender interface {
+	SendEnvelope(msgType protocol.MessageType, payload any) error
+	SendFrame(sessionID string, data []byte) error
+}
+
+// Manager reacts to control-plane messages and terminal frames received
+// from the Control Server. SetSender is called with the active Sender each
+// time a connection is established, and with nil when it drops — PTYs
+// started on a prior connection keep running across a reconnect, so the
+// Manager must outlive any single connection attempt.
+type Manager interface {
+	SetSender(s Sender)
+	HandleEnvelope(env protocol.Envelope)
+	HandleFrame(sessionID string, data []byte)
+}
+
 // Run dials the Control Server and maintains the connection, reconnecting
 // with exponential backoff on failure, until ctx is cancelled.
-func Run(ctx context.Context, serverURL, token string, hello protocol.HelloPayload, logger *slog.Logger) error {
+func Run(ctx context.Context, serverURL, token string, hello protocol.HelloPayload, mgr Manager, logger *slog.Logger) error {
 	dialURL, err := connectURL(serverURL)
 	if err != nil {
 		return err
@@ -34,7 +54,7 @@ func Run(ctx context.Context, serverURL, token string, hello protocol.HelloPaylo
 
 	backoff := minBackoff
 	for ctx.Err() == nil {
-		connected, err := connectOnce(ctx, dialURL, token, hello, logger)
+		connected, err := connectOnce(ctx, dialURL, token, hello, mgr, logger)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -78,7 +98,7 @@ func connectURL(serverURL string) (string, error) {
 // connectOnce performs a single connection attempt. The returned bool
 // reports whether the handshake succeeded (used by Run to decide whether to
 // reset its backoff), independent of the returned error.
-func connectOnce(ctx context.Context, dialURL, token string, hello protocol.HelloPayload, logger *slog.Logger) (bool, error) {
+func connectOnce(ctx context.Context, dialURL, token string, hello protocol.HelloPayload, mgr Manager, logger *slog.Logger) (bool, error) {
 	conn, _, err := websocket.Dial(ctx, dialURL, &websocket.DialOptions{
 		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + token}},
 	})
@@ -87,15 +107,26 @@ func connectOnce(ctx context.Context, dialURL, token string, hello protocol.Hell
 	}
 	defer conn.CloseNow()
 
-	if err := sendEnvelope(ctx, conn, protocol.MessageHello, hello); err != nil {
+	sender := &wsSender{conn: conn}
+	if err := sender.SendEnvelope(protocol.MessageHello, hello); err != nil {
 		return false, fmt.Errorf("send hello: %w", err)
 	}
 	logger.Info("connected to control server")
 
-	return true, heartbeatLoop(ctx, conn, logger)
+	mgr.SetSender(sender)
+	defer mgr.SetSender(nil)
+
+	return true, runLoop(ctx, conn, sender, mgr)
 }
 
-func sendEnvelope(ctx context.Context, conn *websocket.Conn, msgType protocol.MessageType, payload any) error {
+// wsSender adapts a *websocket.Conn to Sender, serializing writes: the
+// heartbeat ticker and every PTY's output goroutine share one connection.
+type wsSender struct {
+	mu   sync.Mutex
+	conn *websocket.Conn
+}
+
+func (s *wsSender) SendEnvelope(msgType protocol.MessageType, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -104,23 +135,41 @@ func sendEnvelope(ctx context.Context, conn *websocket.Conn, msgType protocol.Me
 	if err != nil {
 		return err
 	}
-	return conn.Write(ctx, websocket.MessageText, data)
+	return s.write(websocket.MessageText, data)
 }
 
-// heartbeatLoop sends periodic heartbeats and watches for server-initiated
-// messages (such as revocation) until the connection fails or ctx is done.
-func heartbeatLoop(ctx context.Context, conn *websocket.Conn, logger *slog.Logger) error {
+func (s *wsSender) SendFrame(sessionID string, payload []byte) error {
+	return s.write(websocket.MessageBinary, protocol.EncodeFrame(sessionID, payload))
+}
+
+func (s *wsSender) write(msgType websocket.MessageType, data []byte) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conn.Write(ctx, msgType, data)
+}
+
+// runLoop reads frames/envelopes and dispatches them to mgr, sending
+// periodic heartbeats, until the connection fails or ctx is done.
+func runLoop(ctx context.Context, conn *websocket.Conn, sender *wsSender, mgr Manager) error {
 	readErrCh := make(chan error, 1)
 	go func() {
 		for {
-			_, data, err := conn.Read(ctx)
+			msgType, data, err := conn.Read(ctx)
 			if err != nil {
 				readErrCh <- err
 				return
 			}
+			if msgType == websocket.MessageBinary {
+				if sessionID, payload, ok := protocol.DecodeFrame(data); ok {
+					mgr.HandleFrame(sessionID, payload)
+				}
+				continue
+			}
 			var env protocol.Envelope
-			if json.Unmarshal(data, &env) == nil && env.Type == protocol.MessageRevoked {
-				logger.Warn("runtime credential revoked by control server")
+			if json.Unmarshal(data, &env) == nil {
+				mgr.HandleEnvelope(env)
 			}
 		}
 	}()
@@ -136,7 +185,7 @@ func heartbeatLoop(ctx context.Context, conn *websocket.Conn, logger *slog.Logge
 		case err := <-readErrCh:
 			return err
 		case <-ticker.C:
-			if err := sendEnvelope(ctx, conn, protocol.MessageHeartbeat, struct{}{}); err != nil {
+			if err := sender.SendEnvelope(protocol.MessageHeartbeat, struct{}{}); err != nil {
 				return fmt.Errorf("send heartbeat: %w", err)
 			}
 		}

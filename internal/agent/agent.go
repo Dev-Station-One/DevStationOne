@@ -30,10 +30,11 @@ func Run(ctx context.Context, cfg config.Runtime, logger *slog.Logger) error {
 		OS:             goruntime.GOOS,
 		Arch:           goruntime.GOARCH,
 		RuntimeVersion: Version,
-		// Terminal, filesystem, service, and database capabilities flip to
-		// true once the slices implementing them land.
-		Capabilities: protocol.Capabilities{},
+		// Filesystem, service, and database capabilities flip to true once
+		// the slices implementing them land.
+		Capabilities: protocol.Capabilities{Terminal: true},
 	}
 
-	return connection.Run(ctx, cfg.ServerURL, cfg.Token, hello, logger)
+	mgr := NewSessionManager(logger)
+	return connection.Run(ctx, cfg.ServerURL, cfg.Token, hello, mgr, logger)
 }

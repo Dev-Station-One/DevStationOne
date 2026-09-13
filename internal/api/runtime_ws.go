@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coder/websocket"
@@ -15,6 +16,7 @@ import (
 	"devstation/internal/database"
 	"devstation/internal/protocol"
 	"devstation/internal/runtimes"
+	"devstation/internal/sessions"
 )
 
 // heartbeatTimeout is how long the server waits for any message (heartbeat
@@ -24,7 +26,7 @@ const heartbeatTimeout = 45 * time.Second
 // runtimeConnectHandler accepts the outbound WebSocket connection a
 // Development Runtime opens using its enrollment token as a bearer
 // credential.
-func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, logger *slog.Logger) http.HandlerFunc {
+func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		if token == "" {
@@ -51,7 +53,7 @@ func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, logger 
 			return // Accept already wrote the HTTP error response.
 		}
 
-		handleRuntimeConnection(r.Context(), conn, db, registry, logger, rt)
+		handleRuntimeConnection(r.Context(), conn, db, registry, hub, logger, rt)
 	}
 }
 
@@ -64,21 +66,52 @@ func bearerToken(r *http.Request) string {
 	return strings.TrimPrefix(h, prefix)
 }
 
-// wsConn adapts a *websocket.Conn to runtimes.Conn.
+// wsConn adapts a *websocket.Conn to runtimes.Conn. Writes are serialized
+// through mu: heartbeats, revocation, and per-session control/output frames
+// can all originate from different goroutines (the connection's own read
+// loop vs. HTTP handlers acting on a session), and coder/websocket requires
+// callers to synchronize concurrent writes themselves.
 type wsConn struct {
-	c *websocket.Conn
+	mu sync.Mutex
+	c  *websocket.Conn
 }
 
-func (w wsConn) Revoke() error {
-	env := protocol.Envelope{Version: protocol.Version, Type: protocol.MessageRevoked}
-	data, _ := json.Marshal(env)
+func (w *wsConn) write(msgType websocket.MessageType, data []byte) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = w.c.Write(ctx, websocket.MessageText, data)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.c.Write(ctx, msgType, data)
+}
+
+func (w *wsConn) Revoke() error {
+	env := protocol.Envelope{Version: protocol.Version, Type: protocol.MessageRevoked}
+	data, _ := json.Marshal(env)
+	_ = w.write(websocket.MessageText, data)
 	return w.c.Close(websocket.StatusNormalClosure, "revoked")
 }
 
-func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, logger *slog.Logger, rt runtimes.Runtime) {
+// SendEnvelope sends a JSON control message (session.open, session.resize,
+// session.signal, session.close, ...) to the runtime.
+func (w *wsConn) SendEnvelope(msgType protocol.MessageType, payload any) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	data, err := json.Marshal(protocol.Envelope{Version: protocol.Version, Type: msgType, Payload: body})
+	if err != nil {
+		return err
+	}
+	return w.write(websocket.MessageText, data)
+}
+
+// SendFrame sends raw terminal input bytes for sessionID to the runtime, as
+// a binary-safe frame (see protocol.EncodeFrame).
+func (w *wsConn) SendFrame(sessionID string, data []byte) error {
+	return w.write(websocket.MessageBinary, protocol.EncodeFrame(sessionID, data))
+}
+
+func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger, rt runtimes.Runtime) {
 	defer conn.CloseNow()
 	conn.SetReadLimit(1 << 20)
 
@@ -108,7 +141,7 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 		return
 	}
 
-	wc := wsConn{c: conn}
+	wc := &wsConn{c: conn}
 	registry.Register(rt.ID, wc)
 	defer registry.Unregister(rt.ID, wc)
 	defer func() {
@@ -121,21 +154,73 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 
 	for {
 		readCtx, cancelRead := context.WithTimeout(ctx, heartbeatTimeout)
-		_, data, err := conn.Read(readCtx)
+		msgType, data, err := conn.Read(readCtx)
 		cancelRead()
 		if err != nil {
 			logger.Info("runtime disconnected", "runtime_id", rt.ID, "error", err)
 			return
 		}
 
+		if msgType == websocket.MessageBinary {
+			if sessionID, payload, ok := protocol.DecodeFrame(data); ok {
+				hub.Forward(sessionID, payload)
+			}
+			continue
+		}
+
 		var env protocol.Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
 			continue
 		}
-		if env.Type == protocol.MessageHeartbeat {
-			if err := runtimes.Heartbeat(ctx, db.Pool, rt.ID); err != nil {
-				logger.Error("runtime heartbeat update failed", "runtime_id", rt.ID, "error", err)
-			}
+		handleRuntimeEnvelope(ctx, env, db, hub, logger, rt.ID)
+	}
+}
+
+// handleRuntimeEnvelope dispatches one control-plane JSON message received
+// from a connected runtime.
+func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, hub *sessions.Hub, logger *slog.Logger, runtimeID string) {
+	switch env.Type {
+	case protocol.MessageHeartbeat:
+		if err := runtimes.Heartbeat(ctx, db.Pool, runtimeID); err != nil {
+			logger.Error("runtime heartbeat update failed", "runtime_id", runtimeID, "error", err)
 		}
+
+	case protocol.MessageSessionReady:
+		var p protocol.SessionReadyPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		if err := sessions.MarkDetached(ctx, db.Pool, p.SessionID); err != nil {
+			logger.Error("session mark detached failed", "session_id", p.SessionID, "error", err)
+		}
+		hub.ResolveOpen(p.SessionID, nil)
+
+	case protocol.MessageSessionError:
+		var p protocol.SessionErrorPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		if err := sessions.MarkFailed(ctx, db.Pool, p.SessionID, p.Error); err != nil {
+			logger.Error("session mark failed failed", "session_id", p.SessionID, "error", err)
+		}
+		hub.ResolveOpen(p.SessionID, errors.New(p.Error))
+		hub.Discard(p.SessionID)
+
+	case protocol.MessageSessionExit:
+		var p protocol.SessionExitPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		if err := sessions.MarkExited(ctx, db.Pool, p.SessionID, p.ExitCode); err != nil {
+			logger.Error("session mark exited failed", "session_id", p.SessionID, "error", err)
+		}
+		hub.Discard(p.SessionID)
+
+	case protocol.MessageSessionClosed:
+		var p protocol.SessionClosedPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		hub.Discard(p.SessionID)
 	}
 }

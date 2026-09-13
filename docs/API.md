@@ -62,8 +62,8 @@ POST   /api/v1/projects/{projectID}/sessions
 ```
 
 CRUD requires an authenticated session; the session sub-resource routes
-above are defined by the contract but implemented in Slice 4 alongside PTYs
-(they are not yet wired up). CRUD is scoped by ownership (ADR-013):
+above are implemented in Slice 4 (see Sessions below). CRUD is scoped by
+ownership (ADR-013):
 administrators see and manage every project, other users only ones they
 created (`created_by`). A project the caller does not own responds `404`,
 the same as one that does not exist, so the response never confirms another
@@ -74,6 +74,9 @@ is revoked.
 ## Sessions
 
 ```text
+GET    /api/v1/projects/{projectID}/sessions
+POST   /api/v1/projects/{projectID}/sessions
+
 GET    /api/v1/sessions/{sessionID}
 PATCH  /api/v1/sessions/{sessionID}
 DELETE /api/v1/sessions/{sessionID}
@@ -85,6 +88,60 @@ POST   /api/v1/sessions/{sessionID}/signal
 
 WSS    /api/v1/sessions/{sessionID}/stream
 ```
+
+A Session is a persistent, real PTY (ADR-006) running on the Project's
+runtime. All routes require an authenticated session and are authorized the
+same way as Projects (`authorizedTermSession` resolves the session's
+Project and applies the same ownership check as `authorizedProject`,
+`404` on mismatch — ADR-013).
+
+`POST /api/v1/projects/{projectID}/sessions` creates the row, then
+synchronously sends `session.open` to the Project's runtime over its
+existing control-plane connection (Slice 2) and waits up to 10s for
+`session.ready`/`session.error`. Responses:
+- `201` — the session started; `status` is `detached` (alive, unattached).
+- `409` — the Project's runtime is not currently connected.
+- `502` — the runtime rejected session.open (e.g. `os_user` does not match
+  the runtime's actual OS user — see ADR-014) or the command could not be
+  dispatched.
+- `504` — the runtime did not respond within the timeout.
+
+Status values (`docs/PROTOCOL.md` lifecycle, plus `failed`):
+`requested`, `starting`, `running` (attached), `detached` (alive,
+unattached), `exited`, `failed`, `closed`.
+
+`PATCH` renames a session (`{"name": "..."}`) — it is the only mutable
+field; working directory/shell/environment come from the Project and
+cannot be overridden per-session.
+
+`DELETE` sends `session.close` to the runtime (best-effort — it also
+succeeds if the runtime is offline) and marks the session `closed`. This
+is a terminal state: a closed session's row is kept for history but can no
+longer be attached to.
+
+`POST .../resize` `{"cols": int, "rows": int}` and `POST .../signal`
+`{"signal": "SIGINT"|"SIGTERM"|"SIGKILL"|"SIGHUP"|"SIGQUIT"|"SIGTSTP"|"SIGCONT"}`
+both require the runtime to be online (`409` if not) and forward directly
+to it; resize additionally persists the new size. Signal is for explicit
+process control (e.g. a "Force stop" UI action) — normal input, including
+Ctrl+C/Ctrl+D as bytes, goes through the WSS stream instead.
+
+`POST .../attach` and `POST .../detach` are control-plane conveniences,
+not the attach mechanism itself: opening the WSS stream is what attaches a
+browser (and closing it detaches). `attach` just confirms the session is
+still live before a client opens the stream (`409` if `exited`/`failed`/
+`closed`); `detach` forcibly disconnects whichever browser is currently
+attached (e.g. so another device can take over) without closing the
+session.
+
+`WSS .../stream` is the terminal byte stream. Opening it attaches the
+caller (marking the session `running`) and immediately replays up to 256KB
+of recent output (Hub scrollback) so a reattach isn't a blank screen;
+closing it marks the session `detached` if the process is still alive.
+Messages are **binary-only** WebSocket frames carrying raw terminal
+bytes in both directions — no JSON envelope, matching `docs/PROTOCOL.md`'s
+binary-safety requirement. `409` (not upgraded) if the session is not in a
+live status or the runtime is offline.
 
 ## Files
 
