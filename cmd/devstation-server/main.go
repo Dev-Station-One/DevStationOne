@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"devstation/internal/api"
+	"devstation/internal/auth"
 	"devstation/internal/config"
 	"devstation/internal/database"
 	"devstation/internal/logging"
@@ -45,6 +46,11 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+
+	if err := auth.BootstrapAdmin(ctx, db.Pool, logger, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		logger.Error("admin bootstrap failed", "error", err)
+		return err
+	}
 
 	handler := api.NewRouter(db, logger, "web/static")
 	srv := &http.Server{

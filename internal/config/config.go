@@ -8,10 +8,12 @@ import (
 
 // Server holds configuration for the devstation-server binary.
 type Server struct {
-	Addr        string
-	DatabaseURL string
-	LogLevel    string
-	Environment string
+	Addr          string
+	DatabaseURL   string
+	LogLevel      string
+	Environment   string
+	AdminEmail    string
+	AdminPassword string
 }
 
 // Runtime holds configuration for the devstation-runtime binary.
@@ -24,10 +26,12 @@ type Runtime struct {
 // LoadServer reads Server config from the environment, applying defaults.
 func LoadServer() (Server, error) {
 	cfg := Server{
-		Addr:        getenv("DEVSTATION_SERVER_ADDR", ":8080"),
-		DatabaseURL: getenv("DEVSTATION_DATABASE_URL", ""),
-		LogLevel:    getenv("DEVSTATION_LOG_LEVEL", "info"),
-		Environment: getenv("DEVSTATION_ENV", "development"),
+		Addr:          getenv("DEVSTATION_SERVER_ADDR", ":8080"),
+		DatabaseURL:   getenv("DEVSTATION_DATABASE_URL", ""),
+		LogLevel:      getenv("DEVSTATION_LOG_LEVEL", "info"),
+		Environment:   getenv("DEVSTATION_ENV", "development"),
+		AdminEmail:    getenv("DEVSTATION_ADMIN_EMAIL", ""),
+		AdminPassword: getenv("DEVSTATION_ADMIN_PASSWORD", ""),
 	}
 	if cfg.DatabaseURL == "" {
 		return Server{}, fmt.Errorf("DEVSTATION_DATABASE_URL is required")

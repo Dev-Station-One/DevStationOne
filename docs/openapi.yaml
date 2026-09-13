@@ -39,7 +39,103 @@ paths:
           description: Ready
         "503":
           description: Not ready
+  /api/v1/auth/login:
+    post:
+      summary: Log in with email and password
+      tags: [Auth]
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Authenticated; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Invalid email or password
+  /api/v1/auth/logout:
+    post:
+      summary: Log out and destroy the current session
+      tags: [Auth]
+      operationId: logout
+      responses:
+        "204":
+          description: Logged out
+  /api/v1/auth/session:
+    get:
+      summary: Get the current authenticated user
+      tags: [Auth]
+      operationId: getCurrentSession
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Not authenticated
+  /api/v1/auth/sessions:
+    get:
+      summary: List active sessions for the current user
+      tags: [Auth]
+      operationId: listSessions
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Active sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+        "401":
+          description: Not authenticated
+  /api/v1/auth/sessions/{sessionID}:
+    delete:
+      summary: Revoke one of the current user's sessions
+      tags: [Auth]
+      operationId: revokeSession
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: sessionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Session revoked
+        "401":
+          description: Not authenticated
+        "404":
+          description: Session not found
 components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: devstation_session
   schemas:
     Error:
       type: object
@@ -51,3 +147,38 @@ components:
           type: string
         request_id:
           type: [string, "null"]
+    User:
+      type: object
+      required: [id, email, is_admin, created_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        is_admin:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    Session:
+      type: object
+      required: [id, user_agent, ip_address, created_at, last_seen_at, expires_at, current]
+      properties:
+        id:
+          type: string
+        user_agent:
+          type: string
+        ip_address:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_seen_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        current:
+          type: boolean

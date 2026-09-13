@@ -9,8 +9,9 @@
 <body>
   <div class="page">
     <header class="navbar navbar-expand-md navbar-light d-print-none">
-      <div class="container-xl">
+      <div class="container-xl d-flex justify-content-between">
         <a href="/" class="navbar-brand">DevStation</a>
+        <a href="/account.html" class="btn btn-outline-secondary btn-sm">Account</a>
       </div>
     </header>
     <div class="page-wrapper">
@@ -19,8 +20,7 @@
           <div class="empty">
             <div class="empty-title">DevStation Control Server</div>
             <div class="empty-subtitle text-secondary">
-              Slice 0 foundation is running. Projects, Runtimes, and the rest of the workspace
-              arrive in later implementation slices.
+              Projects, Runtimes, and the rest of the workspace arrive in later implementation slices.
             </div>
           </div>
         </div>
@@ -29,5 +29,10 @@
   </div>
   <script src="/vendor/jquery/jquery.min.js"></script>
   <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script>
+    $.get('/api/v1/auth/session').fail(function () {
+      window.location.href = '/login.html';
+    });
+  </script>
 </body>
 </html>

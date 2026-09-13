@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Account · DevStation</title>
+  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+</head>
+<body>
+  <div class="page">
+    <header class="navbar navbar-expand-md navbar-light d-print-none">
+      <div class="container-xl d-flex justify-content-between">
+        <a href="/" class="navbar-brand">DevStation</a>
+        <button id="logout-btn" class="btn btn-outline-secondary btn-sm">Log out</button>
+      </div>
+    </header>
+    <div class="page-wrapper">
+      <div class="page-body">
+        <div class="container-xl">
+          <h2 class="mb-3">Account</h2>
+          <div class="card mb-4">
+            <div class="card-body">
+              <div class="mb-1"><strong>Email:</strong> <span id="account-email">—</span></div>
+              <div><strong>Role:</strong> <span id="account-role">—</span></div>
+            </div>
+          </div>
+
+          <h3 class="mb-3">Active sessions</h3>
+          <div class="card">
+            <div class="table-responsive">
+              <table class="table card-table table-vcenter">
+                <thead>
+                  <tr>
+                    <th>Device / Agent</th>
+                    <th>IP address</th>
+                    <th>Last seen</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="sessions-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/vendor/jquery/jquery.min.js"></script>
+  <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script>
+    function escapeHtml(s) {
+      return $('<div>').text(s).html();
+    }
+
+    function loadAccount() {
+      $.get('/api/v1/auth/session').done(function (user) {
+        $('#account-email').text(user.email);
+        $('#account-role').text(user.is_admin ? 'Administrator' : 'User');
+      }).fail(function () {
+        window.location.href = '/login.html';
+      });
+    }
+
+    function loadSessions() {
+      $.get('/api/v1/auth/sessions').done(function (sessions) {
+        var $body = $('#sessions-body').empty();
+        sessions.forEach(function (s) {
+          var revokeBtn = s.current
+            ? '<span class="badge bg-green-lt">this device</span>'
+            : '<button class="btn btn-sm btn-outline-danger revoke-btn" data-id="' + s.id + '">Revoke</button>';
+          $body.append(
+            '<tr><td>' + escapeHtml(s.user_agent || 'Unknown') + '</td>' +
+            '<td>' + escapeHtml(s.ip_address || '') + '</td>' +
+            '<td>' + new Date(s.last_seen_at).toLocaleString() + '</td>' +
+            '<td>' + revokeBtn + '</td></tr>'
+          );
+        });
+      });
+    }
+
+    $('#sessions-body').on('click', '.revoke-btn', function () {
+      var id = $(this).data('id');
+      $.ajax({ url: '/api/v1/auth/sessions/' + id, method: 'DELETE' }).always(loadSessions);
+    });
+
+    $('#logout-btn').on('click', function () {
+      $.ajax({ url: '/api/v1/auth/logout', method: 'POST' }).always(function () {
+        window.location.href = '/login.html';
+      });
+    });
+
+    loadAccount();
+    loadSessions();
+  </script>
+</body>
+</html>

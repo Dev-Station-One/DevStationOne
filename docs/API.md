@@ -107,6 +107,6 @@ Never return secrets in errors.
 
 ## Authentication
 
-The implementation must use a secure browser authentication mechanism and runtime device authentication.
+Browser authentication: server-side session, identified by a random 256-bit token stored in an `HttpOnly`, `Secure`, `SameSite=Lax` cookie. The server stores only a SHA-256 hash of the token, never the raw value. Sessions expire 7 days after creation and are individually revocable (`/api/v1/auth/sessions`). See `docs/openapi.yaml` for the concrete contract.
 
-The exact mechanism is selected during the authentication slice and documented in OpenAPI.
+Runtime device authentication is defined in the runtime registration slice (Slice 2).

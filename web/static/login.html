@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · DevStation</title>
+  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+</head>
+<body class="d-flex flex-column">
+  <div class="page page-center">
+    <div class="container container-tight py-4">
+      <div class="text-center mb-4">
+        <span class="navbar-brand">DevStation</span>
+      </div>
+      <div class="card card-md">
+        <div class="card-body">
+          <h2 class="h2 text-center mb-4">Sign in to your account</h2>
+          <div id="login-error" class="alert alert-danger" hidden></div>
+          <form id="login-form" autocomplete="on">
+            <div class="mb-3">
+              <label class="form-label">Email address</label>
+              <input type="email" id="email" class="form-control" autocomplete="username" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Password</label>
+              <input type="password" id="password" class="form-control" autocomplete="current-password" required>
+            </div>
+            <div class="form-footer">
+              <button type="submit" class="btn btn-primary w-100">Sign in</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/vendor/jquery/jquery.min.js"></script>
+  <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script>
+    $('#login-form').on('submit', function (e) {
+      e.preventDefault();
+      $('#login-error').prop('hidden', true);
+      $.ajax({
+        url: '/api/v1/auth/login',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          email: $('#email').val(),
+          password: $('#password').val()
+        })
+      }).done(function () {
+        window.location.href = '/account.html';
+      }).fail(function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Sign in failed';
+        $('#login-error').text(msg).prop('hidden', false);
+      });
+    });
+  </script>
+</body>
+</html>
