@@ -1,0 +1,34 @@
+# Binaries
+/bin/
+/dist/
+/build/
+
+# Go
+*.test
+coverage.out
+
+# Local config/secrets
+.env
+.env.*
+!.env.example
+
+# Frontend
+node_modules/
+web/node_modules/
+web/dist/
+
+# Runtime/local state
+*.sqlite
+*.db
+data/
+tmp/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+
+# CodeGraph generated data
+.codegraph/

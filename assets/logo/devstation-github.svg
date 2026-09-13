@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="DevStation GitHub logo">
+ <defs>
+  <linearGradient id="g" x1="20%" y1="50%" x2="80%" y2="50%">
+   <stop offset="0%" stop-color="#00E5A8"/><stop offset="55%" stop-color="#00CFEA"/><stop offset="100%" stop-color="#00C2FF"/>
+  </linearGradient>
+ </defs>
+ <g transform="translate(142 92)">
+  <path d="M20 330 C20 220 150 180 370 330 C590 480 720 440 720 330 C720 220 590 180 370 330 C150 480 20 440 20 330 Z" fill="none" stroke="url(#g)" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+ </g>
+ <text x="512" y="730" text-anchor="middle" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="112" font-weight="700" fill="#FFFFFF" letter-spacing="-4">DevStation</text>
+</svg>

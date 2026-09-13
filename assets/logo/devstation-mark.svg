@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 100" role="img" aria-label="DevStation mark">
+ <defs>
+  <linearGradient id="devstation-gradient" x1="0%" y1="50%" x2="100%" y2="50%">
+   <stop offset="0%" stop-color="#00E5A8"/>
+   <stop offset="55%" stop-color="#00CFEA"/>
+   <stop offset="100%" stop-color="#00C2FF"/>
+  </linearGradient>
+ </defs>
+ <path d="M18 50 C18 23 48 16 80 50 C112 84 142 77 142 50 C142 23 112 16 80 50 C48 84 18 77 18 50 Z" fill="none" stroke="url(#devstation-gradient)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
