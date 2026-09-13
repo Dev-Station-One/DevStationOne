@@ -36,7 +36,7 @@ func startFakeRuntime(t *testing.T, ctx context.Context, serverURL, token string
 		RuntimeVersion: "test",
 		Capabilities:   protocol.Capabilities{Terminal: true},
 	}
-	mgr := agent.NewSessionManager(logger)
+	mgr := agent.NewManager(logger)
 	go func() {
 		_ = connection.Run(ctx, serverURL, token, hello, mgr, logger)
 	}()

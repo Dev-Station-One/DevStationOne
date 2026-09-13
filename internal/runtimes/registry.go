@@ -1,18 +1,23 @@
 package runtimes
 
 import (
+	"context"
+	"encoding/json"
 	"sync"
 
 	"devstation/internal/protocol"
 )
 
 // Conn is the subset of a runtime's live connection the registry needs: to
-// notify it of revocation and close it, and (Slice 4) to dispatch terminal
-// session control messages and binary byte frames to it.
+// notify it of revocation and close it, to dispatch terminal session
+// control messages and binary byte frames to it (Slice 4), and to issue a
+// correlated request/response command and wait for its reply (Slice 5;
+// used by service.command today, and by future file/database RPCs).
 type Conn interface {
 	Revoke() error
 	SendEnvelope(msgType protocol.MessageType, payload any) error
 	SendFrame(sessionID string, data []byte) error
+	SendCommand(ctx context.Context, msgType protocol.MessageType, payload any) (json.RawMessage, error)
 }
 
 // Registry tracks currently-connected runtimes in memory. It is scoped to a

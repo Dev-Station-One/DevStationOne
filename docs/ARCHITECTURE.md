@@ -164,6 +164,24 @@ The Control Server brokers requests and results.
 
 Use systemd user APIs/commands where supported.
 
+```text
+Control Server  -- REST (internal/api/services.go) resolves the Project's
+      |             runtime connection, dispatches one service.command RPC
+      | service      per request (runtimes.Conn.SendCommand, correlated by
+      | command      Envelope.ID — Slice 5's first user of that field),
+      | (RPC)        and waits for the matching service.result/error.
+      v
+Development Runtime  -- internal/services runs real systemctl --user /
+      |                 journalctl --user commands (os/exec, no shell,
+      v                 never root — SECURITY.md).
+systemd --user
+```
+
+Services are not a stored resource: there is no database table, and every
+request reflects the runtime's live state at call time (see
+`docs/API.md` "Services" and `docs/PROTOCOL.md` "Implementation: service
+commands").
+
 ## Persistence
 
 PostgreSQL stores:

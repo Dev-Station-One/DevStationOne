@@ -74,6 +74,16 @@ func bearerToken(r *http.Request) string {
 type wsConn struct {
 	mu sync.Mutex
 	c  *websocket.Conn
+
+	pendingMu sync.Mutex
+	pending   map[string]chan rpcResponse
+}
+
+// rpcResponse is what a pending SendCommand call is waiting for: either a
+// successful payload or an error, never both.
+type rpcResponse struct {
+	payload json.RawMessage
+	err     error
 }
 
 func (w *wsConn) write(msgType websocket.MessageType, data []byte) error {
@@ -109,6 +119,73 @@ func (w *wsConn) SendEnvelope(msgType protocol.MessageType, payload any) error {
 // a binary-safe frame (see protocol.EncodeFrame).
 func (w *wsConn) SendFrame(sessionID string, data []byte) error {
 	return w.write(websocket.MessageBinary, protocol.EncodeFrame(sessionID, data))
+}
+
+// SendCommand sends msgType with a fresh correlation ID and blocks until a
+// matching response arrives (routed by tryResolve from the read loop) or ctx
+// is done. It is the generic request/response half of the protocol,
+// distinct from SendEnvelope's fire-and-forget messages.
+func (w *wsConn) SendCommand(ctx context.Context, msgType protocol.MessageType, payload any) (json.RawMessage, error) {
+	id, err := auth.NewSessionToken()
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan rpcResponse, 1)
+	w.pendingMu.Lock()
+	if w.pending == nil {
+		w.pending = make(map[string]chan rpcResponse)
+	}
+	w.pending[id] = ch
+	w.pendingMu.Unlock()
+	defer func() {
+		w.pendingMu.Lock()
+		delete(w.pending, id)
+		w.pendingMu.Unlock()
+	}()
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	data, err := json.Marshal(protocol.Envelope{Version: protocol.Version, Type: msgType, ID: id, Payload: body})
+	if err != nil {
+		return nil, err
+	}
+	if err := w.write(websocket.MessageText, data); err != nil {
+		return nil, err
+	}
+
+	select {
+	case res := <-ch:
+		return res.payload, res.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// tryResolve delivers env to whichever SendCommand call is waiting on its
+// correlation ID, reporting whether one was found. Envelope types that
+// don't use correlation (e.g. session.ready, which correlates on its
+// payload's session_id instead) always have an empty ID and so never match.
+func (w *wsConn) tryResolve(env protocol.Envelope) bool {
+	if env.ID == "" {
+		return false
+	}
+	w.pendingMu.Lock()
+	ch, ok := w.pending[env.ID]
+	w.pendingMu.Unlock()
+	if !ok {
+		return false
+	}
+	if env.Type == protocol.MessageServiceError {
+		var e protocol.ServiceErrorPayload
+		_ = json.Unmarshal(env.Payload, &e)
+		ch <- rpcResponse{err: errors.New(e.Error)}
+	} else {
+		ch <- rpcResponse{payload: env.Payload}
+	}
+	return true
 }
 
 func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger, rt runtimes.Runtime) {
@@ -170,6 +247,9 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 
 		var env protocol.Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
+			continue
+		}
+		if wc.tryResolve(env) {
 			continue
 		}
 		handleRuntimeEnvelope(ctx, env, db, hub, logger, rt.ID)

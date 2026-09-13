@@ -1,6 +1,8 @@
 package runtimes
 
 import (
+	"context"
+	"encoding/json"
 	"testing"
 
 	"devstation/internal/protocol"
@@ -15,6 +17,10 @@ func (c *fakeConn) Revoke() error { c.revoked = true; return nil }
 func (c *fakeConn) SendEnvelope(msgType protocol.MessageType, payload any) error { return nil }
 
 func (c *fakeConn) SendFrame(sessionID string, data []byte) error { return nil }
+
+func (c *fakeConn) SendCommand(ctx context.Context, msgType protocol.MessageType, payload any) (json.RawMessage, error) {
+	return nil, nil
+}
 
 func TestRegistry_RegisterUnregisterIsOnline(t *testing.T) {
 	r := NewRegistry()

@@ -165,6 +165,41 @@ output is streamed back via a `pump` goroutine per session until the
 process exits. A `session.open` whose `os_user` does not match the
 runtime's actual OS user is rejected with `session.error` (ADR-014).
 
+## Implementation (Slice 5): service commands
+
+Unlike terminal sessions, `systemd --user` operations are simple
+request/response — list/status/start/stop/restart/enable/disable/logs each
+produce one answer, with no ongoing byte stream. They reuse the
+control-plane connection with a single message pair:
+
+```text
+service.command   server -> runtime   {action, unit, lines}
+service.result     runtime -> server  {services} | {service} | {logs}
+service.error       runtime -> server {error}
+```
+
+`action` is one of `list`, `status`, `start`, `stop`, `restart`, `enable`,
+`disable`, `logs`; `unit` is required for every action except `list`;
+`lines` is the tail length for `logs`.
+
+This is the first use of `Envelope.ID` for its originally-reserved purpose
+(see "Implementation: control-plane envelope" above): several service
+commands can be in flight on one runtime connection at once, with no other
+natural per-request identifier the way session messages have `session_id`,
+so the server generates a random correlation ID per command and the
+runtime's `service.result`/`service.error` reply carries the same ID back.
+`runtimes.Conn.SendCommand` on the Control Server implements the
+generic wait-for-matching-ID half of this exchange; `connection.Sender`'s
+`SendReply(id, ...)` implements the runtime side. Both are intentionally
+generic (not service-specific), for reuse by future request/response RPCs
+(file operations, database queries) — see ADR-016.
+
+Runtime-side, `internal/services` runs real `systemctl --user`/`journalctl
+--user` commands (direct process execution, no shell — SECURITY.md) via
+`os/exec`, never as root. `hello.Capabilities.Services` reflects whether a
+`systemd --user` instance is actually reachable at connect time, not merely
+whether this runtime build supports the capability.
+
 ## Security
 
 Every runtime connection is authenticated.

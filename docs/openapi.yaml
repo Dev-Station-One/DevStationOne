@@ -586,6 +586,305 @@ paths:
           description: The project's runtime is not currently connected
         "502":
           description: Failed to reach the runtime
+  /api/v1/projects/{projectID}/services:
+    get:
+      summary: List systemd --user services on the project's runtime
+      description: Not a stored resource — every call is a live RPC to the runtime. See docs/API.md "Services".
+      tags: [Services]
+      operationId: listServices
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Every unit the runtime's systemd --user instance knows about
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ServiceInfo"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime failed to run systemctl
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}:
+    get:
+      summary: Get one service's current status
+      tags: [Services]
+      operationId: getService
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The unit's status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        "400":
+          description: Invalid unit name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime reported the unit not found, or systemctl failed
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}/logs:
+    get:
+      summary: Get a service's recent journal lines
+      tags: [Services]
+      operationId: getServiceLogs
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: lines
+          in: query
+          description: Defaults to 200, capped at 2000.
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Recent journal lines, oldest first. Empty is a normal result, not an error.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "400":
+          description: Invalid unit name, or lines is not a positive integer
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: journalctl failed on the runtime
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}/start:
+    post:
+      summary: Start a service
+      tags: [Services]
+      operationId: startService
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The unit's resulting status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        "400":
+          description: Invalid unit name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: systemctl failed on the runtime
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}/stop:
+    post:
+      summary: Stop a service
+      tags: [Services]
+      operationId: stopService
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The unit's resulting status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        "400":
+          description: Invalid unit name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: systemctl failed on the runtime
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}/restart:
+    post:
+      summary: Restart a service
+      tags: [Services]
+      operationId: restartService
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The unit's resulting status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        "400":
+          description: Invalid unit name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: systemctl failed on the runtime
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}/enable:
+    post:
+      summary: Enable a service to start at login
+      tags: [Services]
+      operationId: enableService
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The unit's resulting status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        "400":
+          description: Invalid unit name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: systemctl failed on the runtime (e.g. the unit has no [Install] section)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/services/{unit}/disable:
+    post:
+      summary: Disable a service
+      tags: [Services]
+      operationId: disableService
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: unit
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The unit's resulting status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo"
+        "400":
+          description: Invalid unit name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: systemctl failed on the runtime
+        "504":
+          description: The runtime did not respond within the timeout
 components:
   securitySchemes:
     cookieAuth:
@@ -798,3 +1097,21 @@ components:
         updated_at:
           type: string
           format: date-time
+    ServiceInfo:
+      type: object
+      description: A systemd --user unit's live status. Not a stored resource — see docs/API.md "Services".
+      required: [unit, description, load_state, active_state, sub_state, enabled]
+      properties:
+        unit:
+          type: string
+        description:
+          type: string
+        load_state:
+          type: string
+        active_state:
+          type: string
+        sub_state:
+          type: string
+        enabled:
+          type: string
+          enum: [enabled, disabled, static, unknown]

@@ -143,7 +143,7 @@
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="terminal">Terminal</a></li>
               <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Files</a></li>
               <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Databases</a></li>
-              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Services</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="services">Services</a></li>
             </ul>
 
             <div id="terminal-panel" hidden>
@@ -169,6 +169,19 @@
                 </div>
                 <div id="terminal-canvas"></div>
               </div>
+            </div>
+
+            <div id="services-panel" hidden>
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div id="services-summary" class="text-secondary">—</div>
+                <button id="services-refresh-btn" class="btn btn-sm btn-outline-secondary">Refresh</button>
+              </div>
+              <div id="services-loading" class="text-secondary">Loading services…</div>
+              <div id="services-error" class="alert alert-danger" hidden></div>
+              <div id="services-empty" class="card" hidden>
+                <div class="card-body text-secondary">No systemd --user services found on this runtime.</div>
+              </div>
+              <div id="services-list" class="row row-cards"></div>
             </div>
 
             <div id="overview-panel">
@@ -547,6 +560,113 @@
       }
     });
 
+    // --- Services (docs/PRD.md §7, docs/WEB_UI_DESIGN.md Services: systemd --user) ---
+
+    var openLogsUnit = null; // unit name whose logs card is currently expanded, or null
+
+    function activeStateBadgeClass(state) {
+      if (state === 'active') return 'bg-success';
+      if (state === 'failed') return 'bg-danger';
+      if (state === 'activating' || state === 'deactivating' || state === 'reloading') return 'bg-info';
+      return 'bg-secondary';
+    }
+
+    function enabledBadgeClass(state) {
+      if (state === 'enabled') return 'bg-success';
+      if (state === 'disabled') return 'bg-secondary';
+      return 'bg-azure-lt';
+    }
+
+    function serviceCard(svc) {
+      var $col = $('<div class="col-12 col-md-6 col-xl-4 mb-3">');
+      var $card = $('<div class="card h-100">').appendTo($col);
+      var $body = $('<div class="card-body">').appendTo($card);
+
+      $('<div class="d-flex justify-content-between align-items-start mb-1">').appendTo($body).append(
+        $('<div class="fw-bold text-truncate" style="max-width: 70%;">').text(svc.unit).attr('title', svc.unit),
+        $('<span class="badge ' + activeStateBadgeClass(svc.active_state) + '">').text(svc.active_state + ' (' + svc.sub_state + ')')
+      );
+      $('<div class="text-secondary small mb-2 text-truncate">').text(svc.description || '—').appendTo($body);
+      $('<span class="badge ' + enabledBadgeClass(svc.enabled) + ' mb-2">').text(svc.enabled).appendTo($body);
+
+      var $actions = $('<div class="btn-list mt-2">').appendTo($body);
+      var running = svc.active_state === 'active' || svc.active_state === 'activating';
+      $('<button type="button" class="btn btn-sm btn-outline-success" data-action="start">Start</button>')
+        .prop('disabled', running).appendTo($actions);
+      $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="stop">Stop</button>')
+        .prop('disabled', svc.active_state === 'inactive').appendTo($actions);
+      $('<button type="button" class="btn btn-sm btn-outline-primary" data-action="restart">Restart</button>')
+        .appendTo($actions);
+      if (svc.enabled !== 'static') {
+        $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="enable">Enable</button>')
+          .prop('disabled', svc.enabled === 'enabled').appendTo($actions);
+        $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="disable">Disable</button>')
+          .prop('disabled', svc.enabled !== 'enabled').appendTo($actions);
+      }
+      $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="logs">Logs</button>')
+        .appendTo($actions);
+
+      $actions.find('button').on('click', function () {
+        runServiceAction(svc.unit, $(this).data('action'), $col);
+      });
+
+      if (openLogsUnit === svc.unit) {
+        var $logs = $('<pre class="mt-2 mb-0 small bg-dark-subtle p-2" style="max-height: 240px; overflow-y: auto;">Loading…</pre>').appendTo($body);
+        $.get('/api/v1/projects/' + projectID + '/services/' + encodeURIComponent(svc.unit) + '/logs?lines=200')
+          .done(function (lines) {
+            $logs.text(lines.length ? lines.join('\n') : 'No log entries.');
+          })
+          .fail(function (xhr) {
+            $logs.text('Failed to load logs: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText));
+          });
+      }
+
+      return $col;
+    }
+
+    function runServiceAction(unit, action, $col) {
+      if (action === 'logs') {
+        openLogsUnit = (openLogsUnit === unit) ? null : unit;
+        loadServices();
+        return;
+      }
+      $col.find('button').prop('disabled', true);
+      $.ajax({
+        url: '/api/v1/projects/' + projectID + '/services/' + encodeURIComponent(unit) + '/' + action,
+        method: 'POST'
+      }).done(function () {
+        loadServices();
+      }).fail(function (xhr) {
+        window.alert((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' ' + unit + '.'));
+        loadServices();
+      });
+    }
+
+    function loadServices() {
+      $('#services-error').prop('hidden', true);
+      $('#services-loading').prop('hidden', false);
+      $('#services-empty').prop('hidden', true);
+      $.get('/api/v1/projects/' + projectID + '/services')
+        .done(function (list) {
+          $('#services-loading').prop('hidden', true);
+          $('#services-summary').text(list.length + ' service' + (list.length === 1 ? '' : 's'));
+          var $list = $('#services-list').empty();
+          if (!list.length) {
+            $('#services-empty').prop('hidden', false);
+            return;
+          }
+          list.forEach(function (svc) { $list.append(serviceCard(svc)); });
+        })
+        .fail(function (xhr) {
+          $('#services-loading').prop('hidden', true);
+          var msg = (xhr.responseJSON && xhr.responseJSON.error) ||
+            (xhr.status === 409 ? 'Runtime is offline.' : 'Failed to load services.');
+          $('#services-error').text(msg).prop('hidden', false);
+        });
+    }
+
+    $('#services-refresh-btn').on('click', loadServices);
+
     $('[data-app-tab]').on('click', function (e) {
       e.preventDefault();
       var tab = $(this).data('app-tab');
@@ -555,6 +675,7 @@
       $('#overview-panel').prop('hidden', tab !== 'overview');
       $('#overview-actions').prop('hidden', tab !== 'overview');
       $('#terminal-panel').prop('hidden', tab !== 'terminal');
+      $('#services-panel').prop('hidden', tab !== 'services');
       if (tab === 'terminal') {
         if (!sessionsLoaded) {
           sessionsLoaded = true;
@@ -562,6 +683,9 @@
         } else if (activeSessionID && termState[activeSessionID]) {
           setTimeout(function () { termState[activeSessionID].fit.fit(); }, 0);
         }
+      }
+      if (tab === 'services') {
+        loadServices();
       }
     });
 

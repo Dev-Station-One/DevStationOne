@@ -123,6 +123,8 @@ Deliver:
 Acceptance:
 - manage a real user service without root
 
+**Status: Complete.**
+
 ## Slice 6 — File Manager
 
 Deliver:

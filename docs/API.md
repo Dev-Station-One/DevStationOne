@@ -174,15 +174,61 @@ The final OpenAPI contract must define:
 
 ## Services
 
-The final OpenAPI contract must define:
-- list
-- status
-- start
-- stop
-- restart
-- enable
-- disable
-- logs
+```text
+GET  /api/v1/projects/{projectID}/services
+GET  /api/v1/projects/{projectID}/services/{unit}
+GET  /api/v1/projects/{projectID}/services/{unit}/logs
+POST /api/v1/projects/{projectID}/services/{unit}/start
+POST /api/v1/projects/{projectID}/services/{unit}/stop
+POST /api/v1/projects/{projectID}/services/{unit}/restart
+POST /api/v1/projects/{projectID}/services/{unit}/enable
+POST /api/v1/projects/{projectID}/services/{unit}/disable
+```
+
+Services are `systemd --user` units on the Project's runtime (PRD §7). They
+are not a stored resource — every request is a live RPC to the runtime
+(`internal/services`, real `systemctl`/`journalctl` invocations, no root)
+over its existing control-plane connection (see `docs/PROTOCOL.md`
+"Implementation: service commands"), so there is no service table or
+create/delete route. Authorization reuses `authorizedProject` (ADR-013):
+`404` on a project the caller does not own, `409` if the Project's runtime
+is not currently connected.
+
+`{unit}` must match `^[A-Za-z0-9:_.@-]+\.service$` (`services.ValidUnitName`)
+— checked server-side before ever dispatching to the runtime; `400` if it
+doesn't.
+
+`GET .../services` lists every unit the runtime's systemd --user instance
+knows about: both currently-loaded units and installed-but-not-loaded ones
+merged together, since systemd unloads a stopped unit from its live table
+soon after nothing references it (confirmed against a real systemd --user
+instance — a project's own service would otherwise disappear from the list
+the moment it's stopped). A bare template unit (`app@.service`, no
+instance) is excluded — it isn't independently startable.
+
+`GET .../services/{unit}` returns one unit's current status; `404`-shaped
+as `502` (bad gateway) if the runtime reports it not found, since "unit
+doesn't exist" is the runtime's answer, not the Control Server's.
+
+`.../logs?lines=N` returns the unit's most recent journal lines (`journalctl
+--user -u {unit} -n N`, default 200, capped at 2000). An empty array is a
+normal result, not an error — it also covers a machine with no per-user
+journal namespace at all, which `journalctl --user` reports as "No journal
+files were found" rather than failing.
+
+Response shape for every unit-returning endpoint:
+```json
+{
+  "unit": "my-app.service",
+  "description": "My App",
+  "load_state": "loaded",
+  "active_state": "active",
+  "sub_state": "running",
+  "enabled": "enabled"
+}
+```
+`enabled` is `"enabled"`, `"disabled"`, `"static"` (has no `[Install]`
+section — enable/disable are meaningless for it), or `"unknown"`.
 
 ## Errors
 

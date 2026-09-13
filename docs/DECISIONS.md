@@ -152,3 +152,78 @@ convenience, not a durability guarantee: output produced while the Control
 Server is restarted, or while the runtime's own connection is down, is
 lost — PTY bytes are still deliberately not persisted to PostgreSQL
 (ADR-007).
+
+## ADR-016 — Generic correlated request/response over the runtime connection
+
+Slice 5 (services) needed a server-to-runtime request/response exchange
+with no natural per-request key the way Slice 4's session messages have
+`session_id` — several `service.command`s (e.g. two browser tabs both
+listing services) can be in flight on one runtime connection at once. This
+is exactly what `protocol.Envelope.ID` was reserved for since Slice 2
+("optional correlation identifier for future request/response exchanges")
+but had gone unused through Slice 4.
+
+Rather than build service-specific correlation bookkeeping,
+`runtimes.Conn` gained a generic `SendCommand(ctx, msgType, payload)
+(json.RawMessage, error)`: it generates a random ID (reusing
+`auth.NewSessionToken`, already exactly "a high-entropy random token" —
+overkill length for a short-lived in-memory key, but a one-line reuse beats
+a second RNG helper), registers a pending channel keyed by it, sends the
+envelope, and blocks until `wsConn.tryResolve` — called from the runtime
+connection's read loop for every inbound envelope carrying a non-empty
+`ID` — delivers the matching reply or `ctx` is done. The runtime side is
+symmetric: `connection.Sender.SendReply(id, msgType, payload)` sends a
+reply carrying a given correlation ID, alongside the existing
+`SendEnvelope` (id `""`) for fire-and-forget messages like heartbeats and
+session lifecycle events, which don't need correlation and shouldn't be
+forced to carry an unused ID field.
+
+This machinery is deliberately not services-specific: `service.error` is
+the only message type `tryResolve` currently special-cases as a failure
+(vs. treating the payload as a success), but the pattern — one request
+type, one result type, one error type, correlated by ID — is exactly what
+file operations and database queries (Slices 6+) will need too. Building
+it generically now, while there are two real call sites to keep it honest
+(services today, sessions' existing non-correlated flow as the contrast
+case), is judged cheaper than two more rounds of "session_id-shaped"
+one-off correlation later.
+
+## ADR-017 — Services: direct systemctl/journalctl exec, and a live-state union for List
+
+`internal/services` shells out to `systemctl --user` and `journalctl
+--user` via `os/exec` (argv arrays, no shell — SECURITY.md "never
+construct shell commands by concatenating untrusted strings") rather than
+talking to systemd's D-Bus API directly. systemd ships no official Go D-Bus
+binding in this project's dependency set, and the CLI's plain-text/`show`
+output is already a stable, documented interface; parsing it is a smaller,
+more auditable surface than vendoring a D-Bus client for this MVP. Unit
+names are validated (`services.ValidUnitName`, checked both server-side for
+an early `400` and runtime-side before exec) against
+`^[A-Za-z0-9:_.@-]+\.service$` as defense-in-depth — `os/exec` already
+makes shell injection impossible by construction, so this instead rejects
+nonsensical input with a clean error instead of a raw systemctl failure.
+
+**`List` merges two systemctl sources, discovered necessary by testing
+against a real systemd --user instance, not anticipated up front.**
+`systemctl --user list-units --all` only shows units currently loaded into
+the manager's live table — a unit systemd has garbage-collected after it
+stopped (observed happening within about half a second on this project's
+own dev machine, systemd 255) silently disappears from `--all` even though
+`systemctl --user show`/`start` on it still work fine. For a service
+manager whose core workflow is "stop a project's dev service, come back
+later and start it again," a list that drops exactly the units a user just
+stopped is a real defect, not an edge case. `List` therefore unions
+`list-units --all` with `list-unit-files` (which lists every installed
+unit file regardless of live-table membership) and fills in status for the
+difference with one additional bulk `systemctl show unit1 unit2 ...` call
+— not one `show` call per missing unit, which would mean dozens of
+subprocess spawns on a typical desktop (119 installed unit files vs. 24
+loaded, measured on this same dev machine). A bare template unit
+(`app@.service`, no instance) is excluded from that union: `systemctl show`
+and `start` both reject it outright ("is missing the instance name"), so
+listing it would offer Start/Stop actions that error every time. If the
+bulk `show` call itself fails for an unexpected unit name, `List` degrades
+to the `list-units`-only result rather than failing the whole listing over
+one bad entry — found necessary the same way: a real unit
+(`gnome-session-manager@.service`) on this dev machine's own systemd
+instance broke a naive "error on any exec failure" implementation.

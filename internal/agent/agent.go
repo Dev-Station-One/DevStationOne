@@ -11,6 +11,7 @@ import (
 	"devstation/internal/config"
 	"devstation/internal/connection"
 	"devstation/internal/protocol"
+	"devstation/internal/services"
 )
 
 // Version is the Development Runtime build version advertised to the
@@ -30,11 +31,16 @@ func Run(ctx context.Context, cfg config.Runtime, logger *slog.Logger) error {
 		OS:             goruntime.GOOS,
 		Arch:           goruntime.GOARCH,
 		RuntimeVersion: Version,
-		// Filesystem, service, and database capabilities flip to true once
-		// the slices implementing them land.
-		Capabilities: protocol.Capabilities{Terminal: true},
+		// Filesystem and database capabilities flip to true once the
+		// slices implementing them land. Services reflects real, current
+		// availability rather than "this build supports it" — a runtime
+		// with no reachable systemd --user instance must not advertise it.
+		Capabilities: protocol.Capabilities{
+			Terminal: true,
+			Services: services.Available(ctx),
+		},
 	}
 
-	mgr := NewSessionManager(logger)
+	mgr := NewManager(logger)
 	return connection.Run(ctx, cfg.ServerURL, cfg.Token, hello, mgr, logger)
 }

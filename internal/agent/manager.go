@@ -49,12 +49,10 @@ type sessionManager struct {
 	sessions map[string]*pty.Session
 }
 
-// NewSessionManager builds a connection.Manager that starts and drives real
-// PTY sessions in response to control-plane messages from the Control
-// Server. Exported so integration tests can run the real runtime-side
-// session logic against a real PTY, without exec'ing the devstation-runtime
-// binary as a subprocess.
-func NewSessionManager(logger *slog.Logger) connection.Manager {
+// newSessionManager builds the terminal-session half of the runtime's
+// connection.Manager: it starts and drives real PTY sessions in response to
+// control-plane messages from the Control Server.
+func newSessionManager(logger *slog.Logger) *sessionManager {
 	return &sessionManager{logger: logger, sessions: make(map[string]*pty.Session)}
 }
 

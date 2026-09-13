@@ -48,6 +48,15 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Hand
 	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/signal", requireSession(db, signalTermSessionHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/sessions/{sessionID}/stream", requireSession(db, termSessionStreamHandler(db, registry, hub, logger)))
 
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/services", requireSession(db, listServicesHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/services/{unit}", requireSession(db, getServiceHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/services/{unit}/logs", requireSession(db, getServiceLogsHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/start", requireSession(db, serviceActionHandler(db, registry, "start")))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/stop", requireSession(db, serviceActionHandler(db, registry, "stop")))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/restart", requireSession(db, serviceActionHandler(db, registry, "restart")))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/enable", requireSession(db, serviceActionHandler(db, registry, "enable")))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/disable", requireSession(db, serviceActionHandler(db, registry, "disable")))
+
 	mux.Handle("GET /", http.FileServer(http.Dir(staticDir)))
 
 	return withRequestLogging(logger, mux)

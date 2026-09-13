@@ -45,12 +45,26 @@ const (
 	// MessageSessionExit is sent runtime->server when a session's process
 	// exits on its own (not via session.close).
 	MessageSessionExit MessageType = "session.exit"
+
+	// MessageServiceCommand is sent server->runtime to list/inspect/control
+	// a systemd --user service. Unlike session messages, it uses Envelope.ID
+	// for request/response correlation (see runtimes.Conn.SendCommand): a
+	// single runtime connection may have several service commands in flight
+	// at once, with no other natural per-request identifier to key on.
+	MessageServiceCommand MessageType = "service.command"
+	// MessageServiceResult is sent runtime->server with a successful
+	// service.command result, carrying the same Envelope.ID as the request.
+	MessageServiceResult MessageType = "service.result"
+	// MessageServiceError is sent runtime->server when a service.command
+	// fails, carrying the same Envelope.ID as the request.
+	MessageServiceError MessageType = "service.error"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
-// optional correlation identifier for future request/response exchanges
-// (e.g. server-to-runtime commands); it is unused by the messages defined
-// in this slice.
+// optional correlation identifier for request/response exchanges — used by
+// service.command/service.result/service.error (Slice 5); session messages
+// (Slice 4) correlate on their payload's own session_id instead, since that
+// is already unique per request.
 type Envelope struct {
 	Version string          `json:"v"`
 	Type    MessageType     `json:"type"`
@@ -130,6 +144,44 @@ type SessionClosedPayload struct {
 type SessionExitPayload struct {
 	SessionID string `json:"session_id"`
 	ExitCode  int    `json:"exit_code"`
+}
+
+// ServiceCommandPayload is the payload of a MessageServiceCommand envelope.
+type ServiceCommandPayload struct {
+	// Action is one of: list, status, start, stop, restart, enable,
+	// disable, logs.
+	Action string `json:"action"`
+	// Unit is the systemd unit name, e.g. "my-app.service". Required for
+	// every action except "list".
+	Unit string `json:"unit,omitempty"`
+	// Lines is the tail length for a "logs" action.
+	Lines int `json:"lines,omitempty"`
+}
+
+// ServiceInfo describes one systemd --user unit.
+type ServiceInfo struct {
+	Unit        string `json:"unit"`
+	Description string `json:"description"`
+	LoadState   string `json:"load_state"`
+	ActiveState string `json:"active_state"`
+	SubState    string `json:"sub_state"`
+	// Enabled is "enabled", "disabled", "static", or "unknown" if the
+	// runtime could not determine it.
+	Enabled string `json:"enabled"`
+}
+
+// ServiceResultPayload is the payload of a MessageServiceResult envelope.
+// Exactly one of Services, Service, or Logs is populated, matching the
+// request's Action.
+type ServiceResultPayload struct {
+	Services []ServiceInfo `json:"services,omitempty"`
+	Service  *ServiceInfo  `json:"service,omitempty"`
+	Logs     []string      `json:"logs,omitempty"`
+}
+
+// ServiceErrorPayload is the payload of a MessageServiceError envelope.
+type ServiceErrorPayload struct {
+	Error string `json:"error"`
 }
 
 // sessionIDFrameLen is the fixed width of the session ID prefix on a binary

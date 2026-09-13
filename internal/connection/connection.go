@@ -30,6 +30,7 @@ const (
 // to the Control Server over the currently active connection.
 type Sender interface {
 	SendEnvelope(msgType protocol.MessageType, payload any) error
+	SendReply(id string, msgType protocol.MessageType, payload any) error
 	SendFrame(sessionID string, data []byte) error
 }
 
@@ -127,11 +128,22 @@ type wsSender struct {
 }
 
 func (s *wsSender) SendEnvelope(msgType protocol.MessageType, payload any) error {
+	return s.sendEnvelope("", msgType, payload)
+}
+
+// SendReply sends msgType carrying id as its correlation ID, completing a
+// server-initiated request/response exchange (see runtimes.Conn.SendCommand
+// on the Control Server side).
+func (s *wsSender) SendReply(id string, msgType protocol.MessageType, payload any) error {
+	return s.sendEnvelope(id, msgType, payload)
+}
+
+func (s *wsSender) sendEnvelope(id string, msgType protocol.MessageType, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	data, err := json.Marshal(protocol.Envelope{Version: protocol.Version, Type: msgType, Payload: body})
+	data, err := json.Marshal(protocol.Envelope{Version: protocol.Version, Type: msgType, ID: id, Payload: body})
 	if err != nil {
 		return err
 	}
