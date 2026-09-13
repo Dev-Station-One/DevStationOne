@@ -6,7 +6,18 @@
   <title>Project · DevStation</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
   <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
+  <link rel="stylesheet" href="/vendor/codemirror/codemirror.min.css">
+  <link rel="stylesheet" href="/vendor/codemirror/addon/dialog/dialog.min.css">
   <style>
+    /* Nerd Font for the terminal (docs/REQUIREMENTS_NERD_FONT.md). Loaded by
+       the browser only once a terminal actually uses it. */
+    @font-face {
+      font-family: 'JetBrains Mono NFM';
+      src: url('/vendor/fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
     /* Terminal session tabs and app tabs scroll horizontally instead of
        wrapping, per docs/WEB_UI_DESIGN.md "Mobile" and
        VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md mobile terminal priority. */
@@ -192,7 +203,11 @@
                     <button type="button" class="btn btn-outline-secondary" data-send-key="tab" title="Send Tab">Tab</button>
                     <button type="button" class="btn btn-outline-secondary" data-send-key="esc" title="Send Escape">Esc</button>
                   </div>
-                  <div>
+                  <div class="d-flex align-items-center gap-2">
+                    <select id="terminal-font-select" class="form-select form-select-sm" style="width: auto;" title="Terminal font" aria-label="Terminal font">
+                      <option value="system">Font: system</option>
+                      <option value="jetbrainsmono-nerd">Font: Nerd</option>
+                    </select>
                     <span id="session-status-text" class="text-secondary small me-2">—</span>
                     <button id="force-stop-btn" class="btn btn-sm btn-outline-danger" title="Send SIGTERM to this session's process">Force stop</button>
                   </div>
@@ -351,8 +366,6 @@
   <script src="/vendor/codemirror/addon/search/search.min.js"></script>
   <script src="/vendor/codemirror/addon/search/jump-to-line.min.js"></script>
   <script src="/vendor/codemirror/addon/dialog/dialog.min.js"></script>
-  <link rel="stylesheet" href="/vendor/codemirror/codemirror.min.css">
-  <link rel="stylesheet" href="/vendor/codemirror/addon/dialog/dialog.min.css">
   <script src="/vendor/marked/marked.min.js"></script>
   <script src="/vendor/dompurify/purify.min.js"></script>
   <script>
@@ -484,6 +497,44 @@
     var activeSessionID = null;
     var sessionsLoaded = false;
 
+    // --- Terminal font preference (docs/REQUIREMENTS_NERD_FONT.md) ---
+
+    var terminalFontPref = 'system'; // server-stored per-account; 'system' | 'jetbrainsmono-nerd'
+    var NERD_FONT_STACK = '"JetBrains Mono NFM", monospace';
+
+    function applyTerminalFont() {
+      var family = terminalFontPref === 'jetbrainsmono-nerd' ? NERD_FONT_STACK : null;
+      Object.keys(termState).forEach(function (id) {
+        var st = termState[id];
+        if (!st.term) return;
+        st.term.options.fontFamily = family || 'courier-new, courier, monospace';
+        if (st.fit && id === activeSessionID) st.fit.fit();
+      });
+    }
+
+    function setTerminalFont(pref, persist) {
+      if (pref !== 'system' && pref !== 'jetbrainsmono-nerd') pref = 'system';
+      terminalFontPref = pref;
+      $('#terminal-font-select').val(pref);
+      applyTerminalFont();
+      if (!persist) return;
+      $.ajax({
+        url: '/api/v1/auth/preferences', method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({ terminal_font: pref })
+      }).fail(function (xhr) {
+        window.alert((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save terminal font preference.');
+      });
+    }
+
+    $('#terminal-font-select').on('change', function () {
+      setTerminalFont(this.value, true);
+    });
+
+    $.get('/api/v1/auth/session').done(function (u) {
+      setTerminalFont(u.terminal_font || 'system', false);
+    });
+
     function statusLabel(status) {
       var labels = {
         requested: 'Requested', starting: 'Starting', running: 'Running',
@@ -534,7 +585,9 @@
       if (st.pane) return st.pane;
       var $pane = $('<div class="session-term-pane" hidden>').appendTo('#terminal-canvas');
       st.pane = $pane[0];
-      st.term = new Terminal({ convertEol: true, cursorBlink: true, fontSize: 13, theme: { background: '#000000' } });
+      var termOptions = { convertEol: true, cursorBlink: true, fontSize: 13, theme: { background: '#000000' } };
+      if (terminalFontPref === 'jetbrainsmono-nerd') termOptions.fontFamily = NERD_FONT_STACK;
+      st.term = new Terminal(termOptions);
       st.fit = new FitAddon.FitAddon();
       st.term.loadAddon(st.fit);
       st.term.open(st.pane);

@@ -22,6 +22,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Hand
 	mux.HandleFunc("POST /api/v1/auth/login", loginHandler(db))
 	mux.HandleFunc("POST /api/v1/auth/logout", logoutHandler(db))
 	mux.HandleFunc("GET /api/v1/auth/session", requireSession(db, currentSessionHandler))
+	mux.HandleFunc("PUT /api/v1/auth/preferences", requireSession(db, updatePreferencesHandler(db)))
 	mux.HandleFunc("GET /api/v1/auth/sessions", requireSession(db, listSessionsHandler(db)))
 	mux.HandleFunc("DELETE /api/v1/auth/sessions/{sessionID}", requireSession(db, revokeSessionHandler(db)))
 

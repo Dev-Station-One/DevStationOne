@@ -17,14 +17,43 @@ type loginRequest struct {
 }
 
 type userResponse struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	IsAdmin   bool      `json:"is_admin"`
-	CreatedAt time.Time `json:"created_at"`
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	IsAdmin      bool      `json:"is_admin"`
+	TerminalFont string    `json:"terminal_font"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 func toUserResponse(u auth.User) userResponse {
-	return userResponse{ID: u.ID, Email: u.Email, IsAdmin: u.IsAdmin, CreatedAt: u.CreatedAt}
+	return userResponse{ID: u.ID, Email: u.Email, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, CreatedAt: u.CreatedAt}
+}
+
+// updatePreferencesHandler PUT /api/v1/auth/preferences — the authenticated
+// user updates their own preferences. Only the terminal font exists today.
+func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		user, ok := userFromContext(r.Context())
+		if !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+			return
+		}
+		var req struct {
+			TerminalFont string `json:"terminal_font"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if !auth.ValidTerminalFont(req.TerminalFont) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown terminal_font"})
+			return
+		}
+		if err := auth.SetTerminalFont(r.Context(), db.Pool, user.ID, req.TerminalFont); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
 }
 
 func setSessionCookie(w http.ResponseWriter, token string) {

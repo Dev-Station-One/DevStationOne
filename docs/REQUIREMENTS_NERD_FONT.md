@@ -1,7 +1,6 @@
 # Requirements: Nerd Font support in the terminal (user preference)
 
-Status: agreed requirements, ready for implementation planning (`/sc:workflow`
-or a Slice 6.x vertical slice). Scope decisions made with Brian, 2026-09-13.
+Status: **Implemented** (storage: `users.terminal_font` column, migration 0006).
 
 ## Goal
 

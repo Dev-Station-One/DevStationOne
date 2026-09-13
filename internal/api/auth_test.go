@@ -106,3 +106,74 @@ func TestLoginLogoutFlow(t *testing.T) {
 		t.Fatalf("after logout: status = %d, want 401", rec.Code)
 	}
 }
+
+func TestTerminalFontPreference(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	if _, err := auth.CreateUser(ctx, db.Pool, "fontpref@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router := NewRouter(db, logger, t.TempDir())
+	cookie := loginAs(t, router, "fontpref@example.com", "password123")
+
+	get := func() userResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/session", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("session: status = %d, body = %s", rec.Code, rec.Body.String())
+		}
+		var u userResponse
+		if err := json.NewDecoder(rec.Body).Decode(&u); err != nil {
+			t.Fatalf("decode session: %v", err)
+		}
+		return u
+	}
+
+	if got := get().TerminalFont; got != "system" {
+		t.Fatalf("default terminal_font = %q, want system", got)
+	}
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"terminal_font":"jetbrainsmono-nerd"}`)))
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("put preferences: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if got := get().TerminalFont; got != "jetbrainsmono-nerd" {
+		t.Fatalf("terminal_font after put = %q, want jetbrainsmono-nerd", got)
+	}
+
+	// Unknown values are rejected and change nothing.
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"terminal_font":"comic-sans"}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid font: status = %d, want 400", rec.Code)
+	}
+	if got := get().TerminalFont; got != "jetbrainsmono-nerd" {
+		t.Fatalf("terminal_font after rejected put = %q", got)
+	}
+
+	// Per-user: another user's preference is untouched.
+	if _, err := auth.CreateUser(ctx, db.Pool, "otherfont@example.com", "password123", false); err != nil {
+		t.Fatalf("create other user: %v", err)
+	}
+	other := loginAs(t, router, "otherfont@example.com", "password123")
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/session", nil)
+	req.AddCookie(other)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	var otherUser userResponse
+	json.NewDecoder(rec.Body).Decode(&otherUser)
+	if otherUser.TerminalFont != "system" {
+		t.Fatalf("other user terminal_font = %q, want system", otherUser.TerminalFont)
+	}
+}
