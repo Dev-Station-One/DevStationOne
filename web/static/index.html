@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DevStationOne</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
@@ -26,16 +28,16 @@
         <div class="collapse navbar-collapse" id="sidebar-menu">
           <ul class="navbar-nav pt-lg-3">
             <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>
-            <li class="nav-item active"><a class="nav-link" href="/">Dashboard</a></li>
-            <li class="nav-item"><a class="nav-link" href="/projects.html">Projects</a></li>
-            <li class="nav-item"><a class="nav-link" href="/runtimes.html">Runtimes</a></li>
+            <li class="nav-item active"><a class="nav-link" href="/"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link" href="/projects.html"><i class="fa-solid fa-cubes" aria-hidden="true"></i> Projects</a></li>
+            <li class="nav-item"><a class="nav-link" href="/runtimes.html"><i class="fa-solid fa-server" aria-hidden="true"></i> Runtimes</a></li>
             <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Tools</div></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Files</a></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Databases</a></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Services</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i> Files</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
             <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Activity</a></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Settings</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Activity</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-gear" aria-hidden="true"></i> Settings</a></li>
           </ul>
         </div>
       </div>
@@ -43,14 +45,14 @@
     <div class="page-wrapper">
       <header class="navbar navbar-expand-md navbar-light d-print-none">
         <div class="container-xl d-flex justify-content-between align-items-center">
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
+          <button class="icon-btn" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar" title="Fold sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
           <div class="d-flex align-items-center gap-2">
-            <button id="theme-toggle" class="btn btn-outline-secondary btn-sm" type="button" aria-label="Switch theme">&#9684;</button>
+            <button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch theme" title="Switch theme"><i class="fa-solid fa-sun" aria-hidden="true"></i><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
             <div class="dropdown">
-              <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Account</button>
+              <button class="icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i></button>
               <div class="dropdown-menu dropdown-menu-end">
-                <a class="dropdown-item" href="/account.html">Account</a>
-                <button class="dropdown-item" type="button" id="logout-btn">Log out</button>
+                <a class="dropdown-item" href="/account.html"><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Account</a>
+                <button class="dropdown-item" type="button" id="logout-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Log out</button>
               </div>
             </div>
           </div>
@@ -59,6 +61,7 @@
       <div class="page-body">
         <div class="container-xl">
           <div class="empty">
+            <div class="empty-icon"><i class="fa-solid fa-desktop fa-2x" aria-hidden="true"></i></div>
             <div class="empty-title">DevStationOne Control Server</div>
             <div class="empty-subtitle text-secondary">
               Create a Project to get started. Files, Databases, and Services arrive in later implementation slices.

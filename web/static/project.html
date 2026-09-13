@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Project · DevStationOne</title>
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
@@ -151,16 +153,16 @@
         <div class="collapse navbar-collapse" id="sidebar-menu">
           <ul class="navbar-nav pt-lg-3">
             <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>
-            <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
-            <li class="nav-item active"><a class="nav-link" href="/projects.html">Projects</a></li>
-            <li class="nav-item"><a class="nav-link" href="/runtimes.html">Runtimes</a></li>
+            <li class="nav-item"><a class="nav-link" href="/"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Dashboard</a></li>
+            <li class="nav-item active"><a class="nav-link" href="/projects.html"><i class="fa-solid fa-cubes" aria-hidden="true"></i> Projects</a></li>
+            <li class="nav-item"><a class="nav-link" href="/runtimes.html"><i class="fa-solid fa-server" aria-hidden="true"></i> Runtimes</a></li>
             <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Tools</div></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Files</a></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Databases</a></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Services</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-folder-tree" aria-hidden="true"></i> Files</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
             <li class="nav-item"><div class="text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Activity</a></li>
-            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update">Settings</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-clock-rotate-left" aria-hidden="true"></i> Activity</a></li>
+            <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" tabindex="-1" title="Available in a later update"><i class="fa-solid fa-gear" aria-hidden="true"></i> Settings</a></li>
           </ul>
         </div>
       </div>
@@ -168,14 +170,14 @@
     <div class="page-wrapper">
       <header class="navbar navbar-expand-md navbar-light d-print-none">
         <div class="container-xl d-flex justify-content-between align-items-center">
-          <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar">Menu</button>
+          <button class="icon-btn" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar" title="Fold sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
           <div class="d-flex align-items-center gap-2">
-            <button id="theme-toggle" class="btn btn-outline-secondary btn-sm" type="button" aria-label="Switch theme">&#9684;</button>
+            <button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch theme" title="Switch theme"><i class="fa-solid fa-sun" aria-hidden="true"></i><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
             <div class="dropdown">
-              <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Account</button>
+              <button class="icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i></button>
               <div class="dropdown-menu dropdown-menu-end">
-                <a class="dropdown-item" href="/account.html">Account</a>
-                <button class="dropdown-item" type="button" id="logout-btn">Log out</button>
+                <a class="dropdown-item" href="/account.html"><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Account</a>
+                <button class="dropdown-item" type="button" id="logout-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Log out</button>
               </div>
             </div>
           </div>
@@ -196,35 +198,35 @@
                   <div class="text-secondary" id="project-summary">—</div>
                 </div>
                 <div class="col-auto" id="overview-actions">
-                  <button id="edit-btn" class="btn btn-outline-secondary btn-sm">Edit</button>
-                  <button id="delete-btn" class="btn btn-outline-danger btn-sm">Delete</button>
+                  <button id="edit-btn" class="icon-btn" aria-label="Edit project" title="Edit project"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
+                  <button id="delete-btn" class="icon-btn text-danger" aria-label="Delete project" title="Delete project"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
                 </div>
               </div>
             </div>
 
             <ul class="nav nav-tabs mb-3 app-tabs">
-              <li class="nav-item"><a class="nav-link active" href="#" data-app-tab="overview">Overview</a></li>
-              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="terminal">Terminal</a></li>
-              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="files">Files</a></li>
-              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update">Databases</a></li>
-              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="services">Services</a></li>
+              <li class="nav-item"><a class="nav-link active" href="#" data-app-tab="overview"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="terminal"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="files"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
+              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="services"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
             </ul>
 
             <div id="terminal-panel" hidden>
               <div class="d-flex align-items-end session-tabs mb-0">
                 <div id="session-tabs" class="d-flex align-items-stretch flex-nowrap"></div>
-                <button id="new-session-btn" class="btn btn-sm btn-outline-secondary ms-2 mb-1" title="New terminal session">+ New</button>
+                <button id="new-session-btn" class="icon-btn ms-2 mb-1" aria-label="New terminal session" title="New terminal session"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
               </div>
               <div id="terminal-empty" class="card">
-                <div class="card-body text-secondary">No terminal sessions yet. Click "+ New" to start one.</div>
+                <div class="card-body text-secondary"><i class="fa-solid fa-terminal me-1" aria-hidden="true"></i>No terminal sessions yet. Click the + button to start one.</div>
               </div>
               <div id="terminal-active" hidden>
                 <div class="d-flex justify-content-between align-items-center bg-dark-subtle px-2 py-1 terminal-toolbar" style="border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;">
                   <div class="btn-group btn-group-sm" role="group" aria-label="Terminal control keys">
-                    <button type="button" class="btn btn-outline-secondary" data-send-key="ctrl-c" title="Send Ctrl+C">Ctrl+C</button>
-                    <button type="button" class="btn btn-outline-secondary" data-send-key="ctrl-d" title="Send Ctrl+D">Ctrl+D</button>
-                    <button type="button" class="btn btn-outline-secondary" data-send-key="tab" title="Send Tab">Tab</button>
-                    <button type="button" class="btn btn-outline-secondary" data-send-key="esc" title="Send Escape">Esc</button>
+                    <button type="button" class="ghost-btn" data-send-key="ctrl-c" title="Send Ctrl+C">Ctrl+C</button>
+                    <button type="button" class="ghost-btn" data-send-key="ctrl-d" title="Send Ctrl+D">Ctrl+D</button>
+                    <button type="button" class="ghost-btn" data-send-key="tab" title="Send Tab">Tab</button>
+                    <button type="button" class="ghost-btn" data-send-key="esc" title="Send Escape">Esc</button>
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <select id="terminal-font-select" class="form-select form-select-sm" style="width: auto;" title="Terminal font" aria-label="Terminal font">
@@ -232,7 +234,7 @@
                       <option value="jetbrainsmono-nerd">Font: Nerd</option>
                     </select>
                     <span id="session-status-text" class="text-secondary small me-2">—</span>
-                    <button id="force-stop-btn" class="btn btn-sm btn-outline-danger" title="Send SIGTERM to this session's process">Force stop</button>
+                    <button id="force-stop-btn" class="icon-btn text-danger" title="Send SIGTERM to this session's process" aria-label="Force stop"><i class="fa-solid fa-circle-stop" aria-hidden="true"></i></button>
                   </div>
                 </div>
                 <div id="terminal-canvas"></div>
@@ -242,12 +244,12 @@
             <div id="services-panel" hidden>
               <div class="d-flex justify-content-between align-items-center mb-3">
                 <div id="services-summary" class="text-secondary">—</div>
-                <button id="services-refresh-btn" class="btn btn-sm btn-outline-secondary">Refresh</button>
+                <button id="services-refresh-btn" class="icon-btn" aria-label="Refresh services" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
               </div>
               <div id="services-loading" class="text-secondary">Loading services…</div>
               <div id="services-error" class="alert alert-danger" hidden></div>
               <div id="services-empty" class="card" hidden>
-                <div class="card-body text-secondary">No systemd --user services found on this runtime.</div>
+                <div class="card-body text-secondary"><i class="fa-solid fa-gears me-1" aria-hidden="true"></i>No systemd --user services found on this runtime.</div>
               </div>
               <div id="services-list" class="row row-cards"></div>
             </div>
@@ -257,31 +259,31 @@
                 <nav id="files-breadcrumbs" class="files-crumb d-flex align-items-center gap-1" aria-label="File path"></nav>
                 <div class="d-flex gap-2 align-items-center">
                   <div id="files-summary" class="text-secondary small">—</div>
-                  <button id="files-refresh-btn" class="btn btn-sm btn-outline-secondary">Refresh</button>
+                  <button id="files-refresh-btn" class="icon-btn" aria-label="Refresh files" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
                 </div>
               </div>
               <div class="d-flex flex-wrap gap-2 align-items-center mb-2 files-toolbar">
-                <button id="files-new-file-btn" class="btn btn-sm btn-outline-primary">New file</button>
-                <button id="files-new-dir-btn" class="btn btn-sm btn-outline-primary">New folder</button>
-                <button id="files-upload-btn" class="btn btn-sm btn-outline-primary">Upload</button>
+                <button id="files-new-file-btn" class="icon-btn" aria-label="New file" title="New file"><i class="fa-solid fa-file-circle-plus" aria-hidden="true"></i></button>
+                <button id="files-new-dir-btn" class="icon-btn" aria-label="New folder" title="New folder"><i class="fa-solid fa-folder-plus" aria-hidden="true"></i></button>
+                <button id="files-upload-btn" class="icon-btn" aria-label="Upload" title="Upload"><i class="fa-solid fa-upload" aria-hidden="true"></i></button>
                 <input id="files-upload-input" type="file" hidden>
                 <form id="files-search-form" class="input-group input-group-sm ms-auto" style="max-width: 280px;">
                   <input id="files-search-input" type="search" class="form-control" placeholder="Search names…" aria-label="Search file names">
-                  <button class="btn btn-outline-secondary" type="submit">Search</button>
+                  <button class="icon-btn" type="submit" aria-label="Search" title="Search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>
                 </form>
               </div>
               <div id="files-selected-bar" class="d-flex align-items-center gap-2 mb-2 d-none flex-wrap">
                 <span id="files-selected-count" class="small text-secondary"></span>
-                <button id="files-delete-selected-btn" class="btn btn-sm btn-outline-danger">Delete selected</button>
-                <button id="files-download-selected-btn" class="btn btn-sm btn-outline-secondary">Download</button>
-                <button id="files-copy-selected-btn" class="btn btn-sm btn-outline-secondary">Copy to…</button>
-                <button id="files-move-selected-btn" class="btn btn-sm btn-outline-secondary">Move to…</button>
-                <button id="files-clear-selection-btn" class="btn btn-sm btn-link">Clear</button>
+                <button id="files-delete-selected-btn" class="icon-btn text-danger" aria-label="Delete selected" title="Delete selected"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>
+                <button id="files-download-selected-btn" class="icon-btn" aria-label="Download selected" title="Download"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+                <button id="files-copy-selected-btn" class="icon-btn" aria-label="Copy selected to directory" title="Copy to…"><i class="fa-solid fa-copy" aria-hidden="true"></i></button>
+                <button id="files-move-selected-btn" class="icon-btn" aria-label="Move selected to directory" title="Move to…"><i class="fa-solid fa-up-down-left-right" aria-hidden="true"></i></button>
+                <button id="files-clear-selection-btn" class="icon-btn" aria-label="Clear selection" title="Clear"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
               </div>
               <div id="files-loading" class="text-secondary">Loading files…</div>
               <div id="files-error" class="alert alert-danger" hidden></div>
               <div id="files-empty" class="card" hidden>
-                <div class="card-body text-secondary">This directory is empty.</div>
+                <div class="card-body text-secondary"><i class="fa-solid fa-folder-open me-1" aria-hidden="true"></i>This directory is empty.</div>
               </div>
               <div id="files-list-wrap" class="card files-scroll" hidden>
                 <table class="table table-vcenter card-table files-table">
@@ -308,9 +310,9 @@
                   </div>
                   <div class="btn-list gap-1 flex-nowrap">
                     <button id="file-editor-save-btn" class="btn btn-sm btn-primary">Save</button>
-                    <button id="file-editor-preview-btn" class="btn btn-sm btn-outline-secondary" hidden>Preview</button>
-                    <button id="file-editor-download-btn" class="btn btn-sm btn-outline-secondary">Download</button>
-                    <button id="file-editor-close-btn" class="btn btn-sm btn-outline-secondary">Close</button>
+                    <button id="file-editor-preview-btn" class="icon-btn" aria-label="Toggle preview" title="Preview" hidden><i class="fa-solid fa-eye" aria-hidden="true"></i></button>
+                    <button id="file-editor-download-btn" class="icon-btn" aria-label="Download file" title="Download"><i class="fa-solid fa-download" aria-hidden="true"></i></button>
+                    <button id="file-editor-close-btn" class="icon-btn" aria-label="Close editor" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                   </div>
                 </div>
                 <div class="card-body">
@@ -323,7 +325,7 @@
               <div id="file-properties" class="card mt-3" hidden>
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <strong id="file-properties-title">—</strong>
-                  <button id="file-properties-close-btn" class="btn btn-sm btn-outline-secondary" type="button">Close</button>
+                  <button id="file-properties-close-btn" class="icon-btn" type="button" aria-label="Close properties" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                 </div>
                 <div class="card-body">
                   <dl class="row mb-0">
@@ -608,7 +610,7 @@
         if (st.activity && id !== activeSessionID) {
           $('<span class="activity-dot" title="New output">').appendTo($tab);
         }
-        var $close = $('<button type="button" class="close-btn" title="Close session" aria-label="Close session">&times;</button>');
+        var $close = $('<button type="button" class="close-btn" title="Close session" aria-label="Close session"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>');
         $close.on('click', function (e) { e.stopPropagation(); closeSession(id); });
         $tab.append($close);
         $tab.on('click', function () { selectSession(id); });
@@ -818,20 +820,18 @@
 
       var $actions = $('<div class="btn-list mt-2">').appendTo($body);
       var running = svc.active_state === 'active' || svc.active_state === 'activating';
-      $('<button type="button" class="btn btn-sm btn-outline-success" data-action="start">Start</button>')
-        .prop('disabled', running).appendTo($actions);
-      $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="stop">Stop</button>')
-        .prop('disabled', svc.active_state === 'inactive').appendTo($actions);
-      $('<button type="button" class="btn btn-sm btn-outline-primary" data-action="restart">Restart</button>')
-        .appendTo($actions);
-      if (svc.enabled !== 'static') {
-        $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="enable">Enable</button>')
-          .prop('disabled', svc.enabled === 'enabled').appendTo($actions);
-        $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="disable">Disable</button>')
-          .prop('disabled', svc.enabled !== 'enabled').appendTo($actions);
+      function iconBtn(action, icon, label, extraCls) {
+        return $('<button type="button" class="icon-btn' + (extraCls ? ' ' + extraCls : '') + '" data-action="' + action + '" aria-label="' + label + '" title="' + label + '">')
+          .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>');
       }
-      $('<button type="button" class="btn btn-sm btn-outline-secondary" data-action="logs">Logs</button>')
-        .appendTo($actions);
+      iconBtn('start', 'play', 'Start').prop('disabled', running).appendTo($actions);
+      iconBtn('stop', 'stop', 'Stop').prop('disabled', svc.active_state === 'inactive').appendTo($actions);
+      iconBtn('restart', 'rotate', 'Restart').appendTo($actions);
+      if (svc.enabled !== 'static') {
+        iconBtn('enable', 'toggle-on', 'Enable').prop('disabled', svc.enabled === 'enabled').appendTo($actions);
+        iconBtn('disable', 'toggle-off', 'Disable').prop('disabled', svc.enabled !== 'enabled').appendTo($actions);
+      }
+      iconBtn('logs', 'file-lines', 'Logs').appendTo($actions);
 
       $actions.find('button').on('click', function () {
         runServiceAction(svc.unit, $(this).data('action'), $col);
@@ -1024,37 +1024,39 @@
     }
 
     function entryActions(entry, p) {
-      var $actions = $('<div class="btn-list justify-content-end gap-1 flex-nowrap">');
-      function btn(label, cls, fn) {
-        return $('<button type="button" class="btn btn-sm ' + cls + '">').text(label).on('click', fn).appendTo($actions);
+      var $actions = $('<div class="d-flex justify-content-end gap-1 flex-nowrap">');
+      function btn(icon, label, extraCls, fn) {
+        return $('<button type="button" class="icon-btn' + (extraCls ? ' ' + extraCls : '') + '" aria-label="' + label + '" title="' + label + '">')
+          .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>')
+          .on('click', fn).appendTo($actions);
       }
       if (entry.type === 'dir') {
-        btn('Open', 'btn-outline-primary', function () { closeEditor(false); loadFiles(p); });
+        btn('folder-open', 'Open', '', function () { closeEditor(false); loadFiles(p); });
       } else {
-        btn('Edit', 'btn-outline-primary', async function () {
+        btn('pen', 'Edit', '', async function () {
           if (await closeEditor(false)) openFileEditor(p, entry);
         });
       }
-      btn('Download', 'btn-outline-secondary', function () {
+      btn('download', 'Download', '', function () {
         window.location.href = filesURL('/content', 'path=' + encodeURIComponent(p) + '&download=1');
       });
-      btn('Rename', 'btn-outline-secondary', async function () {
+      btn('i-cursor', 'Rename', '', async function () {
         var to = await DS.prompt({ title: 'Rename ' + p + ' to:', value: p });
         if (!to) return;
         pathAction('rename', p, to, function () { loadFiles(); });
       });
-      btn('Copy', 'btn-outline-secondary', async function () {
+      btn('copy', 'Copy', '', async function () {
         var to = await DS.prompt({ title: 'Copy ' + p + ' to:', value: p + '-copy' });
         if (!to) return;
         pathAction('copy', p, to, function () { loadFiles(); });
       });
-      btn('Move', 'btn-outline-secondary', async function () {
+      btn('up-down-left-right', 'Move', '', async function () {
         var to = await DS.prompt({ title: 'Move ' + p + ' to:', value: p });
         if (!to) return;
         pathAction('move', p, to, function () { loadFiles(); });
       });
-      btn('Properties', 'btn-outline-secondary', function () { showFileProperties(p, entry); });
-      btn('Delete', 'btn-outline-danger', function () {
+      btn('circle-info', 'Properties', '', function () { showFileProperties(p, entry); });
+      btn('trash', 'Delete', 'text-danger', function () {
         deletePath(p, function () { loadFiles(); });
       });
       return $actions;
@@ -1539,10 +1541,12 @@
         var html = marked.parse(editorState.cm.getValue());
         $preview.append(DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true }));
         showEditorPane('preview');
-        $(this).text('Edit');
+        $(this).attr('title', 'Edit').attr('aria-label', 'Edit')
+          .find('i').attr('class', 'fa-solid fa-pen');
       } else {
         showEditorPane('cm');
-        $(this).text('Preview');
+        $(this).attr('title', 'Preview').attr('aria-label', 'Preview')
+          .find('i').attr('class', 'fa-solid fa-eye');
       }
     });
 

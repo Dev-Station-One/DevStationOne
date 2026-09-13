@@ -105,6 +105,75 @@ body {
   color: var(--bs-btn-disabled-color);
 }
 
+/* Icon actions: borderless FontAwesome buttons (docs/DESIGN_ICON_SYSTEM.md).
+   No outline chrome — hover tint only. 44px targets per VISUAL spec. */
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--ds-text-muted);
+  border-radius: var(--tblr-border-radius);
+  padding: 0 .5rem;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.icon-btn:hover,
+.icon-btn:focus-visible {
+  background: var(--tblr-bg-surface-secondary);
+  color: var(--ds-text);
+}
+.icon-btn:focus-visible {
+  outline: 2px solid var(--ds-secondary);
+  outline-offset: -2px;
+}
+.icon-btn:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+  background: transparent;
+}
+.icon-btn.text-danger { color: var(--ds-danger); }
+.icon-btn.text-danger:hover,
+.icon-btn.text-danger:focus-visible {
+  color: var(--ds-danger);
+  background: var(--tblr-bg-surface-secondary);
+}
+
+/* Ghost text button: terminal key-send buttons keep their text labels but
+   lose the outline border (docs/DESIGN_ICON_SYSTEM.md §3). */
+.ghost-btn {
+  border: none;
+  background: transparent;
+  color: var(--ds-text-muted);
+  padding: 0 .75rem;
+  min-height: 44px;
+  border-radius: var(--tblr-border-radius);
+  cursor: pointer;
+}
+.ghost-btn:hover,
+.ghost-btn:focus-visible {
+  color: var(--ds-text);
+  background: var(--tblr-bg-surface-secondary);
+}
+.ghost-btn:focus-visible {
+  outline: 2px solid var(--ds-secondary);
+  outline-offset: -2px;
+}
+
+/* Sidebar nav and app tabs: fixed icon gutter keeps labels aligned. */
+.navbar-vertical .nav-link .fa-solid,
+.app-tabs .nav-link .fa-solid {
+  width: 1.25em;
+  text-align: center;
+}
+
+/* Theme toggle: sun/moon swap is CSS-driven; app.js only flips data-bs-theme. */
+#theme-toggle .fa-sun { display: none; }
+[data-bs-theme="light"] #theme-toggle .fa-sun { display: inline-block; }
+[data-bs-theme="light"] #theme-toggle .fa-moon { display: none; }
+
 /* Full stacked brand lockup (docs/BRAND_ASSETS.md): sidebar header + login. */
 .ds-logo-full {
   height: 68px;
@@ -122,11 +191,4 @@ body {
 /* Login hero above the sign-in card. */
 .ds-logo-login {
   height: 100px;
-}
-
-/* Theme toggle button: icon-only, 44px effective target (VISUAL spec). */
-#theme-toggle {
-  min-width: 44px;
-  min-height: 44px;
-  line-height: 1;
 }

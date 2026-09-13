@@ -12,6 +12,25 @@ This is the authoritative web UI design direction for DevStationOne. The browser
 - Keep application chrome compact and give workspace content maximum available space.
 - Avoid decorative charts/cards when they do not directly help development work.
 
+## Icons
+
+FontAwesome Free 7.x (solid), vendored self-hosted at
+`web/static/vendor/fontawesome/` — see `docs/DESIGN_ICON_SYSTEM.md` for the full
+convention and icon map. Rules:
+
+- Small/secondary actions are **borderless icon buttons** (`.icon-btn`): the icon
+  alone, no outline/button chrome. Feedback comes from a subtle hover tint, never
+  a border.
+- Every icon-only action carries an `aria-label` and a `title` tooltip.
+- Destructive actions use the `text-danger` variant (trash, ban, force stop).
+- Primary CTAs keep their text labels.
+- Sidebar navigation, application tabs, page headings, and empty states carry
+  icons.
+- Actions whose meaning a glyph cannot convey (terminal key sends such as
+  Ctrl+C/Tab/Esc) keep their text label but use the borderless `.ghost-btn` style.
+- The approved deviation from Tabler's native icon set is recorded in
+  `docs/REQUIREMENTS_ICON_SYSTEM.md`.
+
 ## Navigation
 
 Sidebar sections:

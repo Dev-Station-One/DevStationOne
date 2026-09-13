@@ -19,6 +19,24 @@ Every major component must support, where applicable:
 
 Errors should appear near the failed operation and explain what failed, why, and what action can resolve it.
 
+## Icon Actions
+
+Small/secondary actions render as **borderless icon buttons** (`.icon-btn`, FontAwesome
+Free 7.x solid vendored at `web/static/vendor/fontawesome/`; full map in
+`docs/DESIGN_ICON_SYSTEM.md`):
+
+- Anatomy: `<button class="icon-btn [text-danger]" aria-label="…" title="…"><i class="fa-solid fa-…" aria-hidden="true"></i></button>`
+- No border, no button chrome; hover/focus show a subtle background tint; focus shows an
+  inset focus ring. 44×44px minimum effective target on all viewports.
+- Required states: normal, hover, focus-visible, disabled (45% opacity + `not-allowed`).
+  Disabled state must remain perceivable without color alone (opacity + cursor).
+- Destructive actions (delete, revoke, force stop) use the `text-danger` variant.
+- Terminal key-send buttons (Ctrl+C, Ctrl+D, Tab, Esc) keep text labels in the borderless
+  `.ghost-btn` style — a glyph cannot convey a key combination.
+- Primary CTAs (Create project, Register, Save, Sign in) keep text labels.
+- The theme toggle carries both `fa-sun` and `fa-moon`; visibility is CSS-driven from
+  `data-bs-theme` (dark shows moon, light shows sun) with no JS involvement.
+
 ## Dialogs
 
 All confirmation, text-input, and blocking-error dialogs use the vendored SweetAlert2 library
