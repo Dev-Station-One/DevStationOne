@@ -33,11 +33,22 @@ convention and icon map. Rules:
 
 ## Navigation
 
-Sidebar sections:
+Sidebar sections (full design):
 
 - WORKSPACE: Dashboard, Projects, Runtimes
 - TOOLS: Files, Databases, Services
 - SYSTEM: Activity, Settings
+
+Until the TOOLS and SYSTEM features are implemented, those sections are
+hidden from the sidebar entirely (items and their section headers) rather
+than shown as disabled entries. They return section by section as each
+feature ships.
+
+The sidebar markup is rendered by `web/static/js/app.js` from a single
+template; each page carries only `<aside id="ds-sidebar" data-active="…">`
+with the navbar scaffold classes. Collapsed (folded) sidebar swaps the
+stacked brand lockup for the square favicon mark (`favicon-32.png`) and
+hides nav labels via Tabler's `.nav-link-title` folded behavior.
 
 Top navbar:
 

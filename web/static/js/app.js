@@ -46,7 +46,42 @@
     xhr.send(JSON.stringify({ theme: theme }));
   }
 
+  // Shared sidebar: every page carries <aside id="ds-sidebar" class="navbar
+  // navbar-vertical navbar-expand-lg" data-active="...">, this renders the
+  // nav content so menu changes stay in one file. The host element keeps the
+  // navbar classes in static HTML so Tabler's sibling selectors (e.g.
+  // .navbar-vertical ~ .page-wrapper) apply before and after JS runs.
+  // Labels use .nav-link-title so Tabler's folded-sidebar CSS can hide them.
+  function renderSidebar() {
+    var host = document.getElementById('ds-sidebar');
+    if (!host) return;
+    host.setAttribute('data-bs-theme', 'dark');
+    var active = host.getAttribute('data-active') || '';
+    var items = [
+      { id: 'dashboard', href: '/', icon: 'fa-gauge-high', label: 'Dashboard' },
+      { id: 'projects', href: '/projects.html', icon: 'fa-cubes', label: 'Projects' },
+      { id: 'runtimes', href: '/runtimes.html', icon: 'fa-server', label: 'Runtimes' }
+    ];
+    var links = items.map(function (it) {
+      return '<li class="nav-item' + (it.id === active ? ' active' : '') + '">'
+        + '<a class="nav-link" href="' + it.href + '">'
+        + '<i class="fa-solid ' + it.icon + '" aria-hidden="true"></i> '
+        + '<span class="nav-link-title">' + it.label + '</span></a></li>';
+    }).join('');
+    host.innerHTML = '<div class="container-fluid">'
+      + '<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>'
+      + '<h1 class="navbar-brand d-flex align-items-center"><a href="/">'
+      + '<img src="/assets/logo/devstationone-top-logo.png" alt="DevStationOne" class="ds-logo-full">'
+      + '<img src="/assets/logo/favicon-32.png" alt="DevStationOne" class="ds-logo-mark">'
+      + '</a></h1>'
+      + '<div class="collapse navbar-collapse" id="sidebar-menu"><ul class="navbar-nav pt-lg-3">'
+      + '<li class="nav-item"><div class="ds-nav-title text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>'
+      + links
+      + '</ul></div></div>';
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
+    renderSidebar();
     var btn = document.getElementById('theme-toggle');
     if (btn) {
       btn.addEventListener('click', function () {

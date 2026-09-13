@@ -181,6 +181,19 @@ body {
   max-width: 100%;
 }
 
+/* Folded sidebar (lg+): Tabler sets html[data-bs-sidebar^="folded"]; swap the
+   stacked lockup for the square icon mark instead of squeezing it. */
+.ds-logo-mark {
+  display: none;
+  height: 32px;
+  width: auto;
+}
+@media (min-width: 992px) {
+  html[data-bs-sidebar^="folded"] .ds-logo-full { display: none; }
+  html[data-bs-sidebar^="folded"] .ds-logo-mark { display: inline-block; }
+  html[data-bs-sidebar^="folded"] .ds-nav-title { display: none; }
+}
+
 /* Below lg the vertical navbar becomes a horizontal top navbar. */
 @media (max-width: 991.98px) {
   .ds-logo-full {
