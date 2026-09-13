@@ -105,11 +105,23 @@ body {
   color: var(--bs-btn-disabled-color);
 }
 
-/* Navigation logo sizing (docs/BRAND_ASSETS.md: horizontal logo for nav). */
-.navbar-brand .ds-logo {
-  height: 30px;
+/* Full stacked brand lockup (docs/BRAND_ASSETS.md): sidebar header + login. */
+.ds-logo-full {
+  height: 68px;
   width: auto;
-  max-width: 200px;
+  max-width: 100%;
+}
+
+/* Below lg the vertical navbar becomes a horizontal top navbar. */
+@media (max-width: 991.98px) {
+  .ds-logo-full {
+    height: 40px;
+  }
+}
+
+/* Login hero above the sign-in card. */
+.ds-logo-login {
+  height: 100px;
 }
 
 /* Theme toggle button: icon-only, 44px effective target (VISUAL spec). */

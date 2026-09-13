@@ -21,6 +21,7 @@ Installed in `assets/logo/` (served at `/assets/logo/`):
 - `icon-mark-light.png` — DS1 mark on light background; light-context use
 - `favicon-16.png` / `favicon-32.png` / `favicon-64.png` / `favicon-128.png` / `favicon-256.png` / `favicon-512.png` — favicon sizes
 - `og-image.png` — social preview (cropped from the approved board's OG image)
+- `devstationone-top-logo.png` — full stacked lockup (DS1 mark + wordmark + tagline, transparent); sidebar header and login hero
 
 Also installed:
 
@@ -31,7 +32,8 @@ Reference board (source crops, not deployed): `assets/brand-assets/` with its ow
 
 ## Usage
 
-- Top navigation: `icon-mark-dark.png` at ~26px height next to the "DevStationOne" text, matching the Tabler folded-layout pattern.
+- Top navigation: the vertical sidebar header shows `devstationone-top-logo.png` at 68px height (40px below `lg`, where the sidebar becomes a horizontal top navbar). The folded sidebar scales it to the available width. `navbar-brand-autodark` is deliberately not applied — it inverts the image under dark themes and would destroy the brand gradient.
+- Login page: `devstationone-top-logo.png` at 100px height above the sign-in card.
 - Favicons: pages link `/favicon.ico`, `favicon-32.png`, `favicon-16.png`, and use `favicon-256.png` as the Apple touch icon (the pack has no 180px asset).
 
 ## Known limitation
