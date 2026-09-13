@@ -9,6 +9,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
   <link rel="apple-touch-icon" href="/assets/logo/favicon-180.png">
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
   <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
   <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <link rel="stylesheet" href="/vendor/codemirror/codemirror.min.css">
@@ -391,6 +392,8 @@
   <script src="/vendor/jquery/jquery.min.js"></script>
   <script src="/vendor/tabler/js/tabler.min.js"></script>
   <script src="/js/app.js"></script>
+  <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
+  <script src="/js/dialogs.js"></script>
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>
   <script src="/vendor/codemirror/codemirror.min.js"></script>
@@ -520,8 +523,8 @@
       });
     });
 
-    $('#delete-btn').on('click', function () {
-      if (!window.confirm('Delete this project?')) return;
+    $('#delete-btn').on('click', async function () {
+      if (!(await DS.confirm('Delete this project?'))) return;
       $.ajax({ url: '/api/v1/projects/' + projectID, method: 'DELETE' }).done(function () {
         window.location.href = '/projects.html';
       });
@@ -565,7 +568,7 @@
         contentType: 'application/json',
         data: JSON.stringify({ terminal_font: pref })
       }).fail(function (xhr) {
-        window.alert((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save terminal font preference.');
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save terminal font preference.');
       });
     }
 
@@ -720,8 +723,8 @@
       selectSession(info.id);
     }
 
-    function closeSession(id) {
-      if (!window.confirm('Close this terminal session? The process will be terminated.')) return;
+    async function closeSession(id) {
+      if (!(await DS.confirm('Close this terminal session? The process will be terminated.'))) return;
       var st = termState[id];
       if (st.reconnectTimer) clearTimeout(st.reconnectTimer);
       if (st.ws) st.ws.close();
@@ -750,8 +753,8 @@
       });
     }
 
-    $('#new-session-btn').on('click', function () {
-      var name = window.prompt('Session name', 'bash');
+    $('#new-session-btn').on('click', async function () {
+      var name = await DS.prompt({ title: 'Session name', value: 'bash' });
       if (!name) return;
       $.ajax({
         url: '/api/v1/projects/' + projectID + '/sessions', method: 'POST', contentType: 'application/json',
@@ -759,13 +762,13 @@
       }).done(function (info) {
         addSession(info);
       }).fail(function (xhr) {
-        window.alert((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create session.');
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create session.');
       });
     });
 
-    $('#force-stop-btn').on('click', function () {
+    $('#force-stop-btn').on('click', async function () {
       if (!activeSessionID) return;
-      if (!window.confirm("Send SIGTERM to this session's process?")) return;
+      if (!(await DS.confirm("Send SIGTERM to this session's process?"))) return;
       $.ajax({
         url: '/api/v1/sessions/' + activeSessionID + '/signal', method: 'POST', contentType: 'application/json',
         data: JSON.stringify({ signal: 'SIGTERM' })
@@ -861,7 +864,7 @@
       }).done(function () {
         loadServices();
       }).fail(function (xhr) {
-        window.alert((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' ' + unit + '.'));
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' ' + unit + '.'));
         loadServices();
       });
     }
@@ -1005,17 +1008,17 @@
         contentType: 'application/json',
         data: JSON.stringify(to !== undefined ? { from: from, to: to } : { path: from })
       }).done(done).fail(function (xhr) {
-        window.alert((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' ' + from + '.'));
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' ' + from + '.'));
         if (done) done();
       });
     }
 
-    function deletePath(p, done) {
-      if (!window.confirm('Delete ' + p + '?')) return;
+    async function deletePath(p, done) {
+      if (!(await DS.confirm('Delete ' + p + '?'))) return;
       $.ajax({ url: filesURL('', 'path=' + encodeURIComponent(p)), method: 'DELETE' })
         .done(done)
         .fail(function (xhr) {
-          window.alert((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to delete ' + p + '.'));
+          DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to delete ' + p + '.'));
           if (done) done();
         });
     }
@@ -1033,18 +1036,18 @@
       btn('Download', 'btn-outline-secondary', function () {
         window.location.href = filesURL('/content', 'path=' + encodeURIComponent(p) + '&download=1');
       });
-      btn('Rename', 'btn-outline-secondary', function () {
-        var to = window.prompt('Rename ' + p + ' to:', p);
+      btn('Rename', 'btn-outline-secondary', async function () {
+        var to = await DS.prompt({ title: 'Rename ' + p + ' to:', value: p });
         if (!to) return;
         pathAction('rename', p, to, function () { loadFiles(); });
       });
-      btn('Copy', 'btn-outline-secondary', function () {
-        var to = window.prompt('Copy ' + p + ' to:', p + '-copy');
+      btn('Copy', 'btn-outline-secondary', async function () {
+        var to = await DS.prompt({ title: 'Copy ' + p + ' to:', value: p + '-copy' });
         if (!to) return;
         pathAction('copy', p, to, function () { loadFiles(); });
       });
-      btn('Move', 'btn-outline-secondary', function () {
-        var to = window.prompt('Move ' + p + ' to:', p);
+      btn('Move', 'btn-outline-secondary', async function () {
+        var to = await DS.prompt({ title: 'Move ' + p + ' to:', value: p });
         if (!to) return;
         pathAction('move', p, to, function () { loadFiles(); });
       });
@@ -1075,7 +1078,7 @@
       var next = function (i) {
         if (i >= paths.length) {
           if (failures.length) {
-            window.alert('Failed to ' + action + ': ' + failures.join(', '));
+            DS.error('Failed to ' + action + ': ' + failures.join(', '));
           }
           done();
           return;
@@ -1161,10 +1164,10 @@
 
         var $name = $('<td>');
         var $link = $('<a href="#" class="' + (entry.type === 'dir' ? 'fw-bold' : '') + '">').text(entry.name);
-        $link.on('click', function (e) {
+        $link.on('click', async function (e) {
           e.preventDefault();
           if (entry.type === 'dir') { closeEditor(false); loadFiles(p); }
-          else openFileEditor(p, entry);
+          else if (await closeEditor(false)) openFileEditor(p, entry);
         });
         $name.append($link);
         $tr.append($name);
@@ -1237,14 +1240,14 @@
       runFilesSearch(q, filesDir);
     });
 
-    $('#files-new-file-btn').on('click', function () {
-      var name = window.prompt('New file name (in ' + filesDir + ')');
+    $('#files-new-file-btn').on('click', async function () {
+      var name = await DS.prompt({ title: 'New file name (in ' + filesDir + ')' });
       if (!name) return;
       pathAction('create', joinPath(filesDir, name), undefined, function () { loadFiles(); });
     });
 
-    $('#files-new-dir-btn').on('click', function () {
-      var name = window.prompt('New folder name (in ' + filesDir + ')');
+    $('#files-new-dir-btn').on('click', async function () {
+      var name = await DS.prompt({ title: 'New folder name (in ' + filesDir + ')' });
       if (!name) return;
       pathAction('mkdir', joinPath(filesDir, name), undefined, function () { loadFiles(); });
     });
@@ -1255,7 +1258,7 @@
       var file = this.files[0];
       if (!file) return;
       if (file.size > 24 * 1024 * 1024) {
-        window.alert('File exceeds the 24 MB upload limit.');
+        DS.error('File exceeds the 24 MB upload limit.');
         return;
       }
       var reader = new FileReader();
@@ -1268,7 +1271,7 @@
           data: reader.result
         }).done(function () { loadFiles(); })
           .fail(function (xhr) {
-            window.alert((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to upload ' + file.name + '.'));
+            DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to upload ' + file.name + '.'));
           });
       };
       reader.readAsArrayBuffer(file);
@@ -1292,10 +1295,10 @@
       renderFileList();
     });
 
-    $('#files-delete-selected-btn').on('click', function () {
+    $('#files-delete-selected-btn').on('click', async function () {
       var paths = selectedPaths();
       if (!paths.length) return;
-      if (!window.confirm('Delete ' + paths.length + ' file' + (paths.length === 1 ? '' : 's') + '?')) return;
+      if (!(await DS.confirm('Delete ' + paths.length + ' file' + (paths.length === 1 ? '' : 's') + '?'))) return;
       var next = function () {
         var p = paths.pop();
         if (!p) { loadFiles(); return; }
@@ -1319,18 +1322,18 @@
       });
     });
 
-    $('#files-copy-selected-btn').on('click', function () {
+    $('#files-copy-selected-btn').on('click', async function () {
       var paths = selectedPaths();
       if (!paths.length) return;
-      var toDir = window.prompt('Copy ' + paths.length + ' file(s) into directory:', filesDir);
+      var toDir = await DS.prompt({ title: 'Copy ' + paths.length + ' file(s) into directory:', value: filesDir });
       if (!toDir) return;
       batchTransfer('copy', paths, toDir, function () { loadFiles(); });
     });
 
-    $('#files-move-selected-btn').on('click', function () {
+    $('#files-move-selected-btn').on('click', async function () {
       var paths = selectedPaths();
       if (!paths.length) return;
-      var toDir = window.prompt('Move ' + paths.length + ' file(s) into directory:', filesDir);
+      var toDir = await DS.prompt({ title: 'Move ' + paths.length + ' file(s) into directory:', value: filesDir });
       if (!toDir) return;
       batchTransfer('move', paths, toDir, function () { loadFiles(); });
     });
@@ -1485,13 +1488,14 @@
         });
     }
 
-    function closeEditor(force) {
-      if (!editorState.path) return;
-      if (!force && editorState.dirty && !window.confirm('Discard unsaved changes to ' + editorState.path + '?')) return;
+    async function closeEditor(force) {
+      if (!editorState.path) return true;
+      if (!force && editorState.dirty && !(await DS.confirm('Discard unsaved changes to ' + editorState.path + '?'))) return false;
       editorState.path = null;
       editorState.cm = null;
       editorState.dirty = false;
       $('#file-editor').prop('hidden', true);
+      return true;
     }
 
     $('#file-editor-close-btn').on('click', function () { closeEditor(false); });

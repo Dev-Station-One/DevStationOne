@@ -19,6 +19,23 @@ Every major component must support, where applicable:
 
 Errors should appear near the failed operation and explain what failed, why, and what action can resolve it.
 
+## Dialogs
+
+All confirmation, text-input, and blocking-error dialogs use the vendored SweetAlert2 library
+(`web/static/vendor/sweetalert2/`, helpers in `web/static/js/dialogs.js`: `DS.confirm`, `DS.prompt`,
+`DS.error`). Native `window.alert`/`window.confirm`/`window.prompt` must not be used.
+
+- **Confirm** — warning icon, red (`--ds-danger`) Confirm button, Cancel button. Used for every
+  destructive action (delete project/file/session, revoke runtime, discard unsaved changes).
+  Esc and Cancel both mean "no".
+- **Prompt** — text input with default value, Cancel button; empty submits are rejected inline.
+  Used for file/folder names, rename/copy/move targets, session names, and destination paths.
+- **Error** — error icon, single OK button, blocking modal. Used for API failures surfaced to
+  the user.
+
+Dialogs follow the page's `data-bs-theme` (dark default) and use the brand tokens from
+`docs/BOOTSTRAP_COLORS.md`.
+
 ## Terminal Components
 
 ```text

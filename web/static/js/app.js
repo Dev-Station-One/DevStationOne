@@ -40,7 +40,7 @@
         var prev = theme === 'dark' ? 'light' : 'dark';
         apply(prev);
         store(prev);
-        window.alert('Failed to save theme preference.');
+        DS.error('Failed to save theme preference.');
       }
     };
     xhr.send(JSON.stringify({ theme: theme }));
