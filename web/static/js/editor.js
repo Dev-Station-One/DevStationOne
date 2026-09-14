@@ -44,20 +44,23 @@
   function theme() {
     if (darkTheme) return darkTheme;
     var C = CM6API();
+    var t = C.tags;
+    // HighlightStyle.define needs real @lezer/highlight Tag objects, not
+    // tag-name strings — passing strings silently matched nothing.
     var highlight = C.HighlightStyle.define([
-      { tag: 'keyword', color: '#c678dd' },
-      { tag: ['name', 'propertyName'], color: '#e5c07b' },
-      { tag: ['literal', 'constant'], color: '#d19a66' },
-      { tag: 'string', color: '#98c379' },
-      { tag: ['number', 'integer'], color: '#d19a66' },
-      { tag: ['comment', 'blockComment'], color: '#7f848e', fontStyle: 'italic' },
-      { tag: 'operator', color: '#56b6c2' },
-      { tag: 'typeName', color: '#61afef' },
-      { tag: 'function(variableName)', color: '#61afef' },
-      { tag: 'definition(variable)', color: '#e06c75' },
-      { tag: 'link', color: '#61afef', textDecoration: 'underline' },
-      { tag: 'heading', color: '#e06c75', fontWeight: 'bold' },
-      { tag: 'invalid', color: '#f00' }
+      { tag: t.keyword, color: '#c678dd' },
+      { tag: [t.name, t.propertyName], color: '#e5c07b' },
+      { tag: [t.literal, t.constant(t.name)], color: '#d19a66' },
+      { tag: t.string, color: '#98c379' },
+      { tag: [t.number, t.integer], color: '#d19a66' },
+      { tag: [t.comment, t.blockComment], color: '#7f848e', fontStyle: 'italic' },
+      { tag: t.operator, color: '#56b6c2' },
+      { tag: t.typeName, color: '#61afef' },
+      { tag: t.function(t.variableName), color: '#61afef' },
+      { tag: t.definition(t.variableName), color: '#e06c75' },
+      { tag: t.link, color: '#61afef', textDecoration: 'underline' },
+      { tag: t.heading, color: '#e06c75', fontWeight: 'bold' },
+      { tag: t.invalid, color: '#f00' }
     ]);
     darkTheme = [
       C.EditorView.theme({
@@ -220,6 +223,8 @@
       ));
       var langExt = languageFor(path);
       var stateExts = [].concat(theme(), [fontExt().of(fontSpec())], langExt ? [langExt] : [], [
+        C.lineNumbers(),
+        C.EditorView.lineWrapping,
         C.autocompletion(),
         C.closeBrackets(),
         keymap

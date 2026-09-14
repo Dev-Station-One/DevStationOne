@@ -18,6 +18,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { sql } from "@codemirror/lang-sql";
 import { python } from "@codemirror/lang-python";
 import { go } from "@codemirror/lang-go";
+import { tags } from "@lezer/highlight";
 
 export const CM6 = {
   EditorState: state.EditorState,
@@ -66,6 +67,7 @@ export const CM6 = {
   sql: sql,
   python: python,
   go: go,
+  tags: tags,
 };
 
 export default CM6;
