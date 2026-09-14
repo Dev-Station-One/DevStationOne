@@ -52,6 +52,31 @@
   // navbar classes in static HTML so Tabler's sibling selectors (e.g.
   // .navbar-vertical ~ .page-wrapper) apply before and after JS runs.
   // Labels use .nav-link-title so Tabler's folded-sidebar CSS can hide them.
+  // Shared top bar: every authenticated page carries
+  // <div class="d-flex align-items-center gap-2" id="ds-topbar-actions"></div>
+  // inside its header; this fills it (theme, notifications bell, account
+  // menu) so the top bar is owned by this file the same way the sidebar is.
+  function renderTopbar() {
+    var host = document.getElementById('ds-topbar-actions');
+    if (!host || host.dataset.rendered) return;
+    host.dataset.rendered = '1';
+    host.innerHTML =
+      '<button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch theme" title="Switch theme"><i class="fa-solid fa-sun" aria-hidden="true"></i><i class="fa-solid fa-moon" aria-hidden="true"></i></button>'
+      + '<div class="dropdown">'
+      + '<button class="icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i></button>'
+      + '<div class="dropdown-menu dropdown-menu-end">'
+      + '<a class="dropdown-item" href="/account.html"><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Account</a>'
+      + '<button class="dropdown-item" type="button" id="logout-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Log out</button>'
+      + '</div></div>';
+    document.getElementById('logout-btn').addEventListener('click', function () {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/v1/auth/logout');
+      xhr.onload = function () { window.location.href = '/login.html'; };
+      xhr.onerror = function () { window.location.href = '/login.html'; };
+      xhr.send();
+    });
+  }
+
   function renderSidebar() {
     var host = document.getElementById('ds-sidebar');
     if (!host) return;
@@ -227,6 +252,7 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     renderSidebar();
+    renderTopbar();
     var btn = document.getElementById('theme-toggle');
     if (btn) {
       btn.addEventListener('click', function () {

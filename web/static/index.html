@@ -23,16 +23,7 @@
       <header class="navbar navbar-expand-md navbar-light d-print-none">
         <div class="container-xl d-flex justify-content-between align-items-center">
           <button class="icon-btn" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar" title="Fold sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
-          <div class="d-flex align-items-center gap-2">
-            <button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch theme" title="Switch theme"><i class="fa-solid fa-sun" aria-hidden="true"></i><i class="fa-solid fa-moon" aria-hidden="true"></i></button>
-            <div class="dropdown">
-              <button class="icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i></button>
-              <div class="dropdown-menu dropdown-menu-end">
-                <a class="dropdown-item" href="/account.html"><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Account</a>
-                <button class="dropdown-item" type="button" id="logout-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Log out</button>
-              </div>
-            </div>
-          </div>
+          <div class="d-flex align-items-center gap-2" id="ds-topbar-actions"></div>
         </div>
       </header>
       <div class="page-body">
@@ -102,12 +93,6 @@
   <script>
     $.get('/api/v1/auth/session').fail(function () {
       window.location.href = '/login.html';
-    });
-
-    $('#logout-btn').on('click', function () {
-      $.ajax({ url: '/api/v1/auth/logout', method: 'POST' }).always(function () {
-        window.location.href = '/login.html';
-      });
     });
 
     function escapeHtml(s) {

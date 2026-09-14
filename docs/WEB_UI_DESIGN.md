@@ -50,6 +50,15 @@ with the navbar scaffold classes. Collapsed (folded) sidebar swaps the
 stacked brand lockup for the square favicon mark (`favicon-32.png`) and
 hides nav labels via Tabler's `.nav-link-title` folded behavior.
 
+The top bar is shared the same way: each authenticated page carries an
+empty `<div id="ds-topbar-actions">` inside its header, and `app.js`
+renders the theme toggle, notifications bell, and account menu
+(Logout wired centrally — pages do not duplicate the markup or handler).
+The top bar must never load a second Bootstrap copy: Tabler bundles its
+own, and a second copy's data-api closes every dropdown the moment the
+first opens (Summernote therefore uses the jQuery-only `lite` build,
+not the Bootstrap-5 build).
+
 Top navbar:
 
 - sidebar toggle
