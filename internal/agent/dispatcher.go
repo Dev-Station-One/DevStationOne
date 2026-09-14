@@ -10,27 +10,30 @@ import (
 // dispatcher implements connection.Manager by routing each control-plane
 // message to whichever capability handles it: service.command to
 // serviceManager, file.command to fileManager, db.command to dbManager,
-// everything else (session.*, revoked) to sessionManager. Terminal frames
-// always belong to a session.
+// git.command to gitManager, everything else (session.*, revoked) to
+// sessionManager. Terminal frames always belong to a session.
 type dispatcher struct {
 	session *sessionManager
 	service *serviceManager
 	file    *fileManager
 	db      *dbManager
+	git     *gitManager
 }
 
 // NewManager builds the runtime's top-level connection.Manager, driving
 // real PTY sessions (Slice 4), systemd --user services (Slice 5), contained
-// filesystem operations (Slice 6), and database connections (Slice 7) from
-// control-plane messages. Exported so integration tests can run the real
-// runtime-side logic against a real PTY/systemd, without exec'ing the
-// devstationone-runtime binary as a subprocess.
+// filesystem operations (Slice 6), database connections (Slice 7), and git
+// operations (Slice 16) from control-plane messages. Exported so
+// integration tests can run the real runtime-side logic against a real
+// PTY/systemd, without exec'ing the devstationone-runtime binary as a
+// subprocess.
 func NewManager(logger *slog.Logger) connection.Manager {
 	return &dispatcher{
 		session: newSessionManager(logger),
 		service: newServiceManager(logger),
 		file:    newFileManager(logger),
 		db:      newDBManager(logger),
+		git:     newGitManager(logger),
 	}
 }
 
@@ -39,6 +42,7 @@ func (d *dispatcher) SetSender(s connection.Sender) {
 	d.service.SetSender(s)
 	d.file.SetSender(s)
 	d.db.SetSender(s)
+	d.git.SetSender(s)
 }
 
 func (d *dispatcher) HandleEnvelope(env protocol.Envelope) {
@@ -52,6 +56,10 @@ func (d *dispatcher) HandleEnvelope(env protocol.Envelope) {
 	}
 	if env.Type == protocol.MessageDBCommand {
 		d.db.HandleEnvelope(env)
+		return
+	}
+	if env.Type == protocol.MessageGitCommand {
+		d.git.HandleEnvelope(env)
 		return
 	}
 	d.session.HandleEnvelope(env)

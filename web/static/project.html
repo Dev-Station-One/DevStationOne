@@ -117,6 +117,29 @@
     .files-table .btn, .files-toolbar .btn { min-height: 44px; }
     .files-crumb { white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
     .files-crumb .btn { padding: .125rem .25rem; }
+    /* Source Control panel (VISUAL spec "Source Control Components"). */
+    .git-diff {
+      max-height: 65vh;
+      overflow: auto;
+      font-family: var(--tblr-font-monospace);
+      font-size: .8125rem;
+      padding: .75rem;
+      white-space: pre;
+    }
+    .git-diff .diff-add { background: var(--tblr-success-lt); display: block; }
+    .git-diff .diff-del { background: var(--tblr-danger-lt); display: block; }
+    .git-diff .diff-hunk { color: var(--tblr-secondary); display: block; }
+    #git-staged-list .list-group-item, #git-unstaged-list .list-group-item {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      cursor: pointer;
+    }
+    #git-staged-list .list-group-item.active, #git-unstaged-list .list-group-item.active {
+      background: var(--tblr-bg-surface-secondary);
+      color: inherit;
+      border-color: var(--tblr-border-color);
+    }
     #file-editor-cm .CodeMirror {
       height: 55vh;
       min-height: 300px;
@@ -199,6 +222,7 @@
               <li class="nav-item"><a class="nav-link active" href="#" data-app-tab="overview"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="terminal"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="files"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="git"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="databases"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="services"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
             </ul>
@@ -426,6 +450,43 @@
                     <dt class="col-4 col-md-3">Modified</dt><dd class="col-8 col-md-9" id="fp-mtime">—</dd>
                     <dt class="col-4 col-md-3">Mode</dt><dd class="col-8 col-md-9" id="fp-mode">—</dd>
                   </dl>
+                </div>
+              </div>
+            </div>
+
+            <div id="git-panel" hidden>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div id="git-summary" class="text-secondary">—</div>
+                <button id="git-refresh-btn" class="icon-btn" aria-label="Refresh source control" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+              </div>
+              <div id="git-loading" class="text-secondary">Loading status…</div>
+              <div id="git-error" class="alert alert-danger" hidden></div>
+              <div id="git-clean" class="card" hidden>
+                <div class="card-body text-secondary"><i class="fa-solid fa-check me-1" aria-hidden="true"></i>No changes.</div>
+              </div>
+              <div id="git-body" hidden>
+                <div class="row g-3">
+                  <div class="col-12 col-lg-4">
+                    <div class="mb-1 small text-secondary text-uppercase">Staged</div>
+                    <div id="git-staged-list" class="list-group mb-3"></div>
+                    <div class="mb-1 small text-secondary text-uppercase">Unstaged</div>
+                    <div id="git-unstaged-list" class="list-group mb-3"></div>
+                    <label class="form-label mt-2">Commit message</label>
+                    <textarea id="git-commit-message" class="form-control" rows="3" placeholder="Describe this change…"></textarea>
+                    <div id="git-commit-error" class="alert alert-danger mt-2" hidden></div>
+                    <button id="git-commit-btn" class="btn btn-primary mt-2" disabled>Commit</button>
+                  </div>
+                  <div class="col-12 col-lg-8">
+                    <div id="git-diff-empty" class="card">
+                      <div class="card-body text-secondary">Select a file to view its diff.</div>
+                    </div>
+                    <div id="git-diff-wrap" class="card" hidden>
+                      <div class="card-header"><strong id="git-diff-title" class="text-break">—</strong></div>
+                      <div class="card-body p-0">
+                        <pre id="git-diff-view" class="git-diff mb-0"></pre>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1775,6 +1836,145 @@
       return $node;
     }
 
+    // --- Source Control (docs/IMPLEMENTATION_PLAN.md Slice 16,
+    // --- docs/WEB_UI_DESIGN.md Source Control) ---
+
+    var gitLoaded = false;
+    var gitSelected = null; // { path, staged } of the entry whose diff is shown, or null
+
+    function gitStatusLabel(f) {
+      var code = f.index !== '.' && f.index !== '?' ? f.index : f.worktree;
+      switch (code) {
+        case 'M': return 'Modified';
+        case 'A': return 'Added';
+        case 'D': return 'Deleted';
+        case 'R': return 'Renamed';
+        case 'C': return 'Copied';
+        case 'U': return 'Conflict';
+        case '?': return 'Untracked';
+        default: return code;
+      }
+    }
+
+    function gitFileRow(f, staged) {
+      var $row = $('<div class="list-group-item list-group-item-action py-1">')
+        .toggleClass('active', !!gitSelected && gitSelected.path === f.path && gitSelected.staged === staged);
+      $('<span class="badge bg-secondary-lt" style="width:5.5rem;">').text(gitStatusLabel(f)).appendTo($row);
+      var label = f.orig_path ? (f.orig_path + ' → ' + f.path) : f.path;
+      $('<span class="text-truncate flex-grow-1">').text(label).attr('title', label).appendTo($row);
+      var $btn = $('<button type="button" class="icon-btn" type="button">')
+        .attr('aria-label', staged ? 'Unstage' : 'Stage')
+        .attr('title', staged ? 'Unstage' : 'Stage')
+        .append('<i class="fa-solid fa-' + (staged ? 'minus' : 'plus') + '" aria-hidden="true"></i>');
+      $btn.on('click', function (e) {
+        e.stopPropagation();
+        gitStageToggle(f.path, staged);
+      });
+      $row.append($btn);
+      $row.on('click', function () {
+        gitSelected = { path: f.path, staged: staged };
+        gitLoadDiff();
+        loadGitStatus();
+      });
+      return $row;
+    }
+
+    function gitStageToggle(path, staged) {
+      $.ajax({
+        url: '/api/v1/projects/' + projectID + '/git/' + (staged ? 'unstage' : 'stage'),
+        method: 'POST', contentType: 'application/json', data: JSON.stringify({ path: path })
+      }).done(function () {
+        loadGitStatus();
+      }).fail(function (xhr) {
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to ' + (staged ? 'unstage' : 'stage') + ' ' + path + '.');
+      });
+    }
+
+    function gitLoadDiff() {
+      if (!gitSelected) {
+        $('#git-diff-wrap').prop('hidden', true);
+        $('#git-diff-empty').prop('hidden', false);
+        return;
+      }
+      $('#git-diff-empty').prop('hidden', true);
+      $('#git-diff-wrap').prop('hidden', false);
+      $('#git-diff-title').text(gitSelected.path);
+      var $view = $('#git-diff-view').empty().text('Loading…');
+      $.get('/api/v1/projects/' + projectID + '/git/diff', { path: gitSelected.path, staged: gitSelected.staged ? '1' : '' })
+        .done(function (body) {
+          $view.empty();
+          var diff = body.diff || '(no diff — binary file, or nothing to show)';
+          diff.split('\n').forEach(function (line) {
+            var cls = '';
+            if (line.charAt(0) === '+' && line.slice(0, 3) !== '+++') cls = 'diff-add';
+            else if (line.charAt(0) === '-' && line.slice(0, 3) !== '---') cls = 'diff-del';
+            else if (line.slice(0, 2) === '@@') cls = 'diff-hunk';
+            $('<span>').addClass(cls).text(line + '\n').appendTo($view);
+          });
+        })
+        .fail(function (xhr) {
+          $view.text('Failed to load diff: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText));
+        });
+    }
+
+    function loadGitStatus() {
+      $('#git-error').prop('hidden', true);
+      $('#git-loading').prop('hidden', false);
+      $('#git-clean').prop('hidden', true);
+      $('#git-body').prop('hidden', true);
+      $.get('/api/v1/projects/' + projectID + '/git/status')
+        .done(function (files) {
+          $('#git-loading').prop('hidden', true);
+          $('#git-summary').text(files.length + ' changed path' + (files.length === 1 ? '' : 's'));
+          if (!files.length) {
+            $('#git-clean').prop('hidden', false);
+            gitSelected = null;
+            gitLoadDiff();
+            return;
+          }
+          $('#git-body').prop('hidden', false);
+          var staged = files.filter(function (f) { return f.index !== '.' && f.index !== '?'; });
+          var unstaged = files.filter(function (f) { return f.worktree !== '.'; });
+          var $staged = $('#git-staged-list').empty();
+          var $unstaged = $('#git-unstaged-list').empty();
+          staged.forEach(function (f) { $staged.append(gitFileRow(f, true)); });
+          unstaged.forEach(function (f) { $unstaged.append(gitFileRow(f, false)); });
+          $('#git-commit-btn').prop('disabled', staged.length === 0 || !$('#git-commit-message').val().trim());
+          if (gitSelected && !files.some(function (f) { return f.path === gitSelected.path; })) {
+            gitSelected = null;
+          }
+          gitLoadDiff();
+        })
+        .fail(function (xhr) {
+          $('#git-loading').prop('hidden', true);
+          var msg = (xhr.responseJSON && xhr.responseJSON.error) ||
+            (xhr.status === 409 ? 'Runtime is offline.' : 'Failed to load source control status.');
+          $('#git-error').text(msg).prop('hidden', false);
+        });
+    }
+
+    $('#git-refresh-btn').on('click', loadGitStatus);
+    $('#git-commit-message').on('input', function () {
+      $('#git-commit-btn').prop('disabled', $('#git-staged-list').children().length === 0 || !$(this).val().trim());
+    });
+    $('#git-commit-btn').on('click', function () {
+      var message = $('#git-commit-message').val().trim();
+      if (!message) return;
+      $('#git-commit-error').prop('hidden', true);
+      $(this).prop('disabled', true);
+      $.ajax({
+        url: '/api/v1/projects/' + projectID + '/git/commit', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ message: message })
+      }).done(function () {
+        $('#git-commit-message').val('');
+        gitSelected = null;
+        loadGitStatus();
+      }).fail(function (xhr) {
+        $('#git-commit-error').text((xhr.responseJSON && xhr.responseJSON.error) || 'Commit failed.').prop('hidden', false);
+        $('#git-commit-btn').prop('disabled', false);
+      });
+    });
+
     // --- Files (docs/PRD.md §5, docs/WEB_UI_DESIGN.md Files,
     // --- docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md File Manager) ---
 
@@ -2441,6 +2641,7 @@
       $('#terminal-panel').prop('hidden', tab !== 'terminal');
       $('#services-panel').prop('hidden', tab !== 'services');
       $('#files-panel').prop('hidden', tab !== 'files');
+      $('#git-panel').prop('hidden', tab !== 'git');
       $('#databases-panel').prop('hidden', tab !== 'databases');
       if (tab === 'terminal') {
         if (!sessionsLoaded) {
@@ -2456,6 +2657,10 @@
       if (tab === 'files' && !filesLoaded) {
         filesLoaded = true;
         loadFiles('.');
+      }
+      if (tab === 'git' && !gitLoaded) {
+        gitLoaded = true;
+        loadGitStatus();
       }
       if (tab === 'databases' && !databasesLoaded) {
         databasesLoaded = true;

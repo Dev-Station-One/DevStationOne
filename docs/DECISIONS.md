@@ -827,3 +827,62 @@ mocking infrastructure for. Also fixed while verifying: two stale docs
 instruction (`sudo -u devstationone devstationone-admin ...` with no
 environment sourced — `devstationone-admin` needs the same two env vars
 the server does, and `sudo -u` doesn't inherit them).
+
+## ADR-028 — Git: real `git` CLI via `os/exec`, not go-git, mirroring the Files RPC pattern (Slice 16)
+
+Date: 2026-09-14
+
+**Decision.** The runtime's git capability (Slice 16: status, diff, stage,
+unstage, commit) runs the real `git` binary as a direct child process
+(`internal/agent/git_manager.go`, `os/exec`, argv only, no shell), with
+`cmd.Dir` set to the Project's working directory. It reuses the Slice 6
+file.command shape exactly: a `git.command`/`git.result`/`git.error`
+message triple over the Slice 5 correlated request/response machinery,
+`root` always server-derived from the Project record, `path` root-relative
+and `filesystem.Clean`-validated. Commit messages travel over `git commit
+-F -`'s stdin, never as a process argument (`docs/SECURITY.md` — process
+arguments are visible to other users on the host via `/proc` or `ps`).
+
+**Why not go-git.** `github.com/go-git/go-git` (a pure-Go git
+implementation) was evaluated and rejected. It still has no credential
+helper support (go-git/go-git#1420, open since 2025) and doesn't run local
+git hooks (pre-commit, commit-msg) the way `git commit` does — both would
+silently diverge from the git behavior the runtime's OS user already has
+configured, which is the same property that made `os/exec` the right
+choice for `internal/services`' systemctl/journalctl calls (ADR-017).
+GPG commit signing and
+custom diff/merge drivers configured for that user would be bypassed the
+same way. A future slice (branch/push/pull, noted as reusing this same RPC
+pattern with new `Action` values) needs the credential helper specifically
+— adopting go-git now would mean a second migration back to `os/exec`
+later rather than one clean choice up front. The real `git` binary is
+already a required dependency of any development machine this runtime runs
+on, so `os/exec` costs nothing go-git would save.
+
+**Containment for status/diff.** Unlike file operations (`os.Root`,
+ADR-018), git operations aren't sandboxed by an OS-level containment
+primitive — `git` itself decides what it can see, by walking up from `cmd.Dir`
+to find `.git`. If a Project's working directory is a subdirectory of a
+larger git checkout, a bare `git status`/`git diff` would report the whole
+outer repository, leaking paths and diffs outside the Project's authorized
+root into the API response. Fixed by passing a `.` pathspec (`-- .`) to
+scope both to the Project root, the same one-flag fix in both the
+Control Server's early path validation and the runtime's re-validation
+(`docs/SECURITY.md` "defense in depth").
+
+**Consequence — a known, accepted gap.** `stage`/`unstage`/`commit` are
+*not* given the same pathspec treatment, because git's own semantics make
+it unnecessary for the paths this system ever passes (always root-relative
+and `filesystem.Clean`-validated, so `git add`/`git reset` can't be made to
+touch anything outside `root`). But git's *index* is repository-wide, not
+directory-scoped: if a Project's working directory sits inside a larger
+checkout and something outside DevStationOne (a human at a shell) has
+already staged changes elsewhere in that same repository, this system's
+`commit` action commits the whole staged index — including those
+unrelated changes — not just what its own `status`/`diff` calls showed.
+This is inherent to running any git tool in a subdirectory of a larger
+repository, not a defect introduced by scoping status/diff reads; a
+pre-commit check that refuses to commit unless every staged path is under
+`root` was considered and deferred as unneeded engineering unless a real
+deployment actually uses Projects rooted inside larger checkouts (the
+documented/expected configuration is one Project, one repository).

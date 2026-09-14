@@ -115,6 +115,33 @@ Editor states:
 
 Modified files must be visibly marked and closing an unsaved editor requires explicit save/discard handling.
 
+## Source Control Components
+
+Desktop:
+
+```text
+Changed Files (Staged / Unstaged) | Diff | Commit box
+```
+
+Changed-file list states:
+
+- loading
+- clean (no changes)
+- changes present
+- runtime offline
+
+Each entry shows its status code (modified, added, deleted, renamed —
+with its original path, untracked) and stage/unstage actions. Diff view
+states: no selection, loading, loaded, diff too large/binary.
+
+Commit box states:
+
+- idle (staged empty — commit disabled)
+- ready (staged non-empty, message entered)
+- committing
+- committed (brief confirmation, list refreshes)
+- commit failed
+
 ## Database Manager Components
 
 Desktop:

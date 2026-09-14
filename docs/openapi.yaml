@@ -17,6 +17,7 @@ tags:
   - name: Projects
   - name: Sessions
   - name: Files
+  - name: Git
   - name: Databases
   - name: Services
   - name: Audit
@@ -1517,6 +1518,210 @@ paths:
           description: The project's runtime is not currently connected
         "502":
           description: The runtime could not move the entry
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/status:
+    get:
+      summary: List changed paths
+      description: Every call is a live RPC to the runtime, scoped to the Project's working directory even when it is a subdirectory of a larger git checkout. See docs/API.md "Git".
+      tags: [Git]
+      operationId: gitStatus
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The changed paths
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GitFileStatus"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (e.g. not a git repository)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/diff:
+    get:
+      summary: Get a unified diff
+      description: Defaults to the working-tree-vs-index diff; `staged=1` diffs the index against HEAD instead.
+      tags: [Git]
+      operationId: gitDiff
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: false
+          description: Scope the diff to one path, relative to the Project's working directory. Omitted diffs the whole Project root.
+          schema:
+            type: string
+        - name: staged
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: The diff text
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [diff]
+                properties:
+                  diff:
+                    type: string
+        "400":
+          description: Invalid path (absolute or escaping the project root)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/stage:
+    post:
+      summary: Stage a path
+      tags: [Git]
+      operationId: gitStage
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        "204":
+          description: Staged
+        "400":
+          description: Invalid or missing path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/unstage:
+    post:
+      summary: Unstage a path
+      tags: [Git]
+      operationId: gitUnstage
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+      responses:
+        "204":
+          description: Unstaged
+        "400":
+          description: Invalid or missing path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/commit:
+    post:
+      summary: Commit the staged index
+      tags: [Git]
+      operationId: gitCommit
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        "200":
+          description: The new commit's SHA
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [commit]
+                properties:
+                  commit:
+                    type: string
+        "400":
+          description: Missing commit message
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (e.g. nothing staged)
         "504":
           description: The runtime did not respond within the timeout
   /api/v1/projects/{projectID}/databases:
@@ -3096,6 +3301,22 @@ components:
         mtime:
           type: string
           format: date-time
+    GitFileStatus:
+      type: object
+      description: One changed path from a git status call. Not a stored resource — see docs/API.md "Git".
+      required: [path, index, worktree]
+      properties:
+        path:
+          type: string
+        orig_path:
+          type: string
+          description: Set only for a rename/copy, to the path before the change.
+        index:
+          type: string
+          description: The staged-change status code (".", "M", "A", "D", "R", "C", "U", or "?" for untracked).
+        worktree:
+          type: string
+          description: The unstaged-change status code, same vocabulary as index.
     AuditEvent:
       type: object
       description: One recorded audit event (docs/API.md "Audit"). actor_user_id is null for an event with no authenticated actor (e.g. a failed login) or once the referenced user is later deleted; actor_email is captured at event time and stays even then.

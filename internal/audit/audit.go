@@ -57,6 +57,12 @@ const (
 	// carried in Detail["action"] for the same reason as EventServiceAction.
 	EventFileTransferred = "file.transferred"
 	EventFileDeleted     = "file.deleted"
+
+	// EventGitStaged/EventGitUnstaged cover a stage/unstage RPC; the path is
+	// carried in Detail["path"].
+	EventGitStaged    = "git.staged"
+	EventGitUnstaged  = "git.unstaged"
+	EventGitCommitted = "git.committed"
 )
 
 // Actor identifies who triggered an event. UserID is empty for an

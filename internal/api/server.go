@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/events"
 	"devstationone/internal/protocol"
@@ -88,6 +89,12 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/copy", requireSession(db, fileTransferHandler(db, registry, "copy")))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/move", requireSession(db, fileTransferHandler(db, registry, "move")))
 	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/files", requireSession(db, deleteFileHandler(db, registry)))
+
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/git/status", requireSession(db, gitStatusHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/git/diff", requireSession(db, gitDiffHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/stage", requireSession(db, gitStageHandler(db, registry, "stage", audit.EventGitStaged)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/unstage", requireSession(db, gitStageHandler(db, registry, "unstage", audit.EventGitUnstaged)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/commit", requireSession(db, gitCommitHandler(db, registry)))
 
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireSession(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireSession(db, listDatabaseConnectionsHandler(db)))

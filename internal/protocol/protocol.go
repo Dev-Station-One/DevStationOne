@@ -85,6 +85,18 @@ const (
 	// carrying the same Envelope.ID as the request. Its payload shape is
 	// identical to ServiceErrorPayload, which is reused for it.
 	MessageDBError MessageType = "db.error"
+
+	// MessageGitCommand is sent server->runtime to perform a git operation
+	// inside a Project's authorized root directory. Like service.command, it
+	// uses Envelope.ID for request/response correlation.
+	MessageGitCommand MessageType = "git.command"
+	// MessageGitResult is sent runtime->server with a successful git.command
+	// result, carrying the same Envelope.ID as the request.
+	MessageGitResult MessageType = "git.result"
+	// MessageGitError is sent runtime->server when a git.command fails,
+	// carrying the same Envelope.ID as the request. Its payload shape is
+	// identical to ServiceErrorPayload, which is reused for it.
+	MessageGitError MessageType = "git.error"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
@@ -278,6 +290,51 @@ type FileResultPayload struct {
 	Info    *FileInfo  `json:"info,omitempty"`
 	Data    []byte     `json:"data,omitempty"`
 	Matches []string   `json:"matches,omitempty"`
+}
+
+// GitCommandPayload is the payload of a MessageGitCommand envelope.
+//
+// Root is the Project's working directory, resolved by the Control Server
+// from the Project record — never taken from a client request, same rule as
+// FileCommandPayload.Root. Path is root-relative; the runtime scopes every
+// read (status/diff) to it with a git pathspec rather than the whole
+// repository, in case Root is a subdirectory of a larger git checkout.
+type GitCommandPayload struct {
+	// Action is one of: status, diff, stage, unstage, commit.
+	Action string `json:"action"`
+	Root   string `json:"root"`
+	// Path scopes a "diff"/"stage"/"unstage" request, relative to Root. "" or
+	// "." means the whole Project root for "diff"; required (non-empty) for
+	// "stage"/"unstage".
+	Path string `json:"path,omitempty"`
+	// Staged selects `git diff --cached` (staged vs HEAD) instead of the
+	// default working-tree-vs-index diff, for a "diff" request.
+	Staged bool `json:"staged,omitempty"`
+	// Message is the commit message for a "commit" request, passed to `git
+	// commit -F -` over stdin rather than argv (docs/SECURITY.md — never
+	// logged as a process argument).
+	Message string `json:"message,omitempty"`
+}
+
+// GitFileStatus describes one changed path from a "status" request. Index is
+// the staged-change status code, Worktree is the unstaged one — the two
+// halves of git's XY status pair (git-status(1) "Porcelain Format Version
+// 2"): each is ".", "M", "A", "D", "R", "C", "U", or "?" (untracked).
+// OrigPath is set only for a rename/copy, to the path before the change.
+type GitFileStatus struct {
+	Path     string `json:"path"`
+	OrigPath string `json:"orig_path,omitempty"`
+	Index    string `json:"index"`
+	Worktree string `json:"worktree"`
+}
+
+// GitResultPayload is the payload of a MessageGitResult envelope. Exactly
+// one of Files, Diff, or Commit is populated, matching the request's Action
+// ("stage"/"unstage" populate none of them — success is the empty result).
+type GitResultPayload struct {
+	Files  []GitFileStatus `json:"files,omitempty"`
+	Diff   string          `json:"diff,omitempty"`
+	Commit string          `json:"commit,omitempty"`
 }
 
 // sessionIDFrameLen is the fixed width of the session ID prefix on a binary

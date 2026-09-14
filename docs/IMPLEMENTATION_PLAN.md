@@ -606,7 +606,13 @@ commit) against a real temp git repo; REST integration tests including
 containment (a path outside `Root` is rejected); OpenAPI validation for the
 new routes.
 
-**Status**: Not Started
+**Status**: Complete. See `docs/DECISIONS.md` ADR-028 for the go-git
+evaluation/rejection and the git-CLI containment reasoning; `docs/API.md`
+"Git" and `docs/PROTOCOL.md` "Slice 16" for the contract; `docs/WEB_UI_DESIGN.md`
+"Source Control" and `docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md`
+"Source Control Components" for the UI. `stage`/`unstage` use `git add` /
+`git reset --` rather than `git restore --staged`, which refuses to run in
+a repo with no commits yet.
 
 ## Slice 17 — Alternate HTML terminal (forms-based rendering)
 

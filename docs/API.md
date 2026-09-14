@@ -244,6 +244,32 @@ The canonical request/response shapes are `docs/openapi.yaml` (tag `Files`).
 HTML/SVG content is always served with an attachment disposition so it can
 never render as a document on the DevStationOne origin.
 
+## Git
+
+Git operations are live RPCs to the Project's runtime (same shape as
+Files), executing the real `git` CLI directly (`os/exec`, no shell) in the
+Project's working directory — reusing whatever `git`, SSH keys, and
+credential helper are already configured for the runtime's OS user
+(`docs/DECISIONS.md` ADR-028).
+
+| Operation | Endpoint |
+|---|---|
+| status | `GET /api/v1/projects/{projectID}/git/status` — changed-path list |
+| diff | `GET /api/v1/projects/{projectID}/git/diff?path=&staged=` — unified diff text; `staged=1` diffs the index against HEAD |
+| stage | `POST /api/v1/projects/{projectID}/git/stage` `{"path"}` |
+| unstage | `POST /api/v1/projects/{projectID}/git/unstage` `{"path"}` |
+| commit | `POST /api/v1/projects/{projectID}/git/commit` `{"message"}` — replies `{"commit": "<sha>"}` |
+
+`status`/`diff` are scoped to the Project's working directory with a git
+pathspec (`-- .` or the given path) even when it is a subdirectory of a
+larger git checkout, so a repo rooted above it can't leak paths outside the
+Project into the result. Staging/committing content from outside the
+Project's working directory (already staged there by something other than
+DevStationOne, in that same larger-checkout scenario) is a known
+limitation — see ADR-028.
+
+The canonical request/response shapes are `docs/openapi.yaml` (tag `Git`).
+
 ## Databases
 
 ```text

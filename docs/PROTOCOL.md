@@ -346,6 +346,51 @@ credentials take effect on the next request rather than up to 5 minutes
 later. See ADR-021/022 for why this is a plain map keyed by connection ID
 rather than a session-open/close message pair.
 
+## Implementation (Slice 16): git commands
+
+Slice 16 adds three message types, reusing the Slice 5 correlated
+request/response machinery unchanged:
+
+- `git.command` (server→runtime): `{action, root, path, staged, message}`.
+  `action` is one of `status`, `diff`, `stage`, `unstage`, `commit`. `root`
+  is the Project's working directory, filled by the Control Server — never
+  accepted from a client (same rule as `file.command`). `path` scopes
+  `diff`/`stage`/`unstage`, root-relative, validated with the same
+  `filesystem.Clean` rule as file paths on both sides. `staged` selects
+  `git diff --cached` instead of the working-tree-vs-index diff. `message`
+  is a commit message, sent runtime-side over `git commit -F -`'s stdin
+  rather than as a process argument (never logged, `docs/SECURITY.md`).
+- `git.result` (runtime→server): exactly one of `{files}`, `{diff}`,
+  `{commit}` populated, matching the action (`stage`/`unstage` populate
+  none of them — success is the empty result).
+- `git.error` (runtime→server): `{error}` — the same payload shape as
+  `service.error`.
+
+Runtime-side, `internal/agent/git_manager.go` runs the real `git` CLI as a
+direct child process (`os/exec`, argv only, no shell) with `cmd.Dir` set to
+`root` — not a Go git library; see `docs/DECISIONS.md` ADR-028 for why.
+`status` runs `git status --porcelain=v2 -z -- .` and parses the NUL-
+delimited porcelain v2 records into `[]GitFileStatus{path, orig_path,
+index, worktree}` (git-status(1) "Porcelain Format Version 2" — a
+rename/copy record is followed by one extra NUL-terminated record carrying
+the original path). `diff` runs `git diff` (or `git diff --cached` when
+`staged`), optionally scoped to `path`, and returns its raw stdout
+verbatim — no parsing, the browser renders the unified diff text as-is.
+`stage`/`unstage` run `git add --` / `git reset --` (not `git restore
+--staged`, which refuses to run in a repo with no commits yet — `git
+reset --` handles that case via an implicit empty tree). `commit` runs
+`git commit -F -` followed by `git rev-parse HEAD` to report the new
+commit's SHA (`git commit`'s own stdout isn't machine-parseable).
+
+Containment: `status` and `diff` (when no `path` is given) pass a `.`
+pathspec (`-- .`) rather than running a bare `git status`/`git diff`, so a
+Project whose working directory is a subdirectory of a larger git checkout
+still only sees changes under its own root — without it, `git` would walk
+up to the enclosing `.git` and report the whole outer repository. `stage`/
+`unstage`/`commit` don't need the same treatment: every path they touch is
+already root-relative and `filesystem.Clean`-validated, so they can't name
+anything outside `root`.
+
 ## Security
 
 Every runtime connection is authenticated.

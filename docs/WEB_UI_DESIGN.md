@@ -36,7 +36,7 @@ convention and icon map. Rules:
 Sidebar sections (full design):
 
 - WORKSPACE: Dashboard, Projects, Runtimes
-- TOOLS: Files, Databases, Services
+- TOOLS: Files, Source Control, Databases, Services
 - SYSTEM: Activity, Settings
 
 Until the TOOLS and SYSTEM features are implemented, those sections are
@@ -67,7 +67,7 @@ A Project is the primary UI context. Show:
 
 Application tabs:
 
-`Terminal | Files | Databases | Services`
+`Terminal | Files | Source Control | Databases | Services`
 
 Terminal session tabs are a separate level:
 
@@ -86,6 +86,18 @@ The terminal canvas gets the majority of available workspace height. Toolbars st
 Files is a project-aware file manager with breadcrumbs, tree/list navigation, search, create, upload/download, rename, copy, move, delete, metadata, editor, and preview. The Project directory is the default context.
 
 The editor supports syntax highlighting, search/replace, save state, Markdown preview, image preview, and appropriate large-file safeguards.
+
+## Source Control
+
+Source Control is a VSCode-style panel scoped to status, diff,
+stage/unstage, and commit — branch/push/pull, history graph, and
+merge/rebase/stash are separate later features.
+
+Show the changed-file list split into Staged and Unstaged groups, each
+entry carrying its status code (modified, added, deleted, renamed,
+untracked). Selecting an entry shows its diff. Stage/unstage per entry and
+in bulk; a commit message box and Commit button are disabled until the
+staged group is non-empty and a message is entered.
 
 ## Databases
 
