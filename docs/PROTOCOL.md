@@ -401,6 +401,58 @@ up to the enclosing `.git` and report the whole outer repository. `stage`/
 already root-relative and `filesystem.Clean`-validated, so they can't name
 anything outside `root`.
 
+## Implementation (Code tab): editor commands
+
+The Code tab's editor stream (see `docs/API.md`) exchanges four new message
+types over the same runtime control connection, reusing the Slice 5
+correlated request/response machinery unchanged:
+
+- `code.command` (server→runtime): `{action, root, path, paths, data,
+  base_mtime, base_size}`. `action` is one of:
+  - `open` — stat + read one file (`path`, root-relative, same
+    `filesystem.Clean` containment rule as `file.command`). Refuses
+    directories, files above `protocol.MaxEditorFileBytes` (2 MiB — the
+    editor autosaves the whole buffer per debounce tick, so a 24 MiB cap
+    would be unusable on the wire; the Files REST path keeps 24 MiB), and
+    binary content (NUL byte in the first 8 KiB, flagged `binary: true`
+    rather than failed). Replies `code.result` with
+    `{data, mtime, size, binary}`.
+  - `save` — write the client's whole buffer (`data`). `base_mtime`/
+    `base_size` are the client's last-known on-disk fingerprint: when the
+    current stat matches, the write succeeds and the reply is
+    `{mtime, size}`; on a mismatch the runtime captures the pre-write disk
+    content, writes anyway (last-write-wins), and replies
+    `{stale: true, data: <pre-write content>, mtime, size}` so the editor
+    can offer the overwritten version in its conflict prompt. A save of a
+    vanished file recreates it.
+  - `watch` — replace the root's watched path set (`paths` is always the
+    Control Server's full per-root union of every subscribed editor's open
+    files; one idempotent message per change). Paths whose stat the
+    runtime already knows keep it, so a retained file is not re-pushed;
+    newly watched paths are seeded silently on the first poll tick.
+  - `unwatch` — remove `paths` from the root's set (roots with nothing
+    left are dropped).
+- `code.result` / `code.error` (runtime→server): the same correlation shape
+  as `file.result`/`file.error` (`code.error` reuses `ServiceErrorPayload`).
+
+- `code.file.changed` (runtime→server push, no `Envelope.ID`):
+  `{root, path, mtime, size}` or `{root, path, deleted: true}`. The
+  runtime's edit manager (`internal/agent/edit_manager.go`) polls
+  `stat` (mtime+size) on the watched set once per second — not inotify
+  (ADR-033: the open set is tiny, so a 1s stat poll beats watch-management
+  complexity and works on every filesystem). It records the post-save stat
+  after each `save`, so the editor's own writes never re-push; a vanished
+  watched file pushes `{deleted: true}` once and stays in the set (it may
+  reappear). The Control Server fans these out to the project's editor
+  stream subscribers as `content`/`deleted` messages.
+
+Accepted semantics (ADR-033): concurrent editing of the same file is
+last-write-wins — the side whose buffer loses gets the winner's content in
+the `stale` reply, nothing else is preserved. There is no OT/CRDT, no
+server-side revision numbers. A runtime restart drops the in-memory watch
+set; the browser re-sends `watch` when it sees the runtime come back
+online, so changes during the gap go undetected.
+
 ## Security
 
 Every runtime connection is authenticated.

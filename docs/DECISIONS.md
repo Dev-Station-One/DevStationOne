@@ -1049,3 +1049,37 @@ rest of the Files feature uses (docs/SECURITY.md), and the OS enforces the
 owner-change restriction independently of anything this application does.
 `docs/API.md`/`docs/PROTOCOL.md` call out the almost-always-fails owner case
 explicitly so it isn't mistaken for a broken feature.
+
+## ADR-033 — Code tab: 1s stat poll + whole-file debounced sync, no inotify, no OT
+
+**Decision.** The Code tab's live editing uses a runtime-side poller, not
+inotify, and whole-file buffers over a debounced save, not character-level
+operations. The runtime keeps one watched path set per Project root (seeded
+by the Control Server, which always sends the full union of every
+subscribed editor's open files), re-stats each path's mtime+size once per
+second, and pushes `code.file.changed` when a stat drifts. Saves carry the
+client's last-known on-disk fingerprint; on a mismatch the runtime returns
+the pre-write content with `stale: true` and still writes
+(last-write-wins). Editor file size is capped at 2 MiB
+(`protocol.MaxEditorFileBytes`), well below the Files REST path's 24 MiB,
+because autosave puts the whole buffer on the wire per debounce tick.
+
+**Why.** The editor's open set is a handful of files, so a 1s `stat` poll
+costs nothing, detects external changes (terminal, Claude Code) well inside
+the ~2s a human notices, works on every filesystem including network
+mounts, and needs no watch lifecycle management — inotify buys sub-second
+latency nobody perceives in exchange for watch-limit failures and cleanup
+bugs. Whole-file sync with a stat-based stale check gives VS Code-like
+behavior (autosave, external-change reload, conflict prompt) without an
+OT/CRDT engine or server-side revision numbers; two people editing the same
+file concurrently is accepted as last-write-wins, with the loser's content
+preserved in the winner's `stale` payload rather than silently discarded.
+
+**Consequence.** The poll loop and watch set live in the runtime's memory:
+a runtime restart drops them, and the browser re-sends `watch` when the
+runtime comes back online (changes during that gap go undetected —
+documented in `docs/PROTOCOL.md`). The saver's own write is not re-pushed
+because `save` records the post-save stat; a content push equal to the
+current buffer is a client-side no-op, so no echo-suppression bookkeeping
+exists. If 2 MiB ever bites, chunked/partial sync is the upgrade path
+(`ponytail:` marker at the constant).

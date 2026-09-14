@@ -97,6 +97,23 @@ const (
 	// carrying the same Envelope.ID as the request. Its payload shape is
 	// identical to ServiceErrorPayload, which is reused for it.
 	MessageGitError MessageType = "git.error"
+
+	// MessageCodeCommand is sent server->runtime to perform an editor
+	// operation (open/save/watch) against a watched file set in a Project
+	// root. Like file.command, it uses Envelope.ID for request/response
+	// correlation.
+	MessageCodeCommand MessageType = "code.command"
+	// MessageCodeResult is sent runtime->server with a successful
+	// code.command result, carrying the same Envelope.ID as the request.
+	MessageCodeResult MessageType = "code.result"
+	// MessageCodeError is sent runtime->server when a code.command fails,
+	// carrying the same Envelope.ID as the request. Its payload shape is
+	// identical to ServiceErrorPayload, which is reused for it.
+	MessageCodeError MessageType = "code.error"
+	// MessageCodeFileChanged is pushed runtime->server (no Envelope.ID — it
+	// is not a reply) when a watched file's mtime/size changed, or the file
+	// vanished, as observed by the edit manager's poll loop.
+	MessageCodeFileChanged MessageType = "code.file.changed"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
@@ -255,6 +272,14 @@ const MaxFileBytes = 24 << 20
 // after encoding, so the limit is set above that.
 const MaxMessageBytes = 48 << 20
 
+// MaxEditorFileBytes caps the size of one file opened or saved through the
+// Code tab's editor stream. It is far below MaxFileBytes because the editor
+// autosaves the whole buffer on every debounce tick — a 24 MiB cap would put
+// ~33 MiB base64 envelopes on the wire per keystroke burst. Files REST still
+// carries up to MaxFileBytes; oversized files open there.
+// ponytail: whole-buffer autosave; chunked/partial sync if 2 MiB bites.
+const MaxEditorFileBytes = 2 << 20
+
 // FileCommandPayload is the payload of a MessageFileCommand envelope.
 //
 // Root is the absolute directory every operation is contained in, resolved
@@ -379,6 +404,57 @@ type GitResultPayload struct {
 	Diff    string          `json:"diff,omitempty"`
 	Commit  string          `json:"commit,omitempty"`
 	Commits []GitCommitInfo `json:"commits,omitempty"`
+}
+
+// CodeCommandPayload is the payload of a MessageCodeCommand envelope.
+//
+// Root is the Project's working directory, resolved by the Control Server
+// from the Project record — never taken from a client request, same rule as
+// FileCommandPayload.Root. Path and Paths entries are always relative to
+// Root; the runtime re-validates containment via os.Root regardless.
+type CodeCommandPayload struct {
+	// Action is one of: open, save, watch, unwatch.
+	Action string `json:"action"`
+	Root   string `json:"root"`
+	// Path is the target file for an open/save action, relative to Root.
+	Path string `json:"path,omitempty"`
+	// Paths carries a "watch" action's full replacement set (the Control
+	// Server always sends the per-root union of every subscriber's open
+	// files) or an "unwatch" action's paths to remove, relative to Root.
+	Paths []string `json:"paths,omitempty"`
+	// Data carries the whole buffer for a "save" action (base64-encoded on
+	// the wire by encoding/json).
+	Data []byte `json:"data,omitempty"`
+	// BaseMTime/BaseSize are a "save" action's client-known on-disk
+	// fingerprint — the mtime/size the client last saw saved or received. A
+	// mismatch means something edited the file outside the editor since; the
+	// runtime still writes (last-write-wins) but returns the pre-write
+	// content with Stale set so the editor can prompt.
+	BaseMTime time.Time `json:"base_mtime,omitempty"`
+	BaseSize  int64     `json:"base_size"`
+}
+
+// CodeResultPayload is the payload of a MessageCodeResult envelope, matching
+// the request's Action: "open" populates Data/MTime/Size/Binary; "save"
+// populates MTime/Size plus Stale and (on a stale save) the pre-write
+// disk content in Data; "watch"/"unwatch" populate none.
+type CodeResultPayload struct {
+	Data   []byte    `json:"data,omitempty"`
+	MTime  time.Time `json:"mtime"`
+	Size   int64     `json:"size"`
+	Binary bool      `json:"binary,omitempty"`
+	Stale  bool      `json:"stale,omitempty"`
+}
+
+// CodeFileChangedPayload is the payload of a MessageCodeFileChanged push:
+// one watched path whose stat no longer matches the edit manager's last
+// known mtime/size, or that vanished from disk (Deleted).
+type CodeFileChangedPayload struct {
+	Root    string    `json:"root"`
+	Path    string    `json:"path"`
+	MTime   time.Time `json:"mtime,omitempty"`
+	Size    int64     `json:"size,omitempty"`
+	Deleted bool      `json:"deleted,omitempty"`
 }
 
 // sessionIDFrameLen is the fixed width of the session ID prefix on a binary
