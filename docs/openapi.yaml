@@ -2791,7 +2791,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/ProjectFields"
         - type: object
-          required: [id, created_by, created_at, updated_at]
+          required: [id, created_by, created_at, updated_at, active_sessions]
           properties:
             id:
               type: string
@@ -2804,6 +2804,12 @@ components:
             updated_at:
               type: string
               format: date-time
+            active_sessions:
+              type: integer
+              description: >
+                Count of this project's terminal sessions not in a terminal
+                status (exited/failed/closed) — see docs/API.md "Dashboard
+                events".
     TerminalSessionFields:
       type: object
       required: [name]

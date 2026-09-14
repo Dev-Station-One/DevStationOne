@@ -175,6 +175,52 @@ func TestListForProject_ScopesAndOrders(t *testing.T) {
 	}
 }
 
+func TestActiveCountsByProjectIDs(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	activeProject, userID := testProject(t, pool)
+	idleProject, _ := testProject(t, pool)
+	untouchedProject, _ := testProject(t, pool)
+
+	running, err := Create(ctx, pool, activeProject, "bash", 80, 24, userID)
+	if err != nil {
+		t.Fatalf("create running: %v", err)
+	}
+	if err := MarkRunning(ctx, pool, running.ID); err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+	if _, err := Create(ctx, pool, activeProject, "npm dev", 80, 24, userID); err != nil {
+		t.Fatalf("create requested: %v", err)
+	}
+
+	exited, err := Create(ctx, pool, idleProject, "bash", 80, 24, userID)
+	if err != nil {
+		t.Fatalf("create exited: %v", err)
+	}
+	if err := MarkExited(ctx, pool, exited.ID, 0); err != nil {
+		t.Fatalf("mark exited: %v", err)
+	}
+
+	counts, err := ActiveCountsByProjectIDs(ctx, pool, []string{activeProject, idleProject, untouchedProject})
+	if err != nil {
+		t.Fatalf("active counts: %v", err)
+	}
+	if counts[activeProject] != 2 {
+		t.Fatalf("activeProject count = %d, want 2 (running + requested)", counts[activeProject])
+	}
+	if counts[idleProject] != 0 {
+		t.Fatalf("idleProject count = %d, want 0 (only an exited session)", counts[idleProject])
+	}
+	if counts[untouchedProject] != 0 {
+		t.Fatalf("untouchedProject count = %d, want 0 (no sessions at all)", counts[untouchedProject])
+	}
+
+	empty, err := ActiveCountsByProjectIDs(ctx, pool, nil)
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("empty input: counts=%v err=%v, want empty map and no error", empty, err)
+	}
+}
+
 func TestGet_NotFound(t *testing.T) {
 	pool := testPool(t)
 	if _, err := Get(context.Background(), pool, "00000000-0000-0000-0000-000000000000"); err != ErrNotFound {

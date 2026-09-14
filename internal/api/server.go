@@ -9,6 +9,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"devstationone/internal/database"
+	"devstationone/internal/events"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
@@ -21,6 +22,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
+	bus := events.NewBus()
 
 	// Per-IP rate limits (docs/SECURITY.md). One limiter instance per
 	// server process (not a package-level var): each Control Server, and
@@ -42,7 +44,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
 	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, hub, logger))
+	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, hub, bus, logger))
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse", requireSession(db, browseRuntimeHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse/search", requireSession(db, browseSearchHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/browse/mkdir", requireSession(db, browseMkdirHandler(db, registry)))
@@ -63,7 +65,8 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/detach", requireSession(db, detachTermSessionHandler(db, hub)))
 	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/resize", requireSession(db, resizeTermSessionHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/signal", requireSession(db, signalTermSessionHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/sessions/{sessionID}/stream", requireSession(db, termSessionStreamHandler(db, registry, hub, logger)))
+	mux.HandleFunc("GET /api/v1/sessions/{sessionID}/stream", requireSession(db, termSessionStreamHandler(db, registry, hub, bus, logger)))
+	mux.HandleFunc("GET /api/v1/events/stream", requireSession(db, eventsStreamHandler(bus)))
 
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/services", requireSession(db, listServicesHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/services/{unit}", requireSession(db, getServiceHandler(db, registry)))

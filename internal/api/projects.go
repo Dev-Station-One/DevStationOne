@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -9,11 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
+	"devstationone/internal/sessions"
 )
 
 type projectRequest struct {
@@ -44,9 +48,10 @@ type projectResponse struct {
 	CreatedBy        string            `json:"created_by"`
 	CreatedAt        time.Time         `json:"created_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`
+	ActiveSessions   int               `json:"active_sessions"`
 }
 
-func toProjectResponse(p projects.Project) projectResponse {
+func toProjectResponse(p projects.Project, activeSessions int) projectResponse {
 	env := p.Environment
 	if env == nil {
 		env = map[string]string{}
@@ -61,7 +66,19 @@ func toProjectResponse(p projects.Project) projectResponse {
 		CreatedBy:        p.CreatedBy,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
+		ActiveSessions:   activeSessions,
 	}
+}
+
+// activeSessionCount looks up how many non-terminal sessions projectID
+// currently has, for enriching a single project's response (dashboard.
+// active_sessions — docs/IMPLEMENTATION_PLAN.md Slice 14).
+func activeSessionCount(ctx context.Context, pool *pgxpool.Pool, projectID string) (int, error) {
+	counts, err := sessions.ActiveCountsByProjectIDs(ctx, pool, []string{projectID})
+	if err != nil {
+		return 0, err
+	}
+	return counts[projectID], nil
 }
 
 // validateProjectFields checks the required, non-runtime-existence properties
@@ -186,7 +203,7 @@ func createProjectHandler(db *database.DB, registry *runtimes.Registry) http.Han
 			return
 		}
 		audit.Record(r.Context(), db.Pool, audit.EventProjectCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "project", p.ID, map[string]any{"name": p.Name}, clientIP(r))
-		writeJSON(w, http.StatusCreated, toProjectResponse(p))
+		writeJSON(w, http.StatusCreated, toProjectResponse(p, 0))
 	}
 }
 
@@ -208,9 +225,19 @@ func listProjectsHandler(db *database.DB) http.HandlerFunc {
 			return
 		}
 
+		ids := make([]string, len(list))
+		for i, p := range list {
+			ids[i] = p.ID
+		}
+		counts, err := sessions.ActiveCountsByProjectIDs(r.Context(), db.Pool, ids)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list projects"})
+			return
+		}
+
 		resp := make([]projectResponse, 0, len(list))
 		for _, p := range list {
-			resp = append(resp, toProjectResponse(p))
+			resp = append(resp, toProjectResponse(p, counts[p.ID]))
 		}
 		writeJSON(w, http.StatusOK, resp)
 	}
@@ -244,7 +271,12 @@ func getProjectHandler(db *database.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		writeJSON(w, http.StatusOK, toProjectResponse(p))
+		count, err := activeSessionCount(r.Context(), db.Pool, p.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up project"})
+			return
+		}
+		writeJSON(w, http.StatusOK, toProjectResponse(p, count))
 	}
 }
 
@@ -313,7 +345,12 @@ func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 		}
 		user, _ := userFromContext(r.Context())
 		audit.Record(r.Context(), db.Pool, audit.EventProjectUpdated, audit.Actor{UserID: user.ID, Email: user.Email}, "project", p.ID, map[string]any{"name": p.Name}, clientIP(r))
-		writeJSON(w, http.StatusOK, toProjectResponse(p))
+		count, err := activeSessionCount(r.Context(), db.Pool, p.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update project"})
+			return
+		}
+		writeJSON(w, http.StatusOK, toProjectResponse(p, count))
 	}
 }
 

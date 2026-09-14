@@ -19,6 +19,7 @@ docs/openapi.yaml
 /runtimes
 /projects
 /sessions
+/events
 /files
 /databases
 /services
@@ -109,6 +110,38 @@ ones touching runtime-derived fields):
   `file.command` RPC to the runtime — the same `os.Root` containment the
   Files endpoints use, not a second path-safety implementation (`400` if
   outside the home directory or missing).
+
+## Dashboard events
+
+```text
+WSS    /api/v1/events/stream
+```
+
+`GET /api/v1/projects` and `GET /api/v1/projects/{projectID}` include
+`active_sessions`: a count of that project's terminal sessions not in a
+terminal status (`exited`/`failed`/`closed`). It is computed at request
+time, not cached.
+
+`WSS /api/v1/events/stream` is a live push channel for the dashboard,
+authenticated the same way as any other browser route (session cookie). It
+carries JSON text frames — unlike the binary-only terminal stream below —
+shaped `{"type": "...", "payload": {...}}`:
+- `runtime.status` — `{"runtime_id": "...", "online": bool}`. Broadcast to
+  every connected browser: runtimes are shared infrastructure, not owned
+  per-user (same visibility as `GET /api/v1/runtimes`).
+- `project.status` — `{"project_id": "..."}`, sent only to that project's
+  owner, fired whenever one of its sessions' activity changes (attach,
+  detach, or exit). The payload deliberately carries no session count —
+  the caller is expected to refetch `GET /api/v1/projects` on receipt
+  rather than trust a stale count on a message that may have coalesced
+  several changes.
+- `ping` — no payload, sent every 30s on an otherwise idle connection to
+  keep intermediate proxies from timing it out.
+
+The bus is in-memory and scoped to a single Control Server process, the
+same limitation already documented on the runtime registry and terminal
+session hub (ADR-012) — a multi-instance deployment would need a shared
+broker.
 
 ## Sessions
 

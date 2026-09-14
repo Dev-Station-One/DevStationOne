@@ -89,6 +89,35 @@ func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID string) (
 	return out, rows.Err()
 }
 
+// ActiveCountsByProjectIDs returns how many non-terminal sessions each of
+// the given projects currently has, keyed by project ID. A project with no
+// active sessions is simply absent from the result (zero value on lookup).
+func ActiveCountsByProjectIDs(ctx context.Context, pool *pgxpool.Pool, projectIDs []string) (map[string]int, error) {
+	out := make(map[string]int)
+	if len(projectIDs) == 0 {
+		return out, nil
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT project_id, count(*) FROM terminal_sessions
+		WHERE project_id = ANY($1) AND status NOT IN ($2, $3, $4)
+		GROUP BY project_id
+	`, projectIDs, StatusExited, StatusFailed, StatusClosed)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
 // Get looks up a session by ID. Callers are responsible for authorizing
 // access via the session's Project.
 func Get(ctx context.Context, pool *pgxpool.Pool, id string) (Session, error) {

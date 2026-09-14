@@ -79,6 +79,53 @@ func projectBody(runtimeID, homeDir string) []byte {
 	return body
 }
 
+func TestProjectHTTP_ActiveSessionsCount(t *testing.T) {
+	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+
+	getProject := func() projectResponse {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID, nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		var p projectResponse
+		json.NewDecoder(rec.Body).Decode(&p)
+		return p
+	}
+
+	if p := getProject(); p.ActiveSessions != 0 {
+		t.Fatalf("active_sessions before any session = %d, want 0", p.ActiveSessions)
+	}
+
+	s := createSession(t, router, cookie, projectID, "bash")
+	if p := getProject(); p.ActiveSessions != 1 {
+		t.Fatalf("active_sessions after create = %d, want 1", p.ActiveSessions)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
+	listReq.AddCookie(cookie)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	var list []projectResponse
+	if err := json.NewDecoder(listRec.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(list) != 1 || list[0].ActiveSessions != 1 {
+		t.Fatalf("list = %+v, want one project with active_sessions=1", list)
+	}
+
+	delReq := httptest.NewRequest(http.MethodDelete, "/api/v1/sessions/"+s.ID, nil)
+	delReq.AddCookie(cookie)
+	delRec := httptest.NewRecorder()
+	router.ServeHTTP(delRec, delReq)
+	if delRec.Code != http.StatusNoContent {
+		t.Fatalf("delete session: status = %d, body = %s", delRec.Code, delRec.Body.String())
+	}
+
+	if p := getProject(); p.ActiveSessions != 0 {
+		t.Fatalf("active_sessions after delete = %d, want 0", p.ActiveSessions)
+	}
+}
+
 func TestProjectHTTP_CreateListScopedByOwner(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()

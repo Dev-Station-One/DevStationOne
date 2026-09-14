@@ -14,6 +14,8 @@ import (
 
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
+	"devstationone/internal/events"
+	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
@@ -26,7 +28,7 @@ const heartbeatTimeout = 45 * time.Second
 // runtimeConnectHandler accepts the outbound WebSocket connection a
 // Development Runtime opens using its enrollment token as a bearer
 // credential.
-func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger) http.HandlerFunc {
+func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		if token == "" {
@@ -53,7 +55,7 @@ func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *se
 			return // Accept already wrote the HTTP error response.
 		}
 
-		handleRuntimeConnection(r.Context(), conn, db, registry, hub, logger, rt)
+		handleRuntimeConnection(r.Context(), conn, db, registry, hub, bus, logger, rt)
 	}
 }
 
@@ -190,7 +192,7 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 	return true
 }
 
-func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger, rt runtimes.Runtime) {
+func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger, rt runtimes.Runtime) {
 	defer conn.CloseNow()
 	// The control connection carries the largest legal envelopes, including
 	// file.command/file.result payloads transferring up to
@@ -226,7 +228,9 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 
 	wc := &wsConn{c: conn}
 	registry.Register(rt.ID, wc)
+	publishRuntimeStatus(bus, rt.ID, true)
 	defer registry.Unregister(rt.ID, wc)
+	defer publishRuntimeStatus(bus, rt.ID, false)
 	defer func() {
 		if err := runtimes.MarkOffline(context.Background(), db.Pool, rt.ID); err != nil {
 			logger.Error("runtime disconnect: mark offline failed", "runtime_id", rt.ID, "error", err)
@@ -258,13 +262,13 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 		if wc.tryResolve(env) {
 			continue
 		}
-		handleRuntimeEnvelope(ctx, env, db, hub, logger, rt.ID)
+		handleRuntimeEnvelope(ctx, env, db, hub, bus, logger, rt.ID)
 	}
 }
 
 // handleRuntimeEnvelope dispatches one control-plane JSON message received
 // from a connected runtime.
-func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, hub *sessions.Hub, logger *slog.Logger, runtimeID string) {
+func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger, runtimeID string) {
 	switch env.Type {
 	case protocol.MessageHeartbeat:
 		if err := runtimes.Heartbeat(ctx, db.Pool, runtimeID); err != nil {
@@ -299,6 +303,11 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 		}
 		if err := sessions.MarkExited(ctx, db.Pool, p.SessionID, p.ExitCode); err != nil {
 			logger.Error("session mark exited failed", "session_id", p.SessionID, "error", err)
+		}
+		if sess, err := sessions.Get(ctx, db.Pool, p.SessionID); err == nil {
+			if proj, err := projects.Get(ctx, db.Pool, sess.ProjectID); err == nil {
+				publishProjectStatus(bus, proj.CreatedBy, proj.ID)
+			}
 		}
 		hub.Discard(p.SessionID)
 

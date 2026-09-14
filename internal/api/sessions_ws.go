@@ -10,6 +10,7 @@ import (
 	"github.com/coder/websocket"
 
 	"devstationone/internal/database"
+	"devstationone/internal/events"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
 )
@@ -43,7 +44,7 @@ func (b *browserConn) Close() {
 // (WSS /api/v1/sessions/{sessionID}/stream). Opening it attaches the
 // browser as the session's live viewer; closing it detaches (the PTY
 // itself is unaffected — see PROTOCOL.md session lifecycle).
-func termSessionStreamHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, logger *slog.Logger) http.HandlerFunc {
+func termSessionStreamHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		s, project, ok := authorizedTermSession(w, r, db, r.PathValue("sessionID"))
 		if !ok {
@@ -71,11 +72,13 @@ func termSessionStreamHandler(db *database.DB, registry *runtimes.Registry, hub 
 		if err := sessions.MarkRunning(r.Context(), db.Pool, s.ID); err != nil {
 			logger.Error("session mark running failed", "session_id", s.ID, "error", err)
 		}
+		publishProjectStatus(bus, project.CreatedBy, project.ID)
 		defer func() {
 			hub.Detach(s.ID, bc)
 			if err := sessions.MarkDetached(context.Background(), db.Pool, s.ID); err != nil {
 				logger.Error("session mark detached failed", "session_id", s.ID, "error", err)
 			}
+			publishProjectStatus(bus, project.CreatedBy, project.ID)
 		}()
 
 		for {

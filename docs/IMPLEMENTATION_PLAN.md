@@ -457,7 +457,44 @@ project functionality unaffected.
 integration test (auth required, receives own-user + broadcast events, not
 other users' project events); browser E2E for dashboard live update.
 
-**Status**: Not Started
+**Status: Complete.** Built as designed, with one simplification found
+during implementation: the frontend does not patch individual rows on a
+live event — it refetches both `GET /api/v1/runtimes` and
+`GET /api/v1/projects` wholesale on any `runtime.status`/`project.status`
+message. `project.status`/`runtime.status` payloads carry only an ID
+(`project_id` or `runtime_id`, plus `online` for runtimes) rather than a
+computed session count, specifically so the frontend has nothing "stale"
+to trust and refetching is the only correct behavior — simpler than
+in-place patching and correct even if several changes coalesce into one
+message. The session-exit publish site was confirmed at
+`internal/api/runtime_ws.go`'s `handleRuntimeEnvelope`
+(`protocol.MessageSessionExit` case, alongside the existing
+`sessions.MarkExited` call), looking up the session's project to publish
+to its owner.
+
+Files changed: `internal/events/bus.go` (+test), `internal/api/events_ws.go`
+(new `GET /api/v1/events/stream` handler, `publishRuntimeStatus`/
+`publishProjectStatus` helpers), `internal/api/runtime_ws.go` (publish calls
+on register/unregister/session-exit), `internal/api/sessions_ws.go`
+(publish calls on attach/detach), `internal/sessions/session.go`
+(`ActiveCountsByProjectIDs` +test), `internal/api/projects.go`
+(`active_sessions` field, `activeSessionCount` helper, wired into all four
+`projectResponse` call sites), `internal/api/server.go` (wiring),
+`web/static/index.html` (rewritten: Runtimes + Active Projects panels,
+live via the new WS). New tests: `internal/events/bus_test.go`,
+`TestActiveCountsByProjectIDs` (sessions), `TestEventsWS_RequiresAuth`,
+`TestEventsWS_RuntimeStatusBroadcastToEveryUser`,
+`TestEventsWS_ProjectStatusScopedToOwner`, `TestProjectHTTP_ActiveSessionsCount`
+(api). Docs updated: `docs/openapi.yaml` (`Project.active_sessions`),
+`docs/API.md` ("Dashboard events" section), `docs/ARCHITECTURE.md`
+("Dashboard events" section).
+
+Verified: full `go test -p 1 ./...` green against the shared dev Postgres;
+`gofmt`/`go vet` clean; real smoke test against the `devstationone-dev`
+systemd instance — logged in as `dev@local.test` in an actual browser
+(Playwright), dashboard rendered live runtime/project data with no console
+errors, and a manually-opened `/api/v1/events/stream` connection
+authenticated and stayed open. No migrations needed.
 
 ## Slice 15 — Notifications (bell)
 

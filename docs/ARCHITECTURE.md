@@ -119,6 +119,29 @@ PTY bytes are not persisted to PostgreSQL by default.
 Persist session metadata only (`terminal_sessions` table: status,
 dimensions, exit code — never terminal content).
 
+## Dashboard events
+
+```text
+Browser dashboard
+      |
+      | WSS (JSON events, one connection per browser tab)
+      v
+Control Server   -- internal/events.Bus fans out to every subscribed
+      |              browser, scoped by user ID (nil = broadcast); an
+      |              in-process pub/sub, same single-process scope as
+      |              runtimes.Registry and sessions.Hub (ADR-012)
+      |
+      +-- runtime online/offline (registry.Register/Unregister) -> broadcast
+      +-- session attach/detach/exit -> scoped to the project's owner
+```
+
+Not a general event bus for arbitrary application state — just the two
+triggers above (Slice 14). Payloads are intentionally thin (an ID, not a
+full resource) — a receiving browser is expected to refetch the relevant
+REST resource rather than trust a payload that may represent several
+coalesced changes. See `docs/API.md` "Dashboard events" for the wire
+format.
+
 ## Project execution
 
 Client:

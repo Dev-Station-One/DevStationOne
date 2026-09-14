@@ -37,14 +37,57 @@
       </header>
       <div class="page-body">
         <div class="container-xl">
-          <div class="empty">
-            <div class="empty-icon"><i class="fa-solid fa-desktop fa-2x" aria-hidden="true"></i></div>
-            <div class="empty-title">DevStationOne Control Server</div>
-            <div class="empty-subtitle text-secondary">
-              Create a Project to get started. Files, Databases, and Services arrive in later implementation slices.
+          <h2 class="mb-3"><i class="fa-solid fa-gauge-high" aria-hidden="true"></i> Dashboard</h2>
+
+          <div class="row row-deck row-cards">
+            <div class="col-12 col-lg-6">
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><i class="fa-solid fa-server" aria-hidden="true"></i> Runtimes</h3>
+                </div>
+                <div class="table-responsive">
+                  <table class="table card-table table-vcenter">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Status</th>
+                        <th>Host</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-runtimes-body"></tbody>
+                  </table>
+                </div>
+                <div id="dash-runtimes-empty" class="empty" hidden>
+                  <div class="empty-icon"><i class="fa-solid fa-server" aria-hidden="true"></i></div>
+                  <div class="empty-title">No runtimes registered</div>
+                  <div class="empty-subtitle text-secondary"><a href="/runtimes.html">Register a Development Runtime</a> to get started.</div>
+                </div>
+              </div>
             </div>
-            <div class="empty-action">
-              <a href="/projects.html" class="btn btn-primary">Go to Projects</a>
+
+            <div class="col-12 col-lg-6">
+              <div class="card">
+                <div class="card-header">
+                  <h3 class="card-title"><i class="fa-solid fa-cubes" aria-hidden="true"></i> Active Projects</h3>
+                </div>
+                <div class="table-responsive">
+                  <table class="table card-table table-vcenter">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Runtime</th>
+                        <th>Sessions</th>
+                      </tr>
+                    </thead>
+                    <tbody id="dash-projects-body"></tbody>
+                  </table>
+                </div>
+                <div id="dash-projects-empty" class="empty" hidden>
+                  <div class="empty-icon"><i class="fa-solid fa-cubes" aria-hidden="true"></i></div>
+                  <div class="empty-title">No projects yet</div>
+                  <div class="empty-subtitle text-secondary"><a href="/projects.html">Create a Project</a> to get started.</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -66,6 +109,90 @@
         window.location.href = '/login.html';
       });
     });
+
+    function escapeHtml(s) {
+      return $('<div>').text(s).html();
+    }
+
+    function runtimeStatusBadge(rt) {
+      if (rt.status === 'revoked') return '<span class="badge bg-red-lt">revoked</span>';
+      if (rt.status === 'pending') return '<span class="badge bg-secondary-lt">pending enrollment</span>';
+      if (rt.online) return '<span class="badge bg-green-lt">online</span>';
+      return '<span class="badge bg-yellow-lt">offline</span>';
+    }
+
+    function loadRuntimes() {
+      $.get('/api/v1/runtimes').done(function (runtimes) {
+        var $body = $('#dash-runtimes-body').empty();
+        $('#dash-runtimes-empty').prop('hidden', runtimes.length > 0);
+        runtimes.forEach(function (rt) {
+          $body.append(
+            '<tr><td>' + escapeHtml(rt.name) + '</td>' +
+            '<td>' + runtimeStatusBadge(rt) + '</td>' +
+            '<td>' + escapeHtml(rt.hostname || '—') + '</td></tr>'
+          );
+        });
+      }).fail(function (xhr) {
+        if (xhr.status === 401) window.location.href = '/login.html';
+      });
+    }
+
+    // Projects are recency-sorted by the API (created_at desc); the
+    // dashboard shows them as-is rather than re-sorting by activity
+    // (docs/IMPLEMENTATION_PLAN.md Slice 14).
+    function loadProjects() {
+      $.get('/api/v1/runtimes').done(function (runtimes) {
+        var runtimeNames = {};
+        runtimes.forEach(function (rt) { runtimeNames[rt.id] = rt.name; });
+
+        $.get('/api/v1/projects').done(function (projects) {
+          var $body = $('#dash-projects-body').empty();
+          $('#dash-projects-empty').prop('hidden', projects.length > 0);
+          projects.forEach(function (p) {
+            var sessionsBadge = p.active_sessions > 0
+              ? '<span class="badge bg-green-lt">' + p.active_sessions + '</span>'
+              : '<span class="badge bg-secondary-lt">0</span>';
+            $body.append(
+              '<tr class="project-row" data-id="' + p.id + '" style="cursor:pointer">' +
+              '<td>' + escapeHtml(p.name) + '</td>' +
+              '<td>' + escapeHtml(runtimeNames[p.runtime_id] || p.runtime_id) + '</td>' +
+              '<td>' + sessionsBadge + '</td></tr>'
+            );
+          });
+        }).fail(function (xhr) {
+          if (xhr.status === 401) window.location.href = '/login.html';
+        });
+      });
+    }
+
+    $('#dash-projects-body').on('click', '.project-row', function () {
+      window.location.href = '/project.html?id=' + $(this).data('id');
+    });
+
+    // Live updates: the events stream only signals that something changed
+    // (runtime online/offline, a project's session activity) — the
+    // dashboard just refetches both lists rather than patching individual
+    // rows, which is simpler and plenty fast for a low-frequency channel
+    // like this one.
+    // ponytail: reconnect is a fixed 3s retry, not exponential backoff —
+    // this is a low-value background channel (the dashboard still works
+    // from the initial REST snapshot without it), add backoff if repeated
+    // reconnect storms ever show up in practice.
+    function connectEvents() {
+      var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      var ws = new WebSocket(proto + '//' + window.location.host + '/api/v1/events/stream');
+      ws.onmessage = function (evt) {
+        var msg;
+        try { msg = JSON.parse(evt.data); } catch (e) { return; }
+        if (msg.type === 'runtime.status') loadRuntimes();
+        if (msg.type === 'project.status') loadProjects();
+      };
+      ws.onclose = function () { setTimeout(connectEvents, 3000); };
+    }
+
+    loadRuntimes();
+    loadProjects();
+    connectEvents();
   </script>
 </body>
 </html>
