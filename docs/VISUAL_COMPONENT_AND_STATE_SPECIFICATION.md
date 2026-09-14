@@ -142,6 +142,31 @@ Commit box states:
 - committed (brief confirmation, list refreshes)
 - commit failed
 
+## Journal Components
+
+Table states (per the Common States): loading (`Loading journal…`),
+error (inline alert with retry via refresh), empty (`No journal notes
+yet` card), loaded (dense table, hover rows). Pagination shows
+`Notes N–M of total` with Prev/Next disabled at the ends.
+
+Row anatomy: DateTime cell (created time, plus a secondary `Edited <ts>`
+line when modified) | snippet (plain text, truncated) | creator name |
+icon actions (view, edit, delete).
+
+Editor modal (XL, static backdrop): Summernote toolbar + editing area,
+commit-association card (picker select + free-text SHA input, both
+optional), attachments list with download links and remove for
+unsaved-only attachments. Save button in the header. States: saving
+(disabled while request in flight is implicit — the Save click posts
+and closes on success), inline error alert for validation/upload
+failures.
+
+Viewer modal (XL): title, metadata line (created at/by, Edited marker),
+optional commit association alert, DOMPurify-sanitized body (embedded
+images resolve to attachment URLs), attachments list with download
+links. States: loading (fetched per open), error alert on fetch
+failure.
+
 ## Database Manager Components
 
 Desktop:

@@ -358,8 +358,11 @@ rather than a session-open/close message pair.
 Slice 16 adds three message types, reusing the Slice 5 correlated
 request/response machinery unchanged:
 
-- `git.command` (server→runtime): `{action, root, path, staged, message}`.
-  `action` is one of `status`, `diff`, `stage`, `unstage`, `commit`. `root`
+- `git.command` (server→runtime): `{action, root, path, staged, message, limit}`.
+  `action` is one of `status`, `diff`, `stage`, `unstage`, `commit`, `log`.
+  `log` runs `git log --max-count=<limit>` (limit defaults to 50, capped at
+  100; Slice 18's journal commit picker) and replies `git.result` with
+  `commits: [{sha, subject, author, datetime}]`, newest first. `root`
   is the Project's working directory, filled by the Control Server — never
   accepted from a client (same rule as `file.command`). `path` scopes
   `diff`/`stage`/`unstage`, root-relative, validated with the same

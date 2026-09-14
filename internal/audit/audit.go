@@ -66,6 +66,11 @@ const (
 	EventGitStaged    = "git.staged"
 	EventGitUnstaged  = "git.unstaged"
 	EventGitCommitted = "git.committed"
+
+	EventJournalCreated         = "journal.created"
+	EventJournalUpdated         = "journal.updated"
+	EventJournalDeleted         = "journal.deleted"
+	EventJournalAttachmentAdded = "journal.attachment_added"
 )
 
 // Actor identifies who triggered an event. UserID is empty for an

@@ -183,8 +183,8 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 		return false
 	}
 	// Every RPC error type carries the same {"error": ...} shape; see
-	// ServiceErrorPayload's reuse by file.error/db.error.
-	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError || env.Type == protocol.MessageDBError {
+	// ServiceErrorPayload's reuse by file.error/db.error/git.error.
+	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError || env.Type == protocol.MessageDBError || env.Type == protocol.MessageGitError {
 		var e protocol.ServiceErrorPayload
 		_ = json.Unmarshal(env.Payload, &e)
 		ch <- rpcResponse{err: errors.New(e.Error)}

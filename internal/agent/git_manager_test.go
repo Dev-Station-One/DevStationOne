@@ -100,6 +100,31 @@ func TestExecuteGit_Diff(t *testing.T) {
 	}
 }
 
+func TestExecuteGit_Log(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "stage", Root: dir, Path: "a.txt"}); err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "commit", Root: dir, Message: "first"}); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "log", Root: dir, Limit: 10})
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if len(result.Commits) != 1 {
+		t.Fatalf("log = %+v, want one commit", result.Commits)
+	}
+	c := result.Commits[0]
+	if len(c.SHA) != 40 || c.Subject != "first" || c.Author != "Test User" || c.Datetime.IsZero() {
+		t.Errorf("commit = %+v", c)
+	}
+}
+
 func TestExecuteGit_StageUnstageCommit(t *testing.T) {
 	dir := initGitRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {

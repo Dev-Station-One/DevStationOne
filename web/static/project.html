@@ -13,6 +13,7 @@
   <link rel="apple-touch-icon" href="/assets/logo/favicon-256.png">
   <link rel="stylesheet" href="/css/app.css">
   <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
+  <link rel="stylesheet" href="/vendor/summernote/summernote-bs5.min.css">
   <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
   <script>try { if (window.localStorage.getItem('tabler-sidebar') === 'folded-hover') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { /* private mode: fine */ }</script>
   <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
@@ -225,6 +226,7 @@
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="git"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="databases"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="services"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="journal"><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</a></li>
             </ul>
 
             <div id="terminal-panel" hidden>
@@ -391,6 +393,97 @@
                         <pre id="git-diff-view" class="git-diff mb-0"></pre>
                       </div>
                     </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div id="journal-panel" hidden>
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <div id="journal-summary" class="text-secondary">—</div>
+                <div class="btn-list gap-1">
+                  <button id="journal-new-btn" class="btn btn-primary btn-sm"><i class="fa-solid fa-plus me-1" aria-hidden="true"></i>New note</button>
+                  <button id="journal-refresh-btn" class="icon-btn" aria-label="Refresh journal" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                </div>
+              </div>
+              <div id="journal-loading" class="text-secondary">Loading journal…</div>
+              <div id="journal-error" class="alert alert-danger" hidden></div>
+              <div id="journal-empty" class="card" hidden>
+                <div class="card-body text-secondary">No journal notes yet. Click "New note" to start one.</div>
+              </div>
+              <div id="journal-body" hidden>
+                <div class="card">
+                  <table class="table table-vcenter card-table table-hover">
+                    <thead>
+                      <tr>
+                        <th>DateTime</th>
+                        <th>Snippet</th>
+                        <th>Created By</th>
+                        <th class="w-1"></th>
+                      </tr>
+                    </thead>
+                    <tbody id="journal-rows"></tbody>
+                  </table>
+                </div>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                  <button id="journal-prev-btn" class="btn btn-sm" disabled><i class="fa-solid fa-chevron-left me-1" aria-hidden="true"></i>Prev</button>
+                  <span id="journal-page-info" class="text-secondary small"></span>
+                  <button id="journal-next-btn" class="btn btn-sm" disabled>Next<i class="fa-solid fa-chevron-right ms-1" aria-hidden="true"></i></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal fade" id="journal-editor-modal" tabindex="-1" data-bs-backdrop="static" aria-hidden="true">
+              <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <strong id="journal-editor-title">New journal note</strong>
+                    <div class="btn-list gap-1 ms-auto">
+                      <button id="journal-save-btn" class="btn btn-sm btn-primary">Save</button>
+                      <button id="journal-editor-close-btn" type="button" class="icon-btn" aria-label="Close editor" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                    </div>
+                  </div>
+                  <div class="modal-body">
+                    <div id="journal-editor-error" class="alert alert-danger mb-2" hidden></div>
+                    <div id="journal-editor"></div>
+                    <div class="card mt-3">
+                      <div class="card-body">
+                        <label class="form-label mb-1" for="journal-commit-select">Associated commit (optional)</label>
+                        <select id="journal-commit-select" class="form-select mb-2">
+                          <option value="">— none —</option>
+                        </select>
+                        <input id="journal-commit-sha" class="form-control" placeholder="…or paste a commit SHA" autocomplete="off">
+                      </div>
+                    </div>
+                    <div class="mt-3">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="form-label mb-0" for="journal-att-input">Attachments</label>
+                        <button id="journal-attach-btn" class="btn btn-sm"><i class="fa-solid fa-paperclip me-1" aria-hidden="true"></i>Attach file</button>
+                      </div>
+                      <input id="journal-att-input" type="file" class="d-none" multiple>
+                      <div id="journal-att-list" class="list-group"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="modal fade" id="journal-view-modal" tabindex="-1" aria-hidden="true">
+              <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <div class="w-100">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <strong id="journal-view-title">Journal note</strong>
+                        <button id="journal-view-close-btn" type="button" class="icon-btn" aria-label="Close note" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                      </div>
+                      <div id="journal-view-meta" class="text-secondary small mt-1"></div>
+                    </div>
+                  </div>
+                  <div class="modal-body">
+                    <div id="journal-view-commit" class="alert alert-secondary py-2" hidden></div>
+                    <div id="journal-view-body"></div>
+                    <div id="journal-view-atts" class="mt-3"></div>
                   </div>
                 </div>
               </div>
@@ -656,6 +749,8 @@
   <script src="/vendor/codemirror/addon/dialog/dialog.min.js"></script>
   <script src="/vendor/marked/marked.min.js"></script>
   <script src="/vendor/dompurify/purify.min.js"></script>
+  <script src="/vendor/bootstrap/bootstrap.bundle.min.js"></script>
+  <script src="/vendor/summernote/summernote-bs5.min.js"></script>
   <script>
     function escapeHtml(s) {
       return $('<div>').text(s).html();
@@ -2895,6 +2990,7 @@
       $('#files-panel').prop('hidden', tab !== 'files');
       $('#git-panel').prop('hidden', tab !== 'git');
       $('#databases-panel').prop('hidden', tab !== 'databases');
+      $('#journal-panel').prop('hidden', tab !== 'journal');
       if (tab === 'terminal') {
         if (!sessionsLoaded) {
           sessionsLoaded = true;
@@ -2918,6 +3014,9 @@
         databasesLoaded = true;
         loadDatabaseConnections();
       }
+      if (tab === 'journal' && !window.journalLoaded()) {
+        window.journalLoad();
+      }
     });
 
     $('.overview-stat').on('click', function () {
@@ -2934,6 +3033,394 @@
     loadDatabaseConnections();
     gitLoaded = true;
     loadGitStatus();
+  </script>
+  <script>
+    // Journal tab (Slice 18). Note HTML is untrusted: rendered only through
+    // DOMPurify here; the list never carries full bodies.
+    (function () {
+      'use strict';
+      var loaded = false;
+      var page = { limit: 25, offset: 0, total: 0 };
+      var editingNote = null; // null = create
+      var editorAtts = [];    // attachments on the note being edited (metadata)
+      var newAtts = [];       // attachments uploaded for a note being edited this session
+      var commitLog = null;   // recent commits for the picker (lazy)
+
+      function base(suffix, query) {
+        var u = '/api/v1/projects/' + projectID + '/journal' + suffix;
+        if (query) u += '?' + query;
+        return u;
+      }
+
+      function fmtDate(iso) {
+        if (!iso) return '—';
+        return new Intl.DateTimeFormat(undefined, {
+          weekday: 'short', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit'
+        }).format(new Date(iso));
+      }
+
+      function attURL(noteID, attID) {
+        return '/api/v1/projects/' + projectID + '/journal/notes/' + noteID + '/attachments/' + attID;
+      }
+
+      window.journalLoaded = function () { return loaded; };
+
+      window.journalLoad = function () {
+        load(page.offset);
+      };
+
+      function load(offset) {
+        $('#journal-error').prop('hidden', true);
+        $('#journal-loading').prop('hidden', false);
+        $.get(base('', 'limit=' + page.limit + '&offset=' + offset))
+          .done(function (res) {
+            $('#journal-loading').prop('hidden', true);
+            loaded = true;
+            page.offset = offset;
+            page.total = res.total;
+            $('#journal-summary').text(res.total + ' note' + (res.total === 1 ? '' : 's'));
+            var $rows = $('#journal-rows').empty();
+            if (!res.notes.length) {
+              $('#journal-empty').prop('hidden', false);
+              $('#journal-body').prop('hidden', true);
+              return;
+            }
+            $('#journal-empty').prop('hidden', true);
+            $('#journal-body').prop('hidden', false);
+            res.notes.forEach(function (n) { $rows.append(row(n)); });
+            var first = offset + 1, last = offset + res.notes.length;
+            $('#journal-page-info').text('Notes ' + first + '–' + last + ' of ' + res.total);
+            $('#journal-prev-btn').prop('disabled', offset <= 0);
+            $('#journal-next-btn').prop('disabled', last >= res.total);
+          })
+          .fail(function (xhr) {
+            $('#journal-loading').prop('hidden', true);
+            $('#journal-error').text((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load journal.').prop('hidden', false);
+          });
+      }
+
+      function row(n) {
+        var $tr = $('<tr role="button" tabindex="0" aria-label="Open journal note">');
+        var $dt = $('<td class="text-nowrap">').text(fmtDate(n.created_at));
+        if (n.updated_at && n.updated_at !== n.created_at) {
+          $dt.append($('<div class="text-secondary small">').text('Edited ' + fmtDate(n.updated_at)));
+        }
+        var $snip = $('<td class="text-secondary">').text(n.snippet || '(empty)');
+        var $who = $('<td class="text-nowrap">').text(n.creator_name);
+        var $act = $('<td class="text-nowrap">');
+        var btn = function (icon, label) {
+          return $('<button type="button" class="icon-btn" aria-label="' + label + '" title="' + label + '">')
+            .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>');
+        };
+        btn('eye', 'View').on('click', function (e) { e.stopPropagation(); openView(n.id); }).appendTo($act);
+        btn('pen', 'Edit').on('click', function (e) { e.stopPropagation(); openEditor(n.id); }).appendTo($act);
+        btn('trash', 'Delete').on('click', function (e) { e.stopPropagation(); removeNote(n.id); }).appendTo($act);
+        $tr.append($dt, $snip, $who, $act);
+        $tr.on('click', function () { openView(n.id); }).on('keydown', function (e) {
+          if (e.which === 13 || e.which === 32) { e.preventDefault(); openView(n.id); }
+        });
+        return $tr;
+      }
+
+      function fail(action, xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + '.');
+        DS.error(msg);
+      }
+
+      function removeNote(id) {
+        DS.confirm('Delete this journal note and its attachments?').then(function (ok) {
+          if (!ok) return;
+          $.ajax({ url: base('/notes/' + id, ''), method: 'DELETE' })
+            .done(function () { load(page.offset); })
+            .fail(function (xhr) { fail('delete note', xhr); });
+        });
+      }
+
+      // --- Viewer ---
+      function openView(id) {
+        $.get(base('/notes/' + id, ''))
+          .done(function (n) {
+            $('#journal-view-title').text('Journal note');
+            var meta = 'Created ' + fmtDate(n.created_at) + ' by ' + n.creator_name;
+            if (n.updated_at && n.updated_at !== n.created_at) {
+              meta += ' · Edited ' + fmtDate(n.updated_at);
+            }
+            $('#journal-view-meta').text(meta);
+            if (n.commit_sha) {
+              var parts = [n.commit_sha];
+              if (n.commit_subject) parts.push(n.commit_subject);
+              if (n.commit_author) parts.push(n.commit_author + (n.commit_datetime ? ', ' + fmtDate(n.commit_datetime) : ''));
+              $('#journal-view-commit').text('Associated commit: ' + parts.join(' — ')).prop('hidden', false);
+            } else {
+              $('#journal-view-commit').prop('hidden', true);
+            }
+            // Untrusted HTML — never rendered without DOMPurify.
+            $('#journal-view-body').html(DOMPurify.sanitize(n.body_html));
+            var $atts = $('#journal-view-atts').empty();
+            if (n.attachments && n.attachments.length) {
+              $atts.append('<div class="small text-secondary text-uppercase mb-1">Attachments</div>');
+              n.attachments.forEach(function (a) {
+                $atts.append($('<a class="list-group-item list-group-item-action" target="_blank" rel="noopener">')
+                  .attr('href', attURL(n.id, a.id))
+                  .text(a.filename + ' (' + humanSize(a.size_bytes) + ')'));
+              });
+            } else {
+              $atts.empty();
+            }
+            modalInstance('journal-view-modal').show();
+          })
+          .fail(function (xhr) { fail('open note', xhr); });
+      }
+
+      function humanSize(n) {
+        if (n < 1024) return n + ' B';
+        var units = ['KB', 'MB', 'GB'], i = -1;
+        do { n /= 1024; i++; } while (n >= 1024 && i < units.length - 1);
+        return n.toFixed(n >= 10 ? 0 : 1) + ' ' + units[i];
+      }
+
+      // --- Editor ---
+      function openEditor(id) {
+        editingNote = id || null;
+        editorAtts = [];
+        newAtts = [];
+        $('#journal-editor-error').prop('hidden', true);
+        $('#journal-editor-title').text(id ? 'Edit journal note' : 'New journal note');
+        var $sel = $('#journal-commit-select').empty().append('<option value="">— none —</option>');
+        $('#journal-commit-sha').val('');
+        renderEditorAtts();
+        if (!commitLog) {
+          $sel.append('<option value="" disabled>Loading commits…</option>');
+          $.get('/api/v1/projects/' + projectID + '/git/log', 'limit=50')
+            .done(function (commits) {
+              commitLog = commits;
+              fillCommitSelect($sel, commits);
+            })
+            .fail(function () {
+              // Offline/failed — don't cache the empty list; retry next open.
+              fillCommitSelect($sel, []);
+            });
+        } else {
+          fillCommitSelect($sel, commitLog);
+        }
+        var pending = { id: id, body: '', sha: '', atts: [] };
+        if (id) {
+          $.get(base('/notes/' + id, ''))
+            .done(function (n) {
+              pending.body = n.body_html;
+              pending.sha = n.commit_sha || '';
+              pending.atts = n.attachments || [];
+              modalInstance('journal-editor-modal').show();
+            })
+            .fail(function (xhr) { fail('open note', xhr); });
+        } else {
+          modalInstance('journal-editor-modal').show();
+        }
+        // Applied on shown so summernote initializes with the editor visible.
+        // Native listener — jQuery's namespaced proxy doesn't catch tabler's
+        // Modal events here.
+        document.getElementById('journal-editor-modal').addEventListener('shown.bs.modal', function (e) {
+          // summernote's own dialogs bubble bootstrap modal events up here —
+          // only react to this modal's own events.
+          if (e.target !== e.currentTarget) return;
+          ensureEditor();
+          editorAtts = pending.atts;
+          renderEditorAtts();
+          $('#journal-editor').summernote('code', pending.body);
+          $('#journal-commit-sha').val(pending.sha);
+        }, { once: true });
+      }
+
+      function fillCommitSelect($sel, commits) {
+        $sel.find('option[disabled]').remove();
+        (commits || []).forEach(function (c) {
+          var label = c.sha.slice(0, 8) + ' — ' + c.subject + ' (' + c.author + ', ' + fmtDate(c.datetime) + ')';
+          $sel.append($('<option>').val(c.sha).text(label).data('commit', c));
+        });
+      }
+
+      function chosenCommit() {
+        var sha = $('#journal-commit-sha').val().trim();
+        if (sha) return { sha: sha, subject: '', author: '', datetime: null };
+        var $opt = $('#journal-commit-select').find('option:selected');
+        var c = $opt.data('commit');
+        return c ? { sha: c.sha, subject: c.subject, author: c.author, datetime: c.datetime } : null;
+      }
+
+      function renderEditorAtts() {
+        var $list = $('#journal-att-list').empty();
+        editorAtts.forEach(function (a) { $list.append(attRow(a, false)); });
+        newAtts.forEach(function (a) { $list.append(attRow(a, true)); });
+      }
+
+      function attRow(a, isNew) {
+        var $item = $('<div class="list-group-item d-flex justify-content-between align-items-center py-1">');
+        var label = isNew ? a.filename + ' (' + humanSize(a.size) + ')' : a.filename + ' (' + humanSize(a.size_bytes) + ')';
+        $item.append($('<span class="text-truncate" style="min-width:0">').text(label));
+        var $right = $('<div class="btn-list gap-1 flex-nowrap">');
+        if (!isNew) {
+          $right.append($('<a class="icon-btn" target="_blank" rel="noopener">')
+            .attr('href', attURL(editingNote, a.id)).attr('aria-label', 'Download ' + a.filename).attr('title', 'Download')
+            .append('<i class="fa-solid fa-download" aria-hidden="true"></i>'));
+        }
+        if (isNew) {
+          // ponytail: existing attachments have no delete endpoint — they
+          // go away with the note (FK CASCADE); add one if it's ever needed.
+          var del = $('<button type="button" class="icon-btn text-danger" aria-label="Remove attachment" title="Remove">')
+            .append('<i class="fa-solid fa-xmark" aria-hidden="true"></i>');
+          del.on('click', function () {
+            newAtts = newAtts.filter(function (x) { return x.id !== a.id; });
+            // Drop the matching placeholder image from the editor body, if any.
+            $('#journal-editor').summernote('code', $('#journal-editor').summernote('code')
+              .replace(new RegExp('data-ds-att="' + a.filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"'), 'data-ds-att="removed"'));
+            renderEditorAtts();
+          });
+          $right.append(del);
+        }
+        $item.append($right);
+        return $item;
+      }
+
+      function uploadAttachment(file, insertIntoBody) {
+        var noteID = editingNote;
+        if (!noteID) {
+          // No note yet — buffer for the save call below.
+          if (file.size > 25 * 1024 * 1024) {
+            $('#journal-editor-error').text('Attachment exceeds the 25 MB limit.').prop('hidden', false);
+            return;
+          }
+          if (newAtts.length + editorAtts.length >= 10) {
+            $('#journal-editor-error').text('A note can have at most 10 attachments.').prop('hidden', false);
+            return;
+          }
+          newAtts.push({ id: null, filename: file.name, size: file.size, file: file });
+          renderEditorAtts();
+          if (insertIntoBody && /^image\//.test(file.type)) {
+            var fr = new FileReader();
+            fr.onload = function () {
+              $('#journal-editor').summernote('insertNode', $('<img>').attr({ src: fr.result, 'data-ds-att': file.name })[0]);
+            };
+            fr.readAsDataURL(file);
+          }
+          return;
+        }
+        var fd = new FormData();
+        fd.append('file', file);
+        $.ajax({ url: base('/notes/' + noteID + '/attachments', ''), method: 'POST', data: fd, processData: false, contentType: false })
+          .done(function (a) {
+            editorAtts.push(a);
+            renderEditorAtts();
+            if (insertIntoBody && /^image\//.test(a.content_type || file.type)) {
+              $('#journal-editor').summernote('insertNode', $('<img>').attr({ src: attURL(noteID, a.id), 'data-ds-att': a.id })[0]);
+            }
+          })
+          .fail(function (xhr) { fail('upload attachment', xhr); });
+      }
+
+      function save() {
+        var html = $('#journal-editor').summernote('code');
+        if (!$('<div>').html(html).text().trim() && !$(html).find('img').length) {
+          $('#journal-editor-error').text('Write something first.').prop('hidden', false);
+          return;
+        }
+        var c = chosenCommit();
+        var body = {
+          body_html: html,
+          commit_sha: c ? c.sha : '',
+          commit_subject: c ? (c.subject || '') : '',
+          commit_author: c ? (c.author || '') : '',
+          commit_datetime: c && c.datetime ? c.datetime : null
+        };
+        var noteID = editingNote;
+        var afterSave = function (n) {
+          // Flush pending new attachments onto the saved note, then swap
+          // their placeholder images for real attachment URLs — a data-URL
+          // body never gets persisted.
+          var pending = newAtts.filter(function (a) { return a.file; });
+          if (!pending.length) { modalInstance('journal-editor-modal').hide(); load(page.offset); return; }
+          var done = 0, failed = 0, atts = [];
+          pending.forEach(function (a) {
+            var fd = new FormData();
+            fd.append('file', a.file);
+            $.ajax({ url: base('/notes/' + n.id + '/attachments', ''), method: 'POST', data: fd, processData: false, contentType: false })
+              .done(function (att) {
+                atts.push(att);
+                var $html = $('<div>').html($('#journal-editor').summernote('code'));
+                $html.find('img[data-ds-att="' + a.filename + '"]').attr({ src: attURL(n.id, att.id), 'data-ds-att': att.id });
+                $('#journal-editor').summernote('code', $html.html());
+                if (++done === pending.length) {
+                  if (failed) {
+                    $('#journal-editor-error').text(failed + ' attachment upload(s) failed; the note was saved.').prop('hidden', false);
+                    load(page.offset);
+                    return;
+                  }
+                  $.ajax({ url: base('/notes/' + n.id, ''), method: 'PUT', data: JSON.stringify({ body_html: $('#journal-editor').summernote('code'), commit_sha: body.commit_sha, commit_subject: body.commit_subject, commit_author: body.commit_author, commit_datetime: body.commit_datetime }), contentType: 'application/json' })
+                    .done(function () { modalInstance('journal-editor-modal').hide(); load(page.offset); })
+                    .fail(function (xhr) { $('#journal-editor-error').text('Failed to link attachments into the note: ' + ((xhr.responseJSON && xhr.responseJSON.error) || 'save failed')); });
+                }
+              })
+              .fail(function (xhr) {
+                failed++;
+                atts.push(null);
+                if (done + failed === pending.length) {
+                  $('#journal-editor-error').text('Attachment upload failed; the note itself was saved.').prop('hidden', false);
+                  load(page.offset);
+                }
+              });
+          });
+        };
+        if (noteID) {
+          $.ajax({ url: base('/notes/' + noteID, ''), method: 'PUT', data: JSON.stringify(body), contentType: 'application/json' })
+            .done(afterSave)
+            .fail(function (xhr) { $('#journal-editor-error').text((xhr.responseJSON && xhr.responseJSON.error) || 'Save failed.').prop('hidden', false); });
+        } else {
+          $.post({ url: base('', ''), data: JSON.stringify(body), contentType: 'application/json' })
+            .done(afterSave)
+            .fail(function (xhr) { $('#journal-editor-error').text((xhr.responseJSON && xhr.responseJSON.error) || 'Save failed.').prop('hidden', false); });
+        }
+      }
+
+      $('#journal-new-btn').on('click', function () { openEditor(null); });
+      $('#journal-refresh-btn').on('click', function () { load(page.offset); });
+      $('#journal-prev-btn').on('click', function () { load(Math.max(0, page.offset - page.limit)); });
+      $('#journal-next-btn').on('click', function () { if (page.offset + page.limit < page.total) load(page.offset + page.limit); });
+      $('#journal-save-btn').on('click', save);
+      $('#journal-editor-close-btn').on('click', function () { modalInstance('journal-editor-modal').hide(); });
+      $('#journal-view-close-btn').on('click', function () { modalInstance('journal-view-modal').hide(); });
+      $('#journal-attach-btn').on('click', function () { $('#journal-att-input').trigger('click'); });
+      $('#journal-att-input').on('change', function () {
+        var files = this.files;
+        for (var i = 0; i < files.length; i++) uploadAttachment(files[i], false);
+        this.value = '';
+      });
+
+      // ponytail: summernote must be initialized while its modal is visible
+      // — hidden-editor init leaves ImagePopover half-wired and every
+      // .summernote('code', ...) call then throws. Init on first open,
+      // destroy on close.
+      var editorReady = false;
+      function ensureEditor() {
+        if (editorReady) return;
+        $('#journal-editor').summernote({
+          placeholder: 'Write a journal entry…',
+          height: 240,
+          callbacks: {
+            onImageUpload: function (files) {
+              for (var i = 0; i < files.length; i++) uploadAttachment(files[i], true);
+            }
+          }
+        });
+        editorReady = true;
+      }
+      document.getElementById('journal-editor-modal').addEventListener('hidden.bs.modal', function (e) {
+        if (e.target !== e.currentTarget) return;
+        if (editorReady) {
+          $('#journal-editor').summernote('destroy');
+          editorReady = false;
+        }
+      });
+    })();
   </script>
 </body>
 </html>

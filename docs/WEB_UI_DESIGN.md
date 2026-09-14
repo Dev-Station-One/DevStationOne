@@ -67,7 +67,7 @@ A Project is the primary UI context. Show:
 
 Application tabs:
 
-`Terminal | Files | Source Control | Databases | Services`
+`Terminal | Files | Source Control | Databases | Services | Journal`
 
 Terminal session tabs are a separate level:
 
@@ -110,6 +110,26 @@ SQLite must explicitly indicate unsupported server-style user/role administratio
 ## Services
 
 Services represents `systemd --user` services where available. Show service status, start/stop/restart, enable/disable, and logs.
+
+## Journal
+
+Developer notes for the Project (Tabler datatables pattern,
+`docs/JOURNAL_REQUIREMENTS.md`). A server-side-paginated table —
+DateTime (creation time, with an "Edited <ts>" sub-line when modified) |
+HTML-stripped snippet | Created By (display name, email fallback) |
+action icons (view, edit, delete) — with row click (or the view icon)
+opening an XL modal that renders the full note.
+
+- Editor: XL modal with Summernote (Bootstrap 5 build, vendored), an
+  optional commit association picker (`git log` — SHA | subject | author
+  | datetime, plus a free-text SHA field), and an attachment list
+  (upload via paperclip; pasted/uploaded images insert into the body and
+  are stored as attachments, never inline base64).
+- Viewer: XL modal with the note body rendered through DOMPurify (note
+  HTML is untrusted), creation/edit metadata, the commit association,
+  and downloadable attachment links.
+- Delete requires confirmation. Timestamps render with the app's Intl
+  formatter ("Mon Sep 14, 11:12 AM" shape).
 
 ## Mobile
 

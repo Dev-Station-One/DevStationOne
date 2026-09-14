@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -149,6 +150,18 @@ func executeGit(ctx context.Context, cmd protocol.GitCommandPayload) (protocol.G
 		}
 		return protocol.GitResultPayload{Commit: strings.TrimSpace(sha)}, nil
 
+	case "log":
+		limit := cmd.Limit
+		if limit <= 0 || limit > 100 {
+			limit = 50
+		}
+		out, err := runGit(ctx, cmd.Root, "", "log", "--max-count="+strconv.Itoa(limit),
+			"--pretty=format:%H%x1f%s%x1f%an%x1f%aI", "--date=iso-strict")
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{Commits: parseGitLog(out)}, nil
+
 	default:
 		return protocol.GitResultPayload{}, fmt.Errorf("unknown git action %q", cmd.Action)
 	}
@@ -244,4 +257,27 @@ func statusFromXY(xy, path string) protocol.GitFileStatus {
 		x, y = string(xy[0]), string(xy[1])
 	}
 	return protocol.GitFileStatus{Path: path, Index: x, Worktree: y}
+}
+
+// parseGitLog parses `git log --pretty=format:%H%x1f%s%x1f%an%x1f%aI`
+// output: one 0x1f-separated record per line, newest first. A repo with
+// no commits yields empty output (git log fails there with a HEAD error,
+// which runGit surfaces as an error the caller maps to a 502).
+func parseGitLog(out string) []protocol.GitCommitInfo {
+	if strings.TrimSpace(out) == "" {
+		return nil
+	}
+	var commits []protocol.GitCommitInfo
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		f := strings.Split(line, "\x1f")
+		if len(f) != 4 {
+			continue
+		}
+		when, err := time.Parse(time.RFC3339, f[3])
+		if err != nil {
+			continue
+		}
+		commits = append(commits, protocol.GitCommitInfo{SHA: f[0], Subject: f[1], Author: f[2], Datetime: when})
+	}
+	return commits
 }

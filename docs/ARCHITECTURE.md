@@ -293,6 +293,8 @@ PostgreSQL stores:
 - database connections (`database_connections`, credentials encrypted —
   see ADR-021)
 - database connection metadata
+- journal notes (`journal_notes`) and their attachments
+  (`journal_attachments`, content in `bytea`) — `internal/journal`
 - audit events
 - settings
 

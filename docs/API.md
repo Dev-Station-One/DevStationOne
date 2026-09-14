@@ -279,6 +279,7 @@ credential helper are already configured for the runtime's OS user
 | stage | `POST /api/v1/projects/{projectID}/git/stage` `{"path"}` |
 | unstage | `POST /api/v1/projects/{projectID}/git/unstage` `{"path"}` |
 | commit | `POST /api/v1/projects/{projectID}/git/commit` `{"message"}` — replies `{"commit": "<sha>"}` |
+| log | `GET /api/v1/projects/{projectID}/git/log?limit=` — recent commits (SHA, subject, author, datetime), newest first; feeds the journal commit picker. A repo with no commits yet is a 502 |
 
 `status`/`diff` are scoped to the Project's working directory with a git
 pathspec (`-- .` or the given path) even when it is a subdirectory of a
@@ -289,6 +290,30 @@ DevStationOne, in that same larger-checkout scenario) is a known
 limitation — see ADR-028.
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag `Git`).
+
+## Journal
+
+Developer notes on a Project (`docs/JOURNAL_REQUIREMENTS.md`). Rich-text
+HTML bodies (Summernote), optional captured git-commit association, and
+attachments (25 MB / 10 per note) stored Control-Server-side. Note HTML
+is untrusted — never rendered without DOMPurify; the list endpoint
+carries an HTML-stripped snippet, never the full body. Any user with
+project access may create, edit, or delete notes; edits preserve
+creator/creation time and bump `updated_at` (the UI shows an "Edited"
+marker). Deletion cascades to attachments.
+
+```text
+GET    /api/v1/projects/{projectID}/journal?limit=&offset=   — server-side page + total
+POST   /api/v1/projects/{projectID}/journal                  — create
+GET    /api/v1/projects/{projectID}/journal/notes/{noteID}
+PUT    /api/v1/projects/{projectID}/journal/notes/{noteID}
+DELETE /api/v1/projects/{projectID}/journal/notes/{noteID}   — cascades to attachments
+POST   /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments    — multipart "file"
+GET    /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachmentID}
+```
+
+The canonical request/response shapes are `docs/openapi.yaml` (tag
+`Journal`).
 
 ## Databases
 
@@ -738,9 +763,12 @@ Browser authentication: server-side session, identified by a random 256-bit toke
 
 User preferences (docs/REQUIREMENTS_NERD_FONT.md): read through
 `GET /api/v1/auth/session` (`terminal_font`: `system` | `jetbrainsmono-nerd`;
-`theme`: `dark` | `light`), updated with a partial `PUT
-/api/v1/auth/preferences` (`{"terminal_font": ...}` and/or `{"theme": ...}`)
-→ `204`. Per-account, server-stored. Theme applies the
+`theme`: `dark` | `light`; `display_name`), updated with a partial `PUT
+/api/v1/auth/preferences` (`{"terminal_font": ...}`, `{"theme": ...}`,
+and/or `{"display_name": ...}` — trimmed, ≤80 chars, empty clears it)
+→ `204`. Per-account, server-stored. `display_name` is the friendly name
+shown instead of the email (journal creator column; empty falls back to
+the email). Theme applies the
 `docs/BOOTSTRAP_COLORS.md` dark workstation palette (default) or its light
 variant; `web/static/css/app.css` + `web/static/js/app.js` carry the
 tokens and the toggle. UI design deviations from the docs are tracked in

@@ -135,6 +135,10 @@ paths:
                 theme:
                   type: string
                   enum: [dark, light]
+                display_name:
+                  type: string
+                  maxLength: 80
+                  description: Trimmed on save; empty clears it (the email is shown instead).
       responses:
         "204":
           description: Saved
@@ -1844,6 +1848,291 @@ paths:
           description: The runtime's git command failed (e.g. nothing staged)
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/log:
+    get:
+      summary: List recent commits for the journal commit picker
+      description: Live RPC to the runtime (`git log`), scoped to the Project's working directory. A repository with no commits yet is a 502.
+      tags: [Git]
+      operationId: gitLog
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+            minimum: 1
+      responses:
+        "200":
+          description: Recent commits, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GitCommitInfo"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (e.g. not a git repository)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/journal:
+    get:
+      summary: List journal notes (one server-side page)
+      description: Journal notes are rich-text entries with an optional captured git-commit association; see docs/JOURNAL_REQUIREMENTS.md. The list carries an HTML-stripped snippet, never the full body.
+      tags: [Journal]
+      operationId: listJournalNotes
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        "200":
+          description: A page of notes, newest first, with the total matching count
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [notes, total]
+                properties:
+                  notes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/JournalNoteSummary"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+    post:
+      summary: Create a journal note
+      tags: [Journal]
+      operationId: createJournalNote
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalNoteInput"
+      responses:
+        "201":
+          description: Created note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalNote"
+        "400":
+          description: Missing body
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+  /api/v1/projects/{projectID}/journal/notes/{noteID}:
+    get:
+      summary: Get a journal note with its attachments
+      tags: [Journal]
+      operationId: getJournalNote
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalNote"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Note not found (or belongs to another project)
+    put:
+      summary: Update a journal note
+      description: Overwrites the body and commit metadata; the creator and creation time are preserved. Any user with project access may edit.
+      tags: [Journal]
+      operationId: updateJournalNote
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JournalNoteInput"
+      responses:
+        "200":
+          description: Updated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalNote"
+        "400":
+          description: Missing body
+        "401":
+          description: Not authenticated
+        "404":
+          description: Note not found (or belongs to another project)
+    delete:
+      summary: Delete a journal note (and its attachments)
+      tags: [Journal]
+      operationId: deleteJournalNote
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+        "404":
+          description: Note not found (or belongs to another project)
+  /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments:
+    post:
+      summary: Upload an attachment to a journal note
+      description: multipart/form-data with a "file" field. 25 MB per attachment, 10 per note.
+      tags: [Journal]
+      operationId: createJournalAttachment
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Stored attachment metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JournalAttachment"
+        "400":
+          description: Over a limit (25 MB per attachment, 10 per note), or not a multipart body with a "file" field
+        "401":
+          description: Not authenticated
+        "404":
+          description: Note not found (or belongs to another project)
+  /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachmentID}:
+    get:
+      summary: Download a journal attachment
+      description: Always served as a download (Content-Disposition attachment); <img> previews fetch the bytes and ignore the disposition.
+      tags: [Journal]
+      operationId: downloadJournalAttachment
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: noteID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: attachmentID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The attachment bytes
+        "401":
+          description: Not authenticated
+        "404":
+          description: Attachment not found (or belongs to another note/project)
   /api/v1/projects/{projectID}/databases:
     post:
       summary: Create a database connection
@@ -2963,13 +3252,16 @@ components:
           type: [string, "null"]
     User:
       type: object
-      required: [id, email, is_admin, terminal_font, theme, created_at]
+      required: [id, email, display_name, is_admin, terminal_font, theme, created_at]
       properties:
         id:
           type: string
         email:
           type: string
           format: email
+        display_name:
+          type: string
+          description: Optional friendly name shown instead of the email ("" falls back to the email).
         is_admin:
           type: boolean
         terminal_font:
@@ -3493,3 +3785,101 @@ components:
         updated_at:
           type: string
           format: date-time
+    GitCommitInfo:
+      type: object
+      description: One recent commit from a git log call. Not a stored resource.
+      required: [sha, subject, author, datetime]
+      properties:
+        sha:
+          type: string
+        subject:
+          type: string
+        author:
+          type: string
+        datetime:
+          type: string
+          format: date-time
+    JournalNoteInput:
+      type: object
+      description: Create/update input for a journal note. body_html is Summernote-produced HTML, sanitized at render time (DOMPurify) and never rendered unsanitized; commit metadata is captured free text, not a live reference.
+      required: [body_html]
+      properties:
+        body_html:
+          type: string
+        commit_sha:
+          type: string
+        commit_subject:
+          type: string
+        commit_author:
+          type: string
+        commit_datetime:
+          type: [string, "null"]
+          format: date-time
+    JournalAttachment:
+      type: object
+      required: [id, filename, content_type, size_bytes, created_at]
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    JournalNoteBase:
+      type: object
+      required: [id, project_id, commit_sha, commit_subject, commit_author, created_by, creator_name, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        commit_sha:
+          type: string
+          description: Captured SHA at link time ("" when unassociated).
+        commit_subject:
+          type: string
+        commit_author:
+          type: string
+        commit_datetime:
+          type: [string, "null"]
+          format: date-time
+        created_by:
+          type: string
+        creator_name:
+          type: string
+          description: The creator's display_name, falling back to their email.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    JournalNoteSummary:
+      type: object
+      description: One journal note as returned by the list — snippet only, never the full body.
+      allOf:
+        - $ref: "#/components/schemas/JournalNoteBase"
+        - type: object
+          required: [snippet]
+          properties:
+            snippet:
+              type: string
+    JournalNote:
+      type: object
+      description: One journal note with its full body and attachments.
+      allOf:
+        - $ref: "#/components/schemas/JournalNoteBase"
+        - type: object
+          required: [body_html]
+          properties:
+            body_html:
+              type: string
+            attachments:
+              type: array
+              items:
+                $ref: "#/components/schemas/JournalAttachment"

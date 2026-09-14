@@ -662,6 +662,102 @@ from a card button.
 
 **Status**: Not Started
 
+## Slice 18 — Project Journal
+
+**Goal**: a Journal tab on the Project workspace — rich-text notes
+(Summernote), optional git-commit association, file attachments/pasted
+images stored Control-Server-side, Tabler datatable with server-side
+pagination. Requirements: `docs/JOURNAL_REQUIREMENTS.md`.
+
+**Design**:
+
+- Migration `0012_journal`: nullable `users.display_name`; `journal_notes`
+  (id, project_id, body_html, commit_sha, commit_subject, commit_author,
+  commit_datetime, created_by, created_at, updated_at; project_id FK
+  CASCADE) and `journal_attachments` (id, note_id FK CASCADE, filename,
+  content_type, size_bytes, content bytea; created_at).
+- New `internal/journal` package modeled on `internal/projects`: Create,
+  Get, ListForProject (limit/offset + total, ORDER BY created_at DESC),
+  Update, Delete, AddAttachment, ListAttachments, GetAttachment.
+  Snippet (first ~120 chars, HTML-stripped) computed at list time in Go.
+- API on `/api/v1/projects/{projectID}/journal`: GET list
+  (?limit=&offset=), POST create, GET/PUT/DELETE `/notes/{noteID}`,
+  POST/GET `/notes/{noteID}/attachments[/{attachmentID}]` (multipart
+  upload; download with safe Content-Disposition, following the files
+  API's existing attachment handling). Authorize via the existing
+  project-ownership path used by every project-scoped handler.
+- `Sanitization — ponytail: render-time only, using the already-vendored
+  DOMPurify at every render point (row snippet is text-stripped server
+  side; full body sanitized in the view/edit modals before it touches
+  the DOM). No new Go sanitizer dependency; untrusted HTML never reaches
+  the DOM unsanitized. Add server-side bluemonday only if a non-browser
+  client ever renders note HTML.`
+- Commit association: `git.command` gains a `log` action (runtime runs
+  `git log --max-count=N --pretty=format:...` in Root; agent side in
+  `internal/agent/git_manager.go`, payload reuses GitCommandPayload with
+  a Limit field). New GET `.../git/log?limit=` endpoint feeds the picker;
+  the note stores SHA/subject/author/datetime as captured metadata, no
+  GitHub API.
+- Creator display: `users.display_name` (nullable); journal list joins
+  users, coalescing to email. Account page gains a display-name field;
+  `PUT /auth/preferences` accepts it.
+- UI in `web/static/project.html`: Journal tab (Tabler datatable,
+  columns DateTime | Snippet | Created By | actions), XL modals for
+  editor (Summernote, vendored into `web/static/vendor/summernote` —
+  Bootstrap-5 build on the existing vendored jQuery) and viewer
+  (DOMPurify-sanitized render, attachment list with download links,
+  commit link). Timestamps via the app's existing Intl date formatter,
+  "Mon Sep 14, 11:11 AM".
+- Server-side pagination like the audit-log API; edit/delete open to
+  any user with project access; edits set updated_at and the row shows
+  an "Edited <ts>" marker; delete confirmed via the existing SweetAlert
+  dialog pattern; audit events journal_created/edited/deleted/attached.
+- Limits enforced server-side: 25 MB per attachment, 10 per note.
+  Summernote paste callback uploads pasted images as attachments.
+
+**Stages** (one commit at the end; docs/CodeGraph updated in this pass,
+not deferred):
+
+1. Migration 0012 + `internal/journal` package + `display_name`
+   persistence (auth setter, preferences handler field) — unit + DB
+   tests. → verify: `go test -p 1 ./internal/journal ./internal/auth ./internal/api`
+2. API handlers + OpenAPI + git `log` protocol action + runtime
+   implementation + contract tests. → verify: `make openapi-lint`,
+   `go test -p 1 ./...`
+3. Web UI: vendored Summernote, Journal tab, table, editor/viewer
+   modals, display-name field in account page. → verify: browser smoke
+   (create/edit/delete/attach/paste-image/link-commit) + E2E test.
+4. Docs (API.md, ARCHITECTURE.md, WEB_UI_DESIGN.md,
+   VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md, PROTOCOL.md), CodeGraph
+   maintain, full `make fmt vet lint test` gate, smoke on dev instance,
+   review diff, commit.
+
+**Success Criteria**: all acceptance criteria in
+`docs/JOURNAL_REQUIREMENTS.md` demonstrably pass on the dev instance —
+create/edit/delete a note, paste a screenshot (stored as attachment,
+not base64), attach a 25 MB-capped file, link a commit via the picker,
+server-side pagination over >1 page, "Edited" marker, display_name with
+email fallback, no unsanitized HTML in the DOM.
+
+**Tests**: `internal/journal` unit + Postgres tests; API integration
+tests (authz, pagination, limits, attachment download headers); git log
+agent test; JS/browser E2E for create/edit/delete/attach/paste; XSS
+check confirming DOMPurify sanitization of a script-bearing note.
+
+**Status**: Complete (2026-09-14). Implemented in one pass — journal
+package + migration 0012, API + OpenAPI (tag `Journal`), `log` git
+action, Journal tab with Summernote editor / DOMPurify viewer /
+server-side pagination, `users.display_name` preference. Attachment
+removal is note-wide (FK CASCADE, no per-attachment delete endpoint);
+existing attachments carry download-only actions in the editor. Note
+HTML sanitization is render-time DOMPurify, not server-side (see
+`docs/JOURNAL_REQUIREMENTS.md` deviation). Dev-instance smoke verified
+create/edit/delete, display-name creator, attachment upload + download,
+image insert via attachment URL, commit picker + association, XSS
+stripping, Edited markers. Commit-picker live list requires a runtime
+with the new `log` action (this machine's dev runtime updated; other
+runtimes need a runtime-binary update).
+
 ## Future, explicitly not MVP
 
 - Android client

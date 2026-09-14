@@ -333,7 +333,7 @@ type FileResultPayload struct {
 // read (status/diff) to it with a git pathspec rather than the whole
 // repository, in case Root is a subdirectory of a larger git checkout.
 type GitCommandPayload struct {
-	// Action is one of: status, diff, stage, unstage, commit.
+	// Action is one of: status, diff, stage, unstage, commit, log.
 	Action string `json:"action"`
 	Root   string `json:"root"`
 	// Path scopes a "diff"/"stage"/"unstage" request, relative to Root. "" or
@@ -347,6 +347,8 @@ type GitCommandPayload struct {
 	// commit -F -` over stdin rather than argv (docs/SECURITY.md — never
 	// logged as a process argument).
 	Message string `json:"message,omitempty"`
+	// Limit is the commit count for a "log" request.
+	Limit int `json:"limit,omitempty"`
 }
 
 // GitFileStatus describes one changed path from a "status" request. Index is
@@ -364,10 +366,19 @@ type GitFileStatus struct {
 // GitResultPayload is the payload of a MessageGitResult envelope. Exactly
 // one of Files, Diff, or Commit is populated, matching the request's Action
 // ("stage"/"unstage" populate none of them — success is the empty result).
+// GitCommitInfo is one recent commit from a "log" request.
+type GitCommitInfo struct {
+	SHA      string    `json:"sha"`
+	Subject  string    `json:"subject"`
+	Author   string    `json:"author"`
+	Datetime time.Time `json:"datetime"`
+}
+
 type GitResultPayload struct {
-	Files  []GitFileStatus `json:"files,omitempty"`
-	Diff   string          `json:"diff,omitempty"`
-	Commit string          `json:"commit,omitempty"`
+	Files   []GitFileStatus `json:"files,omitempty"`
+	Diff    string          `json:"diff,omitempty"`
+	Commit  string          `json:"commit,omitempty"`
+	Commits []GitCommitInfo `json:"commits,omitempty"`
 }
 
 // sessionIDFrameLen is the fixed width of the session ID prefix on a binary

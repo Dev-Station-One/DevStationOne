@@ -102,6 +102,15 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/stage", requireSession(db, gitStageHandler(db, registry, "stage", audit.EventGitStaged)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/unstage", requireSession(db, gitStageHandler(db, registry, "unstage", audit.EventGitUnstaged)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/commit", requireSession(db, gitCommitHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/git/log", requireSession(db, gitLogHandler(db, registry)))
+
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal", requireSession(db, listJournalNotesHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal", requireSession(db, createJournalNoteHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}", requireSession(db, getJournalNoteHandler(db)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/journal/notes/{noteID}", requireSession(db, updateJournalNoteHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/journal/notes/{noteID}", requireSession(db, deleteJournalNoteHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments", requireSession(db, uploadJournalAttachmentHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachmentID}", requireSession(db, downloadJournalAttachmentHandler(db)))
 
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireSession(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireSession(db, listDatabaseConnectionsHandler(db)))

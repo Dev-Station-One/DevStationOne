@@ -78,8 +78,8 @@ func SessionAndUser(ctx context.Context, pool *pgxpool.Pool, token string) (Sess
 	}
 
 	err = pool.QueryRow(ctx, `
-		SELECT id, email, is_admin, created_at, terminal_font, theme FROM users WHERE id = $1
-	`, s.UserID).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme)
+		SELECT id, email, is_admin, created_at, terminal_font, theme, display_name FROM users WHERE id = $1
+	`, s.UserID).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName)
 	if err != nil {
 		return Session{}, User{}, err
 	}

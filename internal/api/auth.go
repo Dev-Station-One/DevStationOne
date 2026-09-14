@@ -21,6 +21,7 @@ type loginRequest struct {
 type userResponse struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
+	DisplayName  string    `json:"display_name"`
 	IsAdmin      bool      `json:"is_admin"`
 	TerminalFont string    `json:"terminal_font"`
 	Theme        string    `json:"theme"`
@@ -28,7 +29,7 @@ type userResponse struct {
 }
 
 func toUserResponse(u auth.User) userResponse {
-	return userResponse{ID: u.ID, Email: u.Email, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, CreatedAt: u.CreatedAt}
+	return userResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, CreatedAt: u.CreatedAt}
 }
 
 // updatePreferencesHandler PUT /api/v1/auth/preferences — partial update of
@@ -44,12 +45,13 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 		var req struct {
 			TerminalFont *string `json:"terminal_font"`
 			Theme        *string `json:"theme"`
+			DisplayName  *string `json:"display_name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
-		if req.TerminalFont == nil && req.Theme == nil {
+		if req.TerminalFont == nil && req.Theme == nil && req.DisplayName == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nothing to update"})
 			return
 		}
@@ -60,6 +62,17 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 		if req.Theme != nil && !auth.ValidTheme(*req.Theme) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown theme"})
 			return
+		}
+		if req.DisplayName != nil {
+			name := strings.TrimSpace(*req.DisplayName)
+			if len(name) > 80 {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "display_name is too long"})
+				return
+			}
+			if err := auth.SetDisplayName(r.Context(), db.Pool, user.ID, name); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
+				return
+			}
 		}
 		if req.TerminalFont != nil {
 			if err := auth.SetTerminalFont(r.Context(), db.Pool, user.ID, *req.TerminalFont); err != nil {
