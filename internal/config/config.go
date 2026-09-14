@@ -26,12 +26,9 @@ type Runtime struct {
 func LoadServer() (Server, error) {
 	cfg := Server{
 		Addr:        getenv("DEVSTATIONONE_SERVER_ADDR", ":8080"),
-		DatabaseURL: getenv("DEVSTATIONONE_DATABASE_URL", ""),
+		DatabaseURL: getenv("DEVSTATIONONE_DATABASE_URL", "postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable"),
 		LogLevel:    getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
 		Environment: getenv("DEVSTATIONONE_ENV", "development"),
-	}
-	if cfg.DatabaseURL == "" {
-		return Server{}, fmt.Errorf("DEVSTATIONONE_DATABASE_URL is required")
 	}
 	return cfg, nil
 }
