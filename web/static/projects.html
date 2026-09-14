@@ -1,228 +1,355 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Projects · DevStationOne</title>
-  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
-  <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
-  <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
-  <link rel="icon" href="/favicon.ico" sizes="any">
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
-  <link rel="apple-touch-icon" href="/assets/logo/favicon-256.png">
-  <link rel="stylesheet" href="/css/app.css">
-  <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
-  <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
-  <script>try { if (window.localStorage.getItem('tabler-sidebar') === 'folded-hover') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { /* private mode: fine */ }</script>
-</head>
-<body>
-  <div class="page">
-    <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark" id="ds-sidebar" data-active="projects"></aside>
-    <div class="page-wrapper">
-      <header class="navbar navbar-expand-md navbar-light d-print-none">
-        <div class="container-fluid d-flex justify-content-between align-items-center">
-          <button class="icon-btn" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar" title="Fold sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
-          <div class="d-flex align-items-center gap-2" id="ds-topbar-actions"></div>
-        </div>
-      </header>
-      <div class="page-body">
-        <div class="container-fluid">
-          <h2 class="mb-3"><i class="fa-solid fa-cubes" aria-hidden="true"></i> Projects</h2>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Projects · DevStationOne</title>
+    <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/assets/logo/favicon-32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="/assets/logo/favicon-16.png"
+    />
+    <link rel="apple-touch-icon" href="/assets/logo/favicon-256.png" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css" />
+    <script>
+      document.documentElement.setAttribute(
+        "data-bs-theme",
+        (function () {
+          try {
+            return window.localStorage.getItem("ds-theme") === "light"
+              ? "light"
+              : "dark";
+          } catch (e) {
+            return "dark";
+          }
+        })(),
+      );
+    </script>
+    <script>
+      try {
+        if (window.localStorage.getItem("tabler-sidebar") === "folded-hover")
+          document.documentElement.setAttribute(
+            "data-bs-sidebar",
+            "folded-hover",
+          );
+      } catch (e) {
+        /* private mode: fine */
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <aside
+        class="navbar navbar-vertical navbar-expand-lg"
+        data-bs-theme="dark"
+        id="ds-sidebar"
+        data-active="projects"
+      ></aside>
+      <div class="page-wrapper">
+        <header class="navbar navbar-expand-md navbar-light d-print-none">
+          <div
+            class="container-fluid d-flex justify-content-between align-items-center"
+          >
+            <button
+              class="icon-btn"
+              type="button"
+              data-bs-toggle="sidebar-folded"
+              aria-label="Fold sidebar"
+              title="Fold sidebar"
+            >
+              <i class="fa-solid fa-bars" aria-hidden="true"></i>
+            </button>
+            <div
+              class="d-flex align-items-center gap-2"
+              id="ds-topbar-actions"
+            ></div>
+          </div>
+        </header>
+        <div class="page-body">
+          <div class="container-fluid">
+            <h2 class="mb-3">
+              <i class="fa-solid fa-cubes" aria-hidden="true"></i> Projects
+            </h2>
 
-          <div class="card mb-4">
-            <div class="card-body">
-              <h3 class="card-title">New project</h3>
-              <div class="row g-2">
-                <div class="col-12 col-md-6">
-                  <label class="form-label">Name</label>
-                  <input id="new-name" type="text" class="form-control" placeholder="My Application">
+            <div class="card mb-4">
+              <div class="table-responsive">
+                <table class="table card-table table-vcenter">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Runtime</th>
+                      <th>Working directory</th>
+                      <th>Updated</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="projects-body"></tbody>
+                </table>
+              </div>
+              <div id="projects-empty" class="empty" hidden>
+                <div class="empty-icon">
+                  <i class="fa-solid fa-cubes" aria-hidden="true"></i>
                 </div>
-                <div class="col-12 col-md-6">
-                  <label class="form-label">Runtime</label>
-                  <select id="new-runtime" class="form-select">
-                    <option value="">Select a runtime…</option>
-                  </select>
-                </div>
-                <div class="col-12 col-md-6">
-                  <label class="form-label">Shell</label>
-                  <select id="new-shell" class="form-select" disabled>
-                    <option value="">Select a runtime first…</option>
-                  </select>
-                </div>
-                <div class="col-12 col-md-6">
-                  <label class="form-label">Working directory</label>
-                  <div class="input-group">
-                    <input id="new-cwd" type="text" class="form-control" readonly placeholder="Select a runtime, then browse…">
-                    <button id="new-cwd-browse" class="btn btn-outline-secondary" type="button" disabled>Browse…</button>
-                  </div>
-                </div>
-                <div class="col-12">
-                  <label class="form-label">Environment <span class="text-secondary">(optional, one KEY=VALUE per line)</span></label>
-                  <textarea id="new-env" class="form-control" rows="2" placeholder="NODE_ENV=development"></textarea>
+                <div class="empty-title">No projects yet</div>
+                <div class="empty-subtitle text-secondary">
+                  Create a project above to get started.
                 </div>
               </div>
-              <div id="create-error" class="alert alert-danger mt-3" hidden></div>
-              <button id="create-btn" class="btn btn-primary mt-3" disabled>Create project</button>
-              <div id="create-offline-hint" class="text-secondary mt-2" hidden>Selected runtime is offline.</div>
             </div>
-          </div>
 
-          <div class="card">
-            <div class="table-responsive">
-              <table class="table card-table table-vcenter">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Runtime</th>
-                    <th>Working directory</th>
-                    <th>Updated</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="projects-body"></tbody>
-              </table>
-            </div>
-            <div id="projects-empty" class="empty" hidden>
-              <div class="empty-icon"><i class="fa-solid fa-cubes" aria-hidden="true"></i></div>
-              <div class="empty-title">No projects yet</div>
-              <div class="empty-subtitle text-secondary">Create a project above to get started.</div>
+            <div class="card">
+              <div class="card-body">
+                <h3 class="card-title">New project</h3>
+                <div class="row g-2">
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">Name</label>
+                    <input
+                      id="new-name"
+                      type="text"
+                      class="form-control"
+                      placeholder="My Application"
+                    />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">Runtime</label>
+                    <select id="new-runtime" class="form-select">
+                      <option value="">Select a runtime…</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">Shell</label>
+                    <select id="new-shell" class="form-select" disabled>
+                      <option value="">Select a runtime first…</option>
+                    </select>
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label">Working directory</label>
+                    <div class="input-group">
+                      <input
+                        id="new-cwd"
+                        type="text"
+                        class="form-control"
+                        readonly
+                        placeholder="Select a runtime, then browse…"
+                      />
+                      <button
+                        id="new-cwd-browse"
+                        class="btn btn-outline-secondary"
+                        type="button"
+                        disabled
+                      >
+                        Browse…
+                      </button>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <label class="form-label"
+                      >Environment
+                      <span class="text-secondary"
+                        >(optional, one KEY=VALUE per line)</span
+                      ></label
+                    >
+                    <textarea
+                      id="new-env"
+                      class="form-control"
+                      rows="2"
+                      placeholder="NODE_ENV=development"
+                    ></textarea>
+                  </div>
+                </div>
+                <div
+                  id="create-error"
+                  class="alert alert-danger mt-3"
+                  hidden
+                ></div>
+                <button id="create-btn" class="btn btn-primary mt-3" disabled>
+                  Create project
+                </button>
+                <div
+                  id="create-offline-hint"
+                  class="text-secondary mt-2"
+                  hidden
+                >
+                  Selected runtime is offline.
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
-  </div>
-  <script src="/vendor/jquery/jquery.min.js"></script>
-  <script src="/vendor/tabler/js/tabler.min.js"></script>
-  <script src="/js/app.js"></script>
-  <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
-  <script src="/js/dialogs.js"></script>
-  <script>
-    function escapeHtml(s) {
-      return $('<div>').text(s).html();
-    }
+    <script src="/vendor/jquery/jquery.min.js"></script>
+    <script src="/vendor/tabler/js/tabler.min.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
+    <script src="/js/dialogs.js"></script>
+    <script>
+      function escapeHtml(s) {
+        return $("<div>").text(s).html();
+      }
 
-    var runtimesById = {};
+      var runtimesById = {};
 
-    function parseEnvironment(text) {
-      var env = {};
-      text.split('\n').forEach(function (line) {
-        line = line.trim();
-        if (!line) return;
-        var i = line.indexOf('=');
-        if (i < 1) return;
-        env[line.slice(0, i).trim()] = line.slice(i + 1).trim();
-      });
-      return env;
-    }
-
-    function loadRuntimes() {
-      return $.get('/api/v1/runtimes').done(function (runtimes) {
-        var $select = $('#new-runtime');
-        runtimesById = {};
-        runtimes.forEach(function (rt) {
-          runtimesById[rt.id] = rt;
-          if (rt.status === 'revoked') return;
-          $select.append($('<option>').val(rt.id).text(rt.name + ' (' + rt.status + ')'));
+      function parseEnvironment(text) {
+        var env = {};
+        text.split("\n").forEach(function (line) {
+          line = line.trim();
+          if (!line) return;
+          var i = line.indexOf("=");
+          if (i < 1) return;
+          env[line.slice(0, i).trim()] = line.slice(i + 1).trim();
         });
-      });
-    }
+        return env;
+      }
 
-    function loadProjects() {
-      $.get('/api/v1/projects').done(function (list) {
-        var $body = $('#projects-body').empty();
-        $('#projects-empty').prop('hidden', list.length > 0);
-        list.forEach(function (p) {
-          var rt = runtimesById[p.runtime_id];
-          $body.append(
-            '<tr class="project-row" data-id="' + p.id + '" style="cursor:pointer">' +
-            '<td>' + escapeHtml(p.name) + '</td>' +
-            '<td>' + escapeHtml(rt ? rt.name : p.runtime_id) + '</td>' +
-            '<td>' + escapeHtml(p.working_directory) + '</td>' +
-            '<td>' + new Date(p.updated_at).toLocaleString() + '</td>' +
-            '<td><button class="icon-btn text-danger delete-btn" data-id="' + p.id + '" aria-label="Delete project" title="Delete project"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>'
+      function loadRuntimes() {
+        return $.get("/api/v1/runtimes").done(function (runtimes) {
+          var $select = $("#new-runtime");
+          runtimesById = {};
+          runtimes.forEach(function (rt) {
+            runtimesById[rt.id] = rt;
+            if (rt.status === "revoked") return;
+            $select.append(
+              $("<option>")
+                .val(rt.id)
+                .text(rt.name + " (" + rt.status + ")"),
+            );
+          });
+        });
+      }
+
+      function loadProjects() {
+        $.get("/api/v1/projects")
+          .done(function (list) {
+            var $body = $("#projects-body").empty();
+            $("#projects-empty").prop("hidden", list.length > 0);
+            list.forEach(function (p) {
+              var rt = runtimesById[p.runtime_id];
+              $body.append(
+                '<tr class="project-row" data-id="' +
+                  p.id +
+                  '" style="cursor:pointer">' +
+                  "<td>" +
+                  escapeHtml(p.name) +
+                  "</td>" +
+                  "<td>" +
+                  escapeHtml(rt ? rt.name : p.runtime_id) +
+                  "</td>" +
+                  "<td>" +
+                  escapeHtml(p.working_directory) +
+                  "</td>" +
+                  "<td>" +
+                  new Date(p.updated_at).toLocaleString() +
+                  "</td>" +
+                  '<td><button class="icon-btn text-danger delete-btn" data-id="' +
+                  p.id +
+                  '" aria-label="Delete project" title="Delete project"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>',
+              );
+            });
+          })
+          .fail(function (xhr) {
+            if (xhr.status === 401) window.location.href = "/login.html";
+          });
+      }
+
+      // Runtime-dependent controls (shell dropdown, directory browse, create)
+      // reset and re-populate whenever the selected runtime changes, since
+      // they all depend on that runtime's live capabilities.
+      $("#new-runtime").on("change", function () {
+        var rt = runtimesById[$(this).val()];
+        var $shell = $("#new-shell").empty();
+        $("#new-cwd").val("");
+
+        if (!rt) {
+          $shell
+            .append($('<option value="">').text("Select a runtime first…"))
+            .prop("disabled", true);
+          $("#new-cwd-browse, #create-btn").prop("disabled", true);
+          $("#create-offline-hint").prop("hidden", true);
+          return;
+        }
+
+        var shells = (rt.capabilities && rt.capabilities.shells) || [];
+        if (shells.length) {
+          $shell.append($('<option value="">').text("Select a shell…"));
+          shells.forEach(function (s) {
+            $shell.append($("<option>").val(s).text(s));
+          });
+        } else {
+          $shell.append(
+            $('<option value="">').text("No shells reported by this runtime"),
           );
-        });
-      }).fail(function (xhr) {
-        if (xhr.status === 401) window.location.href = '/login.html';
+        }
+        $shell.prop("disabled", !rt.online);
+        $("#new-cwd-browse").prop("disabled", !rt.online);
+        $("#create-btn").prop("disabled", !rt.online);
+        $("#create-offline-hint").prop("hidden", rt.online);
       });
-    }
 
-    // Runtime-dependent controls (shell dropdown, directory browse, create)
-    // reset and re-populate whenever the selected runtime changes, since
-    // they all depend on that runtime's live capabilities.
-    $('#new-runtime').on('change', function () {
-      var rt = runtimesById[$(this).val()];
-      var $shell = $('#new-shell').empty();
-      $('#new-cwd').val('');
-
-      if (!rt) {
-        $shell.append($('<option value="">').text('Select a runtime first…')).prop('disabled', true);
-        $('#new-cwd-browse, #create-btn').prop('disabled', true);
-        $('#create-offline-hint').prop('hidden', true);
-        return;
-      }
-
-      var shells = (rt.capabilities && rt.capabilities.shells) || [];
-      if (shells.length) {
-        $shell.append($('<option value="">').text('Select a shell…'));
-        shells.forEach(function (s) { $shell.append($('<option>').val(s).text(s)); });
-      } else {
-        $shell.append($('<option value="">').text('No shells reported by this runtime'));
-      }
-      $shell.prop('disabled', !rt.online);
-      $('#new-cwd-browse').prop('disabled', !rt.online);
-      $('#create-btn').prop('disabled', !rt.online);
-      $('#create-offline-hint').prop('hidden', rt.online);
-    });
-
-    $('#new-cwd-browse').on('click', async function () {
-      var rt = runtimesById[$('#new-runtime').val()];
-      if (!rt) return;
-      var path = await DS.browseDirectory(rt.id);
-      if (path === null) return;
-      var home = rt.capabilities.home_dir;
-      $('#new-cwd').val(path === '.' ? home : home + '/' + path);
-    });
-
-    $('#create-btn').on('click', function () {
-      $('#create-error').prop('hidden', true);
-      var body = {
-        name: $('#new-name').val().trim(),
-        runtime_id: $('#new-runtime').val(),
-        working_directory: $('#new-cwd').val().trim(),
-        shell: $('#new-shell').val(),
-        environment: parseEnvironment($('#new-env').val())
-      };
-      $.ajax({
-        url: '/api/v1/projects',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(body)
-      }).done(function () {
-        $('#new-name, #new-cwd, #new-env').val('');
-        $('#new-runtime').val('').trigger('change');
-        loadProjects();
-      }).fail(function (xhr) {
-        var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create project.';
-        $('#create-error').text(msg).prop('hidden', false);
+      $("#new-cwd-browse").on("click", async function () {
+        var rt = runtimesById[$("#new-runtime").val()];
+        if (!rt) return;
+        var path = await DS.browseDirectory(rt.id);
+        if (path === null) return;
+        var home = rt.capabilities.home_dir;
+        $("#new-cwd").val(path === "." ? home : home + "/" + path);
       });
-    });
 
-    $('#projects-body').on('click', '.project-row', function (e) {
-      if ($(e.target).closest('.delete-btn').length) return;
-      window.location.href = '/project.html?id=' + $(this).data('id');
-    });
+      $("#create-btn").on("click", function () {
+        $("#create-error").prop("hidden", true);
+        var body = {
+          name: $("#new-name").val().trim(),
+          runtime_id: $("#new-runtime").val(),
+          working_directory: $("#new-cwd").val().trim(),
+          shell: $("#new-shell").val(),
+          environment: parseEnvironment($("#new-env").val()),
+        };
+        $.ajax({
+          url: "/api/v1/projects",
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify(body),
+        })
+          .done(function () {
+            $("#new-name, #new-cwd, #new-env").val("");
+            $("#new-runtime").val("").trigger("change");
+            loadProjects();
+          })
+          .fail(function (xhr) {
+            var msg =
+              (xhr.responseJSON && xhr.responseJSON.error) ||
+              "Failed to create project.";
+            $("#create-error").text(msg).prop("hidden", false);
+          });
+      });
 
-    $('#projects-body').on('click', '.delete-btn', async function (e) {
-      e.stopPropagation();
-      var id = $(this).data('id');
-      if (!(await DS.confirm('Delete this project?'))) return;
-      $.ajax({ url: '/api/v1/projects/' + id, method: 'DELETE' }).always(loadProjects);
-    });
+      $("#projects-body").on("click", ".project-row", function (e) {
+        if ($(e.target).closest(".delete-btn").length) return;
+        window.location.href = "/project.html?id=" + $(this).data("id");
+      });
 
-    loadRuntimes().always(loadProjects);
-  </script>
-</body>
+      $("#projects-body").on("click", ".delete-btn", async function (e) {
+        e.stopPropagation();
+        var id = $(this).data("id");
+        if (!(await DS.confirm("Delete this project?"))) return;
+        $.ajax({ url: "/api/v1/projects/" + id, method: "DELETE" }).always(
+          loadProjects,
+        );
+      });
+
+      loadRuntimes().always(loadProjects);
+    </script>
+  </body>
 </html>
