@@ -53,17 +53,18 @@
                     <option value="">Select a runtime…</option>
                   </select>
                 </div>
-                <div class="col-12 col-md-4">
-                  <label class="form-label">OS user</label>
-                  <input id="new-os-user" type="text" class="form-control" placeholder="brian">
-                </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-6">
                   <label class="form-label">Shell</label>
-                  <input id="new-shell" type="text" class="form-control" placeholder="/bin/bash">
+                  <select id="new-shell" class="form-select" disabled>
+                    <option value="">Select a runtime first…</option>
+                  </select>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-6">
                   <label class="form-label">Working directory</label>
-                  <input id="new-cwd" type="text" class="form-control" placeholder="/home/brian/src/my-application">
+                  <div class="input-group">
+                    <input id="new-cwd" type="text" class="form-control" readonly placeholder="Select a runtime, then browse…">
+                    <button id="new-cwd-browse" class="btn btn-outline-secondary" type="button" disabled>Browse…</button>
+                  </div>
                 </div>
                 <div class="col-12">
                   <label class="form-label">Environment <span class="text-secondary">(optional, one KEY=VALUE per line)</span></label>
@@ -71,7 +72,8 @@
                 </div>
               </div>
               <div id="create-error" class="alert alert-danger mt-3" hidden></div>
-              <button id="create-btn" class="btn btn-primary mt-3">Create project</button>
+              <button id="create-btn" class="btn btn-primary mt-3" disabled>Create project</button>
+              <div id="create-offline-hint" class="text-secondary mt-2" hidden>Selected runtime is offline.</div>
             </div>
           </div>
 
@@ -82,7 +84,6 @@
                   <tr>
                     <th>Name</th>
                     <th>Runtime</th>
-                    <th>OS user</th>
                     <th>Working directory</th>
                     <th>Updated</th>
                     <th></th>
@@ -147,7 +148,6 @@
             '<tr class="project-row" data-id="' + p.id + '" style="cursor:pointer">' +
             '<td>' + escapeHtml(p.name) + '</td>' +
             '<td>' + escapeHtml(rt ? rt.name : p.runtime_id) + '</td>' +
-            '<td>' + escapeHtml(p.os_user) + '</td>' +
             '<td>' + escapeHtml(p.working_directory) + '</td>' +
             '<td>' + new Date(p.updated_at).toLocaleString() + '</td>' +
             '<td><button class="icon-btn text-danger delete-btn" data-id="' + p.id + '" aria-label="Delete project" title="Delete project"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>'
@@ -158,14 +158,50 @@
       });
     }
 
+    // Runtime-dependent controls (shell dropdown, directory browse, create)
+    // reset and re-populate whenever the selected runtime changes, since
+    // they all depend on that runtime's live capabilities.
+    $('#new-runtime').on('change', function () {
+      var rt = runtimesById[$(this).val()];
+      var $shell = $('#new-shell').empty();
+      $('#new-cwd').val('');
+
+      if (!rt) {
+        $shell.append($('<option value="">').text('Select a runtime first…')).prop('disabled', true);
+        $('#new-cwd-browse, #create-btn').prop('disabled', true);
+        $('#create-offline-hint').prop('hidden', true);
+        return;
+      }
+
+      var shells = (rt.capabilities && rt.capabilities.shells) || [];
+      if (shells.length) {
+        $shell.append($('<option value="">').text('Select a shell…'));
+        shells.forEach(function (s) { $shell.append($('<option>').val(s).text(s)); });
+      } else {
+        $shell.append($('<option value="">').text('No shells reported by this runtime'));
+      }
+      $shell.prop('disabled', !rt.online);
+      $('#new-cwd-browse').prop('disabled', !rt.online);
+      $('#create-btn').prop('disabled', !rt.online);
+      $('#create-offline-hint').prop('hidden', rt.online);
+    });
+
+    $('#new-cwd-browse').on('click', async function () {
+      var rt = runtimesById[$('#new-runtime').val()];
+      if (!rt) return;
+      var path = await DS.browseDirectory(rt.id);
+      if (path === null) return;
+      var home = rt.capabilities.home_dir;
+      $('#new-cwd').val(path === '.' ? home : home + '/' + path);
+    });
+
     $('#create-btn').on('click', function () {
       $('#create-error').prop('hidden', true);
       var body = {
         name: $('#new-name').val().trim(),
         runtime_id: $('#new-runtime').val(),
-        os_user: $('#new-os-user').val().trim(),
         working_directory: $('#new-cwd').val().trim(),
-        shell: $('#new-shell').val().trim(),
+        shell: $('#new-shell').val(),
         environment: parseEnvironment($('#new-env').val())
       };
       $.ajax({
@@ -174,8 +210,8 @@
         contentType: 'application/json',
         data: JSON.stringify(body)
       }).done(function () {
-        $('#new-name, #new-os-user, #new-cwd, #new-shell, #new-env').val('');
-        $('#new-runtime').val('');
+        $('#new-name, #new-cwd, #new-env').val('');
+        $('#new-runtime').val('').trigger('change');
         loadProjects();
       }).fail(function (xhr) {
         var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create project.';

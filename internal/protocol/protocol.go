@@ -95,6 +95,16 @@ type Capabilities struct {
 	Filesystem bool     `json:"filesystem"`
 	Services   bool     `json:"services"`
 	Databases  []string `json:"databases,omitempty"`
+	// OSUsername and HomeDir identify the OS user the runtime process runs
+	// as, replacing the old per-Project os_user field: a runtime always runs
+	// as one fixed user (ADR-014), so the identity is reported here instead
+	// of typed in by a client.
+	OSUsername string `json:"os_username"`
+	HomeDir    string `json:"home_dir"`
+	// Shells is parsed from /etc/shells. Empty when unreadable — no
+	// fallback list is offered, matching the Project setup UI's strict
+	// dropdown (a client must not be able to type an arbitrary shell path).
+	Shells []string `json:"shells,omitempty"`
 }
 
 // HelloPayload is the payload of a MessageHello envelope.

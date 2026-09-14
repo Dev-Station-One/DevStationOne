@@ -12,7 +12,10 @@ func TestEnvelope_HelloRoundTrip(t *testing.T) {
 		OS:             "linux",
 		Arch:           "amd64",
 		RuntimeVersion: "0.1.0",
-		Capabilities:   Capabilities{Terminal: false, Filesystem: false, Services: false},
+		Capabilities: Capabilities{
+			Terminal: false, Filesystem: false, Services: false,
+			OSUsername: "brian", HomeDir: "/home/brian", Shells: []string{"/bin/bash", "/bin/sh"},
+		},
 	}
 	payload, err := json.Marshal(hello)
 	if err != nil {

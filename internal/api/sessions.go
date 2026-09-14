@@ -134,6 +134,15 @@ func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 			return
 		}
 
+		// The OS user is not stored on the Project — a runtime always runs
+		// as one fixed user (ADR-014), reported live in its capabilities.
+		rt, err := runtimes.GetByID(ctx, db.Pool, project.RuntimeID)
+		if err != nil {
+			_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "failed to look up runtime")
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up runtime"})
+			return
+		}
+
 		if err := sessions.MarkStarting(ctx, db.Pool, sess.ID); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update session"})
 			return
@@ -144,7 +153,7 @@ func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 			SessionID: sess.ID,
 			Shell:     project.Shell,
 			Dir:       project.WorkingDirectory,
-			OSUser:    project.OSUser,
+			OSUser:    rt.Capabilities.OSUsername,
 			Env:       project.Environment,
 			Cols:      uint16(req.Cols),
 			Rows:      uint16(req.Rows),

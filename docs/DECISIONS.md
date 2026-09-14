@@ -290,3 +290,58 @@ before anyone can log in. No transition period — this is a pre-1.0
 project with no installed base to migrate. Release tarball
 (`.github/workflows/release.yml`) and `install.sh` now build/ship/install
 three binaries instead of two.
+
+## ADR-020 — Project setup UI: runtime-reported home dir/shells replace typed `os_user`/shell path/cwd
+
+Date: 2026-09-13
+
+**Decision.** A Project's `os_user` column is dropped (superseding the
+"Project's `os_user`" framing in ADR-014, which still holds — `session.open`
+still carries `os_user` and the runtime still refuses a mismatch — only the
+source changes). `protocol.Capabilities` (`internal/protocol/protocol.go`)
+gains `os_username`, `home_dir`, and `shells`, populated once at connect
+time from `os/user.Current()` and a plain-text parse of `/etc/shells`
+(`internal/agent/agent.go`) — a runtime always runs as one fixed OS user
+(ADR-014's premise), so that identity is reported live instead of typed into
+a Project. `internal/api/sessions.go` sources `session.open`'s `os_user`
+from `runtimes.GetByID(...).Capabilities.OSUsername` at session-create time.
+
+Project create/update now validate against that live state instead of
+trusting client-typed strings: `shell` must be a member of the runtime's
+reported `shells`; `working_directory` must resolve inside the runtime's
+`home_dir`, checked with a cheap `filepath.Rel` early-rejection followed by
+a real `stat` `file.command` RPC to the runtime for the actual containment
+guarantee; both create and update require the target runtime to be online
+and to have reported a home directory, re-checked on every update (even one
+that only renames the project).
+
+The Project setup UI (`web/static/projects.html`, `project.html`) replaces
+the "OS user" text input (removed entirely) and the free-text shell/cwd
+inputs with a shell `<select>` populated from the runtime's reported
+`shells`, and a directory-picker modal (`DS.browseDirectory` in
+`web/static/js/dialogs.js`) that browses the runtime's home directory. The
+picker is a new pair of Control Server endpoints,
+`GET/POST /api/v1/runtimes/{runtimeID}/browse[/mkdir]`
+(`internal/api/runtime_browse.go`) — reusing the existing `file.command`
+RPC and its runtime-side `os.Root` containment
+(`internal/filesystem`, ADR-018) with `root` set to the runtime's home
+directory instead of a Project's working directory. No new protocol message
+types were needed.
+
+**Why runtime-reported instead of client-typed.** The runtime already knows
+its own OS user, home directory, and available shells; asking the browser
+user to type them invites typos that only surface as a cryptic PTY-start
+failure (ADR-014) or a session that can't find its working directory.
+Reusing `file.command` for the picker, rather than inventing a
+directory-listing RPC, means the picker inherits the Files feature's
+existing containment guarantees for free.
+
+**Consequence.** `migrations/0008_drop_project_os_user.up.sql` drops the
+column outright (down migration re-adds it `NOT NULL DEFAULT ''` — no
+backfill; this is a pre-1.0 project with no installed base to migrate, same
+posture as ADR-019). A Project's `os_user` is gone from the API request and
+response shapes; existing API clients sending it now have that field
+silently ignored on decode. Any signed-in session may browse any runtime's
+home directory (matching `GET /api/v1/runtimes`' existing visibility) —
+runtimes are shared infrastructure, not owned per-user, so this is not a new
+privilege boundary.

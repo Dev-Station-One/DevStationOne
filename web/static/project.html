@@ -321,7 +321,6 @@
                 <div class="card-body">
                   <dl class="row mb-0">
                     <dt class="col-3">Runtime</dt><dd class="col-9" id="view-runtime">—</dd>
-                    <dt class="col-3">OS user</dt><dd class="col-9" id="view-os-user">—</dd>
                     <dt class="col-3">Shell</dt><dd class="col-9" id="view-shell">—</dd>
                     <dt class="col-3">Working directory</dt><dd class="col-9" id="view-cwd">—</dd>
                     <dt class="col-3">Environment</dt><dd class="col-9"><pre class="mb-0" id="view-env">—</pre></dd>
@@ -340,17 +339,16 @@
                       <label class="form-label">Runtime</label>
                       <select id="edit-runtime" class="form-select"></select>
                     </div>
-                    <div class="col-12 col-md-4">
-                      <label class="form-label">OS user</label>
-                      <input id="edit-os-user" type="text" class="form-control">
-                    </div>
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-6">
                       <label class="form-label">Shell</label>
-                      <input id="edit-shell" type="text" class="form-control">
+                      <select id="edit-shell" class="form-select"></select>
                     </div>
-                    <div class="col-12 col-md-4">
+                    <div class="col-12 col-md-6">
                       <label class="form-label">Working directory</label>
-                      <input id="edit-cwd" type="text" class="form-control">
+                      <div class="input-group">
+                        <input id="edit-cwd" type="text" class="form-control" readonly>
+                        <button id="edit-cwd-browse" class="btn btn-outline-secondary" type="button">Browse…</button>
+                      </div>
                     </div>
                     <div class="col-12">
                       <label class="form-label">Environment <span class="text-secondary">(one KEY=VALUE per line)</span></label>
@@ -360,6 +358,7 @@
                   <div id="edit-error" class="alert alert-danger mt-3" hidden></div>
                   <button id="save-btn" class="btn btn-primary mt-3">Save</button>
                   <button id="cancel-btn" class="btn btn-link mt-3">Cancel</button>
+                  <div id="edit-offline-hint" class="text-secondary mt-2" hidden>Runtime is offline — save is disabled until it reconnects.</div>
                 </div>
               </div>
             </div>
@@ -425,13 +424,29 @@
       $('#project-name').text(project.name);
       $('#project-summary').text(
         project.name + ' · ' + (runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id) +
-        ' · ' + project.os_user + ' · ' + project.working_directory
+        ' · ' + project.working_directory
       );
       $('#view-runtime').text(runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id);
-      $('#view-os-user').text(project.os_user);
       $('#view-shell').text(project.shell);
       $('#view-cwd').text(project.working_directory);
       $('#view-env').text(formatEnvironment(project.environment) || '—');
+    }
+
+    // Populates the edit form's shell dropdown from the given runtime's live
+    // capabilities and gates Save on it being online, mirroring
+    // projects.html's create form.
+    function populateEditShell(runtimeId, selected) {
+      var rt = runtimesById[runtimeId];
+      var $shell = $('#edit-shell').empty();
+      var shells = (rt && rt.capabilities && rt.capabilities.shells) || [];
+      shells.forEach(function (s) { $shell.append($('<option>').val(s).text(s)); });
+      if (selected && shells.indexOf(selected) === -1) {
+        $shell.append($('<option>').val(selected).text(selected + ' (no longer reported)'));
+      }
+      $shell.val(selected || '');
+      var online = !!(rt && rt.online);
+      $('#edit-shell, #edit-cwd-browse, #save-btn').prop('disabled', !online);
+      $('#edit-offline-hint').prop('hidden', online);
     }
 
     function loadRuntimes() {
@@ -463,12 +478,25 @@
     $('#edit-btn').on('click', function () {
       $('#edit-name').val(project.name);
       $('#edit-runtime').val(project.runtime_id);
-      $('#edit-os-user').val(project.os_user);
-      $('#edit-shell').val(project.shell);
       $('#edit-cwd').val(project.working_directory);
       $('#edit-env').val(formatEnvironment(project.environment));
+      populateEditShell(project.runtime_id, project.shell);
       $('#view-card').prop('hidden', true);
       $('#edit-card').prop('hidden', false);
+    });
+
+    $('#edit-runtime').on('change', function () {
+      $('#edit-cwd').val('');
+      populateEditShell($(this).val(), null);
+    });
+
+    $('#edit-cwd-browse').on('click', async function () {
+      var rt = runtimesById[$('#edit-runtime').val()];
+      if (!rt) return;
+      var path = await DS.browseDirectory(rt.id);
+      if (path === null) return;
+      var home = rt.capabilities.home_dir;
+      $('#edit-cwd').val(path === '.' ? home : home + '/' + path);
     });
 
     $('#cancel-btn').on('click', function () {
@@ -481,9 +509,8 @@
       var body = {
         name: $('#edit-name').val().trim(),
         runtime_id: $('#edit-runtime').val(),
-        os_user: $('#edit-os-user').val().trim(),
         working_directory: $('#edit-cwd').val().trim(),
-        shell: $('#edit-shell').val().trim(),
+        shell: $('#edit-shell').val(),
         environment: parseEnvironment($('#edit-env').val())
       };
       $.ajax({

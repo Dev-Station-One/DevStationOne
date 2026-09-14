@@ -46,8 +46,10 @@ func testProject(t *testing.T, pool *pgxpool.Pool) (projectID, userID string) {
 		t.Fatalf("create runtime: %v", err)
 	}
 	p, err := projects.Create(ctx, pool, projects.Fields{
-		Name: "App", RuntimeID: rt.ID, OSUser: "brian",
-		WorkingDirectory: "/home/brian/app", Shell: "/bin/bash",
+		Name:             "App",
+		RuntimeID:        rt.ID,
+		WorkingDirectory: "/home/brian/app",
+		Shell:            "/bin/bash",
 	}, u.ID)
 	if err != nil {
 		t.Fatalf("create project: %v", err)

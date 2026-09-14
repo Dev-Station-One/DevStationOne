@@ -229,6 +229,94 @@ paths:
           description: Administrator access required
         "404":
           description: Runtime not found
+  /api/v1/runtimes/{runtimeID}/browse:
+    get:
+      summary: List a directory under a runtime's home directory
+      description: >
+        For the Project setup UI's directory picker, used before a Project
+        exists. Every call is a live RPC to the runtime (the same
+        file.command the Files endpoints use), rooted at the runtime's
+        reported home directory instead of a Project's working directory.
+        Open to any authenticated user, matching GET /runtimes' visibility —
+        runtimes are shared infrastructure, not owned per-user. See
+        docs/PROTOCOL.md.
+      tags: [Runtimes]
+      operationId: browseRuntime
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: runtimeID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          description: Directory to list, relative to the runtime's home directory. "." lists the home directory itself.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The directory's entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FileInfo"
+        "400":
+          description: Invalid path (empty, absolute, or escaping the home directory)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Runtime not found
+        "409":
+          description: The runtime is offline, or has not reported a home directory yet
+        "502":
+          description: The runtime could not read the directory
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/runtimes/{runtimeID}/browse/mkdir:
+    post:
+      summary: Create a directory under a runtime's home directory
+      description: For the directory picker's "new folder" action. Fails if the directory already exists.
+      tags: [Runtimes]
+      operationId: browseRuntimeMkdir
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: runtimeID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                  description: Directory to create, relative to the runtime's home directory.
+      responses:
+        "204":
+          description: Created
+        "400":
+          description: Invalid or missing path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Runtime not found
+        "409":
+          description: The runtime is offline, or has not reported a home directory yet
+        "502":
+          description: The runtime could not create the directory (e.g. it already exists)
+        "504":
+          description: The runtime did not respond within the timeout
   /api/v1/projects:
     get:
       summary: List projects visible to the current user
@@ -268,9 +356,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Project"
         "400":
-          description: Invalid request body, or the referenced runtime does not exist or is revoked
+          description: Invalid request body; the referenced runtime does not exist or is revoked; shell is not in the runtime's reported shells; or working_directory is not contained in (or does not exist under) the runtime's home_dir
         "401":
           description: Not authenticated
+        "409":
+          description: The referenced runtime is offline, or has not reported a home directory yet
   /api/v1/projects/{projectID}:
     get:
       summary: Get a project
@@ -321,11 +411,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/Project"
         "400":
-          description: Invalid request body, or the referenced runtime does not exist or is revoked
+          description: Invalid request body; the referenced runtime does not exist or is revoked; shell is not in the runtime's reported shells; or working_directory is not contained in (or does not exist under) the runtime's home_dir
         "401":
           description: Not authenticated
         "404":
           description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime (whether or not runtime_id changed in this request) is offline, or has not reported a home directory yet — re-checked on every patch, not only when runtime-derived fields change
     delete:
       summary: Delete a project
       tags: [Projects]
@@ -1428,6 +1520,17 @@ components:
           type: array
           items:
             type: string
+        os_username:
+          type: string
+          description: OS user the runtime process runs as. A runtime always runs as one fixed user (ADR-014), reported live instead of typed into a Project.
+        home_dir:
+          type: string
+          description: Home directory of os_username. Root for the Project setup directory picker (GET/POST .../runtimes/{runtimeID}/browse*) and for working_directory containment.
+        shells:
+          type: array
+          items:
+            type: string
+          description: Login shells parsed from /etc/shells on the runtime host. Empty if unreadable — no fallback list is offered.
     Runtime:
       type: object
       required: [id, name, hostname, os, arch, runtime_version, capabilities, status, online, enrolled_at, last_seen_at, revoked_at, created_at]
@@ -1475,21 +1578,24 @@ components:
               description: Raw enrollment token, shown exactly once.
     ProjectFields:
       type: object
-      required: [name, runtime_id, os_user, working_directory, shell]
+      required: [name, runtime_id, working_directory, shell]
       properties:
         name:
           type: string
         runtime_id:
           type: string
-        os_user:
-          type: string
-          description: OS user the runtime executes this Project's sessions as.
         working_directory:
           type: string
-          description: Absolute path used as the authoritative session working directory.
+          description: >
+            Absolute path used as the authoritative session working directory.
+            Must resolve inside the target runtime's capabilities.home_dir;
+            the server re-validates this against the runtime's real
+            filesystem (a "stat" file.command RPC), not just string
+            containment. The runtime's OS user identity is not part of this
+            resource — see RuntimeCapabilities.os_username.
         shell:
           type: string
-          description: Absolute path to the shell binary used for interactive sessions.
+          description: Absolute path to the shell binary used for interactive sessions. Must be one of the target runtime's currently-reported capabilities.shells.
         environment:
           type: object
           additionalProperties:
@@ -1497,13 +1603,11 @@ components:
           description: Environment variables applied to the Project's sessions.
     ProjectPatch:
       type: object
-      description: Same properties as ProjectFields; only the fields present in the request are changed.
+      description: Same properties as ProjectFields; only the fields present in the request are changed. Validation (runtime online, shell allowlist, working_directory containment) re-runs on every patch, even one that only renames the project.
       properties:
         name:
           type: string
         runtime_id:
-          type: string
-        os_user:
           type: string
         working_directory:
           type: string

@@ -55,7 +55,6 @@ func TestProjectLifecycle(t *testing.T) {
 	fields := Fields{
 		Name:             "My Application",
 		RuntimeID:        runtimeID,
-		OSUser:           "brian",
 		WorkingDirectory: "/home/brian/src/my-application",
 		Shell:            "/bin/bash",
 		Environment:      map[string]string{"NODE_ENV": "development"},
@@ -76,7 +75,7 @@ func TestProjectLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if found.Name != fields.Name || found.OSUser != fields.OSUser {
+	if found.Name != fields.Name || found.WorkingDirectory != fields.WorkingDirectory {
 		t.Fatalf("found = %+v, want fields %+v", found, fields)
 	}
 

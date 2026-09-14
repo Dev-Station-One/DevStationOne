@@ -60,6 +60,13 @@ Runtime registration advertises:
 - services
 - database drivers
 - systemd availability
+- `os_username`, `home_dir` — the OS user the runtime process runs as and
+  its home directory (a runtime always runs as one fixed user, ADR-014).
+  Replaces the old per-Project `os_user`: the Control Server reads it live
+  from the runtime instead of trusting a client-typed value.
+- `shells` — login shells parsed from `/etc/shells` on the runtime host, so
+  the Project setup UI can offer a real dropdown instead of a free-text
+  path. Empty if unreadable; no fallback list.
 
 ## Versioning
 
@@ -220,6 +227,13 @@ are root-relative and validated with the same `filesystem.Clean` rule on
 both sides (reject empty/absolute/`..`), then the runtime performs every
 operation through an `os.Root` opened at `root`, which also refuses
 symlinks escaping the root (SECURITY.md, ADR-018).
+
+The Project setup UI's directory picker (ADR-020) reuses `file.command`
+unchanged for the `list`/`mkdir`/`stat` actions, with one difference: `root`
+is the runtime's reported home directory (`hello.Capabilities.HomeDir`)
+instead of a Project's working directory, since there is no Project yet at
+that point in the flow. No new message type exists for this — same
+envelope, same runtime-side containment, different source for `root`.
 
 Transfer encoding: `data` (write payloads and read results) is the file's
 bytes base64-encoded inside the JSON envelope by `encoding/json`. A file is

@@ -25,8 +25,10 @@ import (
 // startFakeRuntime dials the Control Server's runtime WebSocket endpoint
 // using the real agent connection + session-manager code (so PTYs it
 // starts are real OS PTYs, not simulated), and keeps it connected until
-// ctx is cancelled.
-func startFakeRuntime(t *testing.T, ctx context.Context, serverURL, token string) {
+// ctx is cancelled. osUsername/homeDir/shells populate Capabilities so
+// Project setup validation (offline gate, shell allowlist, home-dir
+// containment) has something real to check against.
+func startFakeRuntime(t *testing.T, ctx context.Context, serverURL, token, osUsername, homeDir string, shells []string) {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	hello := protocol.HelloPayload{
@@ -34,7 +36,12 @@ func startFakeRuntime(t *testing.T, ctx context.Context, serverURL, token string
 		OS:             "linux",
 		Arch:           "amd64",
 		RuntimeVersion: "test",
-		Capabilities:   protocol.Capabilities{Terminal: true},
+		Capabilities: protocol.Capabilities{
+			Terminal:   true,
+			OSUsername: osUsername,
+			HomeDir:    homeDir,
+			Shells:     shells,
+		},
 	}
 	mgr := agent.NewManager(logger)
 	go func() {
@@ -84,7 +91,9 @@ func sessionsTestSetupIn(t *testing.T, workingDir string) (router http.Handler, 
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	startFakeRuntime(t, runCtx, server.URL, created.Token)
+	// homeDir == workingDir here so the Project's working directory is
+	// trivially "contained" (rel = ".") without needing a second temp dir.
+	startFakeRuntime(t, runCtx, server.URL, created.Token, cur.Username, workingDir, []string{"/bin/sh"})
 
 	pollUntil(t, 3*time.Second, func() bool {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes", nil)
@@ -102,8 +111,10 @@ func sessionsTestSetupIn(t *testing.T, workingDir string) (router http.Handler, 
 	})
 
 	projReq, _ := json.Marshal(projectRequest{
-		Name: "App", RuntimeID: created.ID, OSUser: cur.Username,
-		WorkingDirectory: workingDir, Shell: "/bin/sh",
+		Name:             "App",
+		RuntimeID:        created.ID,
+		WorkingDirectory: workingDir,
+		Shell:            "/bin/sh",
 	})
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projReq))
 	req.AddCookie(adminCookie)

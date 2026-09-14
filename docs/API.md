@@ -33,6 +33,9 @@ POST   /api/v1/runtimes
 GET    /api/v1/runtimes
 POST   /api/v1/runtimes/{runtimeID}/revoke
 
+GET    /api/v1/runtimes/{runtimeID}/browse
+POST   /api/v1/runtimes/{runtimeID}/browse/mkdir
+
 WSS    /api/v1/runtimes/connect
 ```
 
@@ -47,6 +50,18 @@ the token is shown exactly once and only its SHA-256 hash is stored.
 outbound WebSocket connection, authenticating with `Authorization: Bearer
 <enrollment token>` instead of a session cookie. See `docs/PROTOCOL.md` for
 the message envelope exchanged on that connection.
+
+`GET .../browse` and `POST .../browse/mkdir` back the Project setup UI's
+directory picker — used before a Project exists, so there is no Project
+working directory to root the browse in. Both require only an authenticated
+session (same visibility as `GET /api/v1/runtimes`: runtimes are shared
+infrastructure, not owned per-user) and issue a `file.command` RPC to the
+runtime with `root` set to the runtime's reported home directory
+(`capabilities.home_dir`) instead of a Project's working directory — the
+same RPC, and the same runtime-side `os.Root` containment, that the Files
+endpoints use (see Files below and `docs/PROTOCOL.md`). `409` if the runtime
+is offline or hasn't reported a home directory yet (a runtime built before
+this reported nothing here).
 
 ## Projects
 
@@ -67,9 +82,29 @@ ownership (ADR-013):
 administrators see and manage every project, other users only ones they
 created (`created_by`). A project the caller does not own responds `404`,
 the same as one that does not exist, so the response never confirms another
-user's project. `runtime_id` is validated server-side against
-`GET /api/v1/runtimes` and rejected (`400`) if the runtime does not exist or
-is revoked.
+user's project.
+
+A Project has no `os_user` field. A runtime always runs as one fixed OS user
+(ADR-014), reported live as `capabilities.os_username` on the runtime
+resource — it is never client-supplied. Terminal sessions source it from
+there at open time (see Sessions below), not from the Project.
+
+Create and update (`POST`/`PATCH`) validate against the target runtime's
+live state, re-checked on every request (including a `PATCH` that only
+renames the project — the runtime-offline gate applies to any edit, not only
+ones touching runtime-derived fields):
+- `runtime_id` must name an existing, non-revoked runtime that is currently
+  connected and has reported a home directory (`400` not-found/revoked,
+  `409` offline or no home directory yet).
+- `shell` must be one of the runtime's currently-reported
+  `capabilities.shells` (`400` otherwise) — parsed from `/etc/shells` on the
+  runtime host; a client cannot submit an arbitrary shell path.
+- `working_directory` must resolve inside the runtime's
+  `capabilities.home_dir` and actually exist there. The server does a cheap
+  `filepath.Rel` early-rejection, then confirms with a real `stat`
+  `file.command` RPC to the runtime — the same `os.Root` containment the
+  Files endpoints use, not a second path-safety implementation (`400` if
+  outside the home directory or missing).
 
 ## Sessions
 

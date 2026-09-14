@@ -86,7 +86,10 @@ Acceptance:
 - view/edit project
 - authorization prevents cross-user access
 
-**Status: Complete.**
+**Status: Complete.** ("user selection" above is superseded by ADR-020: the
+runtime reports its OS user live instead of a typed `os_user` field; working
+directory and shell are now a runtime-backed directory picker and dropdown,
+not free text — see docs/API.md "Projects" and docs/DECISIONS.md ADR-020.)
 
 ## Slice 4 — Persistent PTY sessions
 

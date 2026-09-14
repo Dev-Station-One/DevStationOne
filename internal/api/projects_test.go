@@ -8,12 +8,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"devstationone/internal/auth"
 )
 
-func createRuntimeAs(t *testing.T, router http.Handler, cookie *http.Cookie, name string) string {
+// createRuntimeAs registers a runtime record but does not connect it — the
+// runtime stays offline. Use createOnlineRuntime when a test needs to
+// create or edit a project against it.
+func createRuntimeAs(t *testing.T, router http.Handler, cookie *http.Cookie, name string) (id, token string) {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"name": name})
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/runtimes", bytes.NewReader(body))
@@ -27,15 +32,47 @@ func createRuntimeAs(t *testing.T, router http.Handler, cookie *http.Cookie, nam
 	if err := json.NewDecoder(rec.Body).Decode(&created); err != nil {
 		t.Fatalf("decode runtime: %v", err)
 	}
-	return created.ID
+	return created.ID, created.Token
 }
 
-func projectBody(runtimeID string) []byte {
+// createOnlineRuntime registers a runtime, connects a fake agent advertising
+// homeDir as its home directory and "/bin/bash" as its only shell, and waits
+// until the Control Server sees it online — Project create/update now
+// require a live, capability-reporting runtime.
+func createOnlineRuntime(t *testing.T, router http.Handler, server *httptest.Server, cookie *http.Cookie, name, homeDir string) string {
+	t.Helper()
+	id, token := createRuntimeAs(t, router, cookie, name)
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	startFakeRuntime(t, runCtx, server.URL, token, "test-user", homeDir, []string{"/bin/bash"})
+
+	pollUntil(t, 3*time.Second, func() bool {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes", nil)
+		req.AddCookie(cookie)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		var list []runtimeResponse
+		json.NewDecoder(rec.Body).Decode(&list)
+		for _, rt := range list {
+			if rt.ID == id && rt.Online {
+				return true
+			}
+		}
+		return false
+	})
+	return id
+}
+
+// projectBody builds a create/update request for a project rooted at
+// homeDir/src/my-application, which the caller must create on disk before
+// use — Project creation now stats it through the runtime's real file
+// manager.
+func projectBody(runtimeID, homeDir string) []byte {
 	body, _ := json.Marshal(projectRequest{
 		Name:             "My Application",
 		RuntimeID:        runtimeID,
-		OSUser:           "brian",
-		WorkingDirectory: "/home/brian/src/my-application",
+		WorkingDirectory: filepath.Join(homeDir, "src", "my-application"),
 		Shell:            "/bin/bash",
 		Environment:      map[string]string{"NODE_ENV": "development"},
 	})
@@ -58,15 +95,21 @@ func TestProjectHTTP_CreateListScopedByOwner(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	router := NewRouter(db, logger, t.TempDir())
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
 
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
 	aliceCookie := loginAs(t, router, "alice@example.com", "password123")
 	bobCookie := loginAs(t, router, "bob@example.com", "password123")
 
-	runtimeID := createRuntimeAs(t, router, adminCookie, "dev01")
+	homeDir := t.TempDir()
+	runtimeID := createOnlineRuntime(t, router, server, adminCookie, "dev01", homeDir)
+	if err := os.MkdirAll(filepath.Join(homeDir, "src", "my-application"), 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
 
 	// Alice creates a project.
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projectBody(runtimeID)))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projectBody(runtimeID, homeDir)))
 	req.AddCookie(aliceCookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -143,10 +186,17 @@ func TestProjectHTTP_UpdateAndDelete(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	router := NewRouter(db, logger, t.TempDir())
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
-	runtimeID := createRuntimeAs(t, router, adminCookie, "dev01")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projectBody(runtimeID)))
+	homeDir := t.TempDir()
+	runtimeID := createOnlineRuntime(t, router, server, adminCookie, "dev01", homeDir)
+	if err := os.MkdirAll(filepath.Join(homeDir, "src", "my-application"), 0o755); err != nil {
+		t.Fatalf("mkdir project dir: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projectBody(runtimeID, homeDir)))
 	req.AddCookie(adminCookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -163,7 +213,7 @@ func TestProjectHTTP_UpdateAndDelete(t *testing.T) {
 	}
 	var patched projectResponse
 	json.NewDecoder(rec.Body).Decode(&patched)
-	if patched.Name != "Renamed" || patched.OSUser != created.OSUser {
+	if patched.Name != "Renamed" || patched.WorkingDirectory != created.WorkingDirectory {
 		t.Fatalf("patched = %+v, want name Renamed with other fields preserved", patched)
 	}
 
@@ -206,7 +256,7 @@ func TestProjectHTTP_ValidatesRuntimeAndFields(t *testing.T) {
 	}
 
 	// Runtime that does not exist.
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projectBody("00000000-0000-0000-0000-000000000000")))
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects", bytes.NewReader(projectBody("00000000-0000-0000-0000-000000000000", t.TempDir())))
 	req.AddCookie(adminCookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)

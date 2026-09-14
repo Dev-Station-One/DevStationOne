@@ -4,18 +4,20 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"devstationone/internal/database"
 	"devstationone/internal/projects"
+	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 )
 
 type projectRequest struct {
 	Name             string            `json:"name"`
 	RuntimeID        string            `json:"runtime_id"`
-	OSUser           string            `json:"os_user"`
 	WorkingDirectory string            `json:"working_directory"`
 	Shell            string            `json:"shell"`
 	Environment      map[string]string `json:"environment"`
@@ -26,7 +28,6 @@ type projectRequest struct {
 type projectPatchRequest struct {
 	Name             *string            `json:"name"`
 	RuntimeID        *string            `json:"runtime_id"`
-	OSUser           *string            `json:"os_user"`
 	WorkingDirectory *string            `json:"working_directory"`
 	Shell            *string            `json:"shell"`
 	Environment      *map[string]string `json:"environment"`
@@ -36,7 +37,6 @@ type projectResponse struct {
 	ID               string            `json:"id"`
 	Name             string            `json:"name"`
 	RuntimeID        string            `json:"runtime_id"`
-	OSUser           string            `json:"os_user"`
 	WorkingDirectory string            `json:"working_directory"`
 	Shell            string            `json:"shell"`
 	Environment      map[string]string `json:"environment"`
@@ -54,7 +54,6 @@ func toProjectResponse(p projects.Project) projectResponse {
 		ID:               p.ID,
 		Name:             p.Name,
 		RuntimeID:        p.RuntimeID,
-		OSUser:           p.OSUser,
 		WorkingDirectory: p.WorkingDirectory,
 		Shell:            p.Shell,
 		Environment:      env,
@@ -72,8 +71,6 @@ func validateProjectFields(f projects.Fields) string {
 		return "name is required"
 	case strings.TrimSpace(f.RuntimeID) == "":
 		return "runtime_id is required"
-	case strings.TrimSpace(f.OSUser) == "":
-		return "os_user is required"
 	case strings.TrimSpace(f.WorkingDirectory) == "":
 		return "working_directory is required"
 	case !strings.HasPrefix(f.WorkingDirectory, "/"):
@@ -86,27 +83,72 @@ func validateProjectFields(f projects.Fields) string {
 	return ""
 }
 
-// resolveRuntime confirms runtimeID names an existing, non-revoked runtime.
-// Runtime IDs are client-supplied and must never be trusted without a
-// server-side lookup.
-func resolveRuntime(w http.ResponseWriter, db *database.DB, r *http.Request, runtimeID string) bool {
+// resolveRuntime confirms runtimeID names an existing, non-revoked, online
+// runtime that has reported a home directory, and returns its live
+// connection alongside its record. Runtime IDs are client-supplied and must
+// never be trusted without a server-side lookup; a Project can only be
+// created or edited while its runtime is reachable, since setup now depends
+// on live runtime state (available shells, home directory) rather than
+// client-typed values.
+func resolveRuntime(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry, runtimeID string) (runtimes.Runtime, runtimes.Conn, bool) {
 	rt, err := runtimes.GetByID(r.Context(), db.Pool, runtimeID)
 	if errors.Is(err, runtimes.ErrNotFound) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "runtime not found"})
-		return false
+		return runtimes.Runtime{}, nil, false
 	}
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up runtime"})
-		return false
+		return runtimes.Runtime{}, nil, false
 	}
 	if rt.Status == runtimes.StatusRevoked {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "runtime is revoked"})
+		return runtimes.Runtime{}, nil, false
+	}
+	if rt.Capabilities.HomeDir == "" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "runtime has not reported a home directory yet"})
+		return runtimes.Runtime{}, nil, false
+	}
+	conn, online := registry.Get(runtimeID)
+	if !online {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "runtime is offline"})
+		return runtimes.Runtime{}, nil, false
+	}
+	return rt, conn, true
+}
+
+// validateShell confirms shell is one the runtime actually reported (parsed
+// from /etc/shells) — a client must not be able to type an arbitrary path.
+func validateShell(w http.ResponseWriter, rt runtimes.Runtime, shell string) bool {
+	if slices.Contains(rt.Capabilities.Shells, shell) {
+		return true
+	}
+	writeJSON(w, http.StatusBadRequest, map[string]string{"error": "shell is not available on this runtime"})
+	return false
+}
+
+// validateWorkingDirectory confirms dir is contained within the runtime's
+// home directory and really exists there. The Rel check is a cheap early
+// rejection; the "stat" RPC is the real check, re-using the same os.Root
+// containment (internal/filesystem) the runtime already enforces for file
+// operations — no second path-safety implementation.
+func validateWorkingDirectory(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, homeDir, dir string) bool {
+	rel, err := filepath.Rel(homeDir, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "working_directory must be inside the runtime's home directory"})
+		return false
+	}
+	result, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{Action: "stat", Root: homeDir, Path: rel})
+	if !ok {
+		return false
+	}
+	if result.Info == nil || result.Info.Type != "dir" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "working_directory does not exist"})
 		return false
 	}
 	return true
 }
 
-func createProjectHandler(db *database.DB) http.HandlerFunc {
+func createProjectHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user, _ := userFromContext(r.Context())
 
@@ -118,7 +160,6 @@ func createProjectHandler(db *database.DB) http.HandlerFunc {
 		fields := projects.Fields{
 			Name:             req.Name,
 			RuntimeID:        req.RuntimeID,
-			OSUser:           req.OSUser,
 			WorkingDirectory: req.WorkingDirectory,
 			Shell:            req.Shell,
 			Environment:      req.Environment,
@@ -127,7 +168,14 @@ func createProjectHandler(db *database.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 			return
 		}
-		if !resolveRuntime(w, db, r, fields.RuntimeID) {
+		rt, conn, ok := resolveRuntime(w, r, db, registry, fields.RuntimeID)
+		if !ok {
+			return
+		}
+		if !validateShell(w, rt, fields.Shell) {
+			return
+		}
+		if !validateWorkingDirectory(w, r, conn, rt.Capabilities.HomeDir, fields.WorkingDirectory) {
 			return
 		}
 
@@ -198,7 +246,7 @@ func getProjectHandler(db *database.DB) http.HandlerFunc {
 	}
 }
 
-func patchProjectHandler(db *database.DB) http.HandlerFunc {
+func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		existing, ok := authorizedProject(w, r, db, r.PathValue("projectID"))
 		if !ok {
@@ -214,7 +262,6 @@ func patchProjectHandler(db *database.DB) http.HandlerFunc {
 		fields := projects.Fields{
 			Name:             existing.Name,
 			RuntimeID:        existing.RuntimeID,
-			OSUser:           existing.OSUser,
 			WorkingDirectory: existing.WorkingDirectory,
 			Shell:            existing.Shell,
 			Environment:      existing.Environment,
@@ -224,9 +271,6 @@ func patchProjectHandler(db *database.DB) http.HandlerFunc {
 		}
 		if req.RuntimeID != nil {
 			fields.RuntimeID = *req.RuntimeID
-		}
-		if req.OSUser != nil {
-			fields.OSUser = *req.OSUser
 		}
 		if req.WorkingDirectory != nil {
 			fields.WorkingDirectory = *req.WorkingDirectory
@@ -242,10 +286,18 @@ func patchProjectHandler(db *database.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
 			return
 		}
-		if fields.RuntimeID != existing.RuntimeID {
-			if !resolveRuntime(w, db, r, fields.RuntimeID) {
-				return
-			}
+		// Re-validated on every patch, not just when runtime_id/shell/
+		// working_directory change: the runtime-offline gate must hold for
+		// any edit, not only ones that touch runtime-derived fields.
+		rt, conn, ok := resolveRuntime(w, r, db, registry, fields.RuntimeID)
+		if !ok {
+			return
+		}
+		if !validateShell(w, rt, fields.Shell) {
+			return
+		}
+		if !validateWorkingDirectory(w, r, conn, rt.Capabilities.HomeDir, fields.WorkingDirectory) {
+			return
 		}
 
 		p, err := projects.Update(r.Context(), db.Pool, existing.ID, fields)

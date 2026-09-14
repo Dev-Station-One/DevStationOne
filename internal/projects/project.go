@@ -16,13 +16,14 @@ import (
 // ErrNotFound is returned when a lookup finds no matching project.
 var ErrNotFound = errors.New("not found")
 
-// Project is a stored execution context: the runtime, OS user, working
-// directory, shell, and environment a Project's sessions run with.
+// Project is a stored execution context: the runtime, working directory,
+// shell, and environment a Project's sessions run with. The OS user is not
+// stored here — a runtime always runs as one fixed OS user (ADR-014), so
+// it's reported live via runtimes.Runtime.Capabilities.OSUsername instead.
 type Project struct {
 	ID               string
 	Name             string
 	RuntimeID        string
-	OSUser           string
 	WorkingDirectory string
 	Shell            string
 	Environment      map[string]string
@@ -36,18 +37,17 @@ type Project struct {
 type Fields struct {
 	Name             string
 	RuntimeID        string
-	OSUser           string
 	WorkingDirectory string
 	Shell            string
 	Environment      map[string]string
 }
 
-const projectColumns = `id, name, runtime_id, os_user, working_directory, shell, environment, created_by, created_at, updated_at`
+const projectColumns = `id, name, runtime_id, working_directory, shell, environment, created_by, created_at, updated_at`
 
 func scanProject(row pgx.Row) (Project, error) {
 	var p Project
 	var env []byte
-	err := row.Scan(&p.ID, &p.Name, &p.RuntimeID, &p.OSUser, &p.WorkingDirectory, &p.Shell, &env, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.Name, &p.RuntimeID, &p.WorkingDirectory, &p.Shell, &env, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		return Project{}, err
 	}
@@ -66,10 +66,10 @@ func Create(ctx context.Context, pool *pgxpool.Pool, f Fields, createdByUserID s
 		return Project{}, err
 	}
 	p, err := scanProject(pool.QueryRow(ctx, `
-		INSERT INTO projects (name, runtime_id, os_user, working_directory, shell, environment, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
+		INSERT INTO projects (name, runtime_id, working_directory, shell, environment, created_by)
+		VALUES ($1, $2, $3, $4, $5::jsonb, $6)
 		RETURNING `+projectColumns,
-		f.Name, f.RuntimeID, f.OSUser, f.WorkingDirectory, f.Shell, env, createdByUserID,
+		f.Name, f.RuntimeID, f.WorkingDirectory, f.Shell, env, createdByUserID,
 	))
 	if err != nil {
 		return Project{}, err
@@ -129,14 +129,13 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id string, f Fields) (Proje
 		UPDATE projects SET
 			name = $2,
 			runtime_id = $3,
-			os_user = $4,
-			working_directory = $5,
-			shell = $6,
-			environment = $7::jsonb,
+			working_directory = $4,
+			shell = $5,
+			environment = $6::jsonb,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING `+projectColumns,
-		id, f.Name, f.RuntimeID, f.OSUser, f.WorkingDirectory, f.Shell, env,
+		id, f.Name, f.RuntimeID, f.WorkingDirectory, f.Shell, env,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Project{}, ErrNotFound
