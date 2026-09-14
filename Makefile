@@ -1,4 +1,4 @@
-.PHONY: build test test-install vet fmt lint openapi-lint db-up dbtest-up db-down run-server run-runtime
+.PHONY: build test test-install vet fmt lint openapi-lint db-up dbtest-postgres-up dbtest-up db-down run-server run-runtime
 
 build:
 	go build ./...
@@ -26,6 +26,11 @@ openapi-lint:
 
 db-up:
 	docker compose up -d postgres
+
+# Separate Postgres for `go test` (TRUNCATEs every run) so it never touches
+# the dev Control Server's database above (ADR-031).
+dbtest-postgres-up:
+	docker compose up -d postgres-test
 
 # Real MySQL/MSSQL test databases for internal/dbconnectors (Slice 7
 # acceptance: connect to each supported engine using a real test database).

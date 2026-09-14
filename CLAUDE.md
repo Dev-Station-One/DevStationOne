@@ -109,6 +109,7 @@ The CodeGraph index is part of repository maintenance and must never be intentio
 **Local dev environment note:** this machine runs many other projects — ports 5432/5433/8080 are frequently already taken (check `ss -ltnp` before picking a port for a manual smoke test; DevStationOne's own Postgres uses 55432, see `docker-compose.yml`). Before any manual smoke test, check for and kill leftover `devstationone-server`/`devstationone-runtime` processes from a prior run (`ps aux | grep devstation-`) — a stale process silently holding the port makes a new test appear to pass or fail against old code instead of erroring.
 
 For Go:
+- `make fmt vet lint test` runs the full local Go gate; `make openapi-lint` validates docs/openapi.yaml
 - `gofmt`
 - `go vet`
 - project-appropriate lint/static analysis
@@ -334,7 +335,8 @@ logout and reboot):
 - Public: `https://ds1.premadev.com` (external TLS-terminating proxy pointed at the upstream)
 - Binary: `bin/devstationone-server` (gitignored). The service does not rebuild itself — after changing server code run `go build -o bin/devstationone-server ./cmd/devstationone-server && systemctl --user restart devstationone-dev.service`
 - Logs: `journalctl --user -u devstationone-dev.service -f`
-- Seeded dev user: `dev@local.test` (re-create it via `DEVSTATIONONE_ADMIN_EMAIL`/`DEVSTATIONONE_ADMIN_PASSWORD` on an empty `users` table if a test run wiped it — API tests `TRUNCATE users CASCADE` on the shared dev Postgres)
+- Seeded dev user: `dev@local.test` — re-create with `echo '<password>' | bin/devstationone-admin --email dev@local.test` if the `users` table is ever empty (the `devstationone-admin` CLI, ADR-019; there is no env-var bootstrap anymore)
+- Integration tests (`make test`) use a separate test-only Postgres (`make dbtest-postgres-up`, port 55433, ADR-031) and `TRUNCATE ... CASCADE` freely there — they no longer touch the dev instance's database on 55432, so this seeded user survives test runs
 
 ## Definition of Done
 

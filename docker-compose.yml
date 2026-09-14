@@ -15,6 +15,25 @@ services:
       timeout: 3s
       retries: 10
 
+  # Separate Postgres for Go integration tests (`TRUNCATE ... CASCADE` on
+  # every run) so they never collide with the persistent dev Control
+  # Server's database above (ADR-031).
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: devstation
+      POSTGRES_PASSWORD: devstation
+      POSTGRES_DB: devstation_test
+    ports:
+      - "55433:5432"
+    volumes:
+      - devstation-postgres-test:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devstation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   # Real test database for internal/dbconnectors' MySQL connector
   # (docs/IMPLEMENTATION_PLAN.md Slice 7 acceptance: connect to each
   # supported engine using a real test database).
@@ -58,5 +77,6 @@ services:
 
 volumes:
   devstation-postgres:
+  devstation-postgres-test:
   devstation-dbtest-mysql:
   devstation-dbtest-mssql:

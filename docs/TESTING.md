@@ -6,18 +6,25 @@ smoke-tested with.
 
 ## Automated tests
 
-Requires the dev Postgres from `docker-compose.yml` (port 55432):
+Requires the *test* Postgres from `docker-compose.yml` (port 55433) — a
+separate container from the persistent dev Control Server's database on
+55432, so `make test` can `TRUNCATE ... CASCADE` freely without wiping a
+real logged-in session (ADR-031):
 
 ```bash
-make db-up
-export DEVSTATIONONE_DATABASE_URL='postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable'
+make dbtest-postgres-up
+export DEVSTATIONONE_TEST_DATABASE_URL='postgres://devstation:devstation@localhost:55433/devstation_test?sslmode=disable'
 make test        # go test -p 1 ./... — -p 1 is required: packages share one Postgres
 make lint        # gofmt + go vet
 make openapi-lint
 ```
 
-Note: without `DEVSTATIONONE_DATABASE_URL` the integration tests silently skip.
-Check the `internal/api` timing — a 0.005s run means everything skipped.
+Migrations run automatically inside each package's `testPool`/`testDB`
+helper (`database.Migrate`, idempotent) — no separate migrate step.
+
+Note: without `DEVSTATIONONE_TEST_DATABASE_URL` the integration tests
+silently skip. Check the `internal/api` timing — a 0.005s run means
+everything skipped.
 
 ## Browser end-to-end test (Slice 12)
 
@@ -31,8 +38,8 @@ tests structurally cannot check (they never execute JavaScript).
 Needs a `google-chrome`/`chromium-browser`/`chromium` binary on `PATH` (in
 that preference order — a bare `chromium` that resolves to a snap wrapper
 is unreliable to drive over CDP; see the comment in `findChromium`) in
-addition to `DEVSTATIONONE_DATABASE_URL`; it `t.Skip`s, not fails, if none
-is found. `make test` already runs it as part of `internal/api`'s normal
+addition to `DEVSTATIONONE_TEST_DATABASE_URL`; it `t.Skip`s, not fails, if
+none is found. `make test` already runs it as part of `internal/api`'s normal
 suite — no separate command.
 
 ## Mobile QA

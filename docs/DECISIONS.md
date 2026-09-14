@@ -981,3 +981,37 @@ changed from `/account.html` to `/` — the dashboard, not the account
 settings page, is the natural landing surface after signing in. No route
 changed; `account.html` is unaffected and still reachable from the user
 menu.
+
+## ADR-031 — Integration tests get their own Postgres, separate from the dev Control Server's database
+
+Date: 2026-09-14
+
+**Decision.** A second `postgres-test` service is added to
+`docker-compose.yml` (port 55433, db `devstation_test`, `make
+dbtest-postgres-up`). Every package's `testPool`/`testDB` helper (`internal/auth`,
+`internal/api`, `internal/projects`, `internal/runtimes`, `internal/sessions`,
+`internal/dbconnections`, `internal/audit`, `internal/notifications`) now
+reads `DEVSTATIONONE_TEST_DATABASE_URL` instead of
+`DEVSTATIONONE_DATABASE_URL`, and calls `database.Migrate(url)` before
+connecting — `migrate`'s `Up()` is idempotent (`ErrNoChange` on repeat
+calls), so this needs no separate migrate step and works against a fresh,
+never-migrated container.
+
+**Why.** `DEVSTATIONONE_DATABASE_URL` on 55432 is also what the persistent
+`devstationone-dev.service` runs against (`bin/devstationone-server`,
+enabled with linger). Every `testPool` helper `TRUNCATE ... CASCADE`s
+`users` (and related tables) at the start of each test run — so any
+developer following the previously-documented `docs/TESTING.md` workflow
+(export `DEVSTATIONONE_DATABASE_URL` at 55432, `make test`) wiped their own
+logged-in dev session on the shared instance every time they ran the test
+suite. Pointing tests at an isolated container removes the collision
+entirely rather than papering over it with a re-seed step.
+
+**Consequence.** `docs/TESTING.md` and `CLAUDE.md`'s "Dev instance" section
+are updated to the new variable/port. `make db-up` (55432, dev) and `make
+dbtest-postgres-up` (55433, test) are now separate, deliberately —
+`db-up` is not on the test critical path and shouldn't imply tests are
+ready to run. No migration path for existing `DEVSTATIONONE_DATABASE_URL`
+exports: this is a pre-1.0 project, and the old var simply stops being read
+by tests (a stale export now makes tests skip with "not set" rather than
+truncate the wrong database, which is the safer failure mode).

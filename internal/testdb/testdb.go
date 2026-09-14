@@ -1,15 +1,19 @@
 // Package testdb holds the fixed connection details for the real test
 // database containers docker-compose.yml defines (started via `make
-// db-up`/`make dbtest-up`), shared by every package whose tests connect to
-// one of them.
+// dbtest-postgres-up`/`make dbtest-up`), shared by every package whose
+// tests connect to one of them.
 package testdb
 
 const (
+	// Postgres points at the isolated test container (ADR-031), not the
+	// persistent dev Control Server's database on 55432 — dbconnectors'
+	// and internal/api's Postgres-connector tests create/drop real
+	// fixture tables here.
 	PostgresHost     = "localhost"
-	PostgresPort     = 55432
+	PostgresPort     = 55433
 	PostgresUser     = "devstation"
 	PostgresPassword = "devstation"
-	PostgresDatabase = "devstation"
+	PostgresDatabase = "devstation_test"
 
 	MySQLHost     = "localhost"
 	MySQLPort     = 53306

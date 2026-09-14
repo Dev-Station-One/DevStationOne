@@ -6,16 +6,22 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"devstationone/internal/database"
 )
 
 // testPool connects to a real Postgres instance for integration tests, or
-// skips the test if DEVSTATIONONE_DATABASE_URL is not set (e.g. `make db-up`
-// was not run). Each test truncates users/sessions so runs are isolated.
+// skips the test if DEVSTATIONONE_TEST_DATABASE_URL is not set (e.g.
+// `make dbtest-postgres-up` was not run). Each test truncates
+// users/sessions so runs are isolated.
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	url := os.Getenv("DEVSTATIONONE_DATABASE_URL")
+	url := os.Getenv("DEVSTATIONONE_TEST_DATABASE_URL")
 	if url == "" {
-		t.Skip("DEVSTATIONONE_DATABASE_URL not set; skipping integration test")
+		t.Skip("DEVSTATIONONE_TEST_DATABASE_URL not set; skipping integration test")
+	}
+	if err := database.Migrate(url); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	pool, err := pgxpool.New(context.Background(), url)
 	if err != nil {

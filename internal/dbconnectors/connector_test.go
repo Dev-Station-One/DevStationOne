@@ -18,7 +18,7 @@ func openOrSkip(t *testing.T, engine string, p Params) {
 	defer cancel()
 	db, err := c.Open(ctx, p)
 	if err != nil {
-		t.Skipf("%s test database not reachable (run: make dbtest-up): %v", engine, err)
+		t.Skipf("%s test database not reachable (run: make dbtest-postgres-up / make dbtest-up): %v", engine, err)
 	}
 	defer db.Close()
 }

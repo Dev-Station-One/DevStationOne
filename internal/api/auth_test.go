@@ -17,9 +17,12 @@ import (
 
 func testDB(t *testing.T) *database.DB {
 	t.Helper()
-	url := os.Getenv("DEVSTATIONONE_DATABASE_URL")
+	url := os.Getenv("DEVSTATIONONE_TEST_DATABASE_URL")
 	if url == "" {
-		t.Skip("DEVSTATIONONE_DATABASE_URL not set; skipping integration test")
+		t.Skip("DEVSTATIONONE_TEST_DATABASE_URL not set; skipping integration test")
+	}
+	if err := database.Migrate(url); err != nil {
+		t.Fatalf("migrate: %v", err)
 	}
 	db, err := database.Connect(context.Background(), url)
 	if err != nil {
