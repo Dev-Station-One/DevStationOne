@@ -224,6 +224,28 @@ Deliver:
 - export
 - query safety/limits as appropriate
 
+**Status: Complete.** `Connector.Rows`/`Commit`/`Query` across all four
+engines (`internal/dbconnectors`), three new API endpoints, and a data grid
++ SQL editor in the connection browser panel. Filtering is a raw SQL
+`WHERE` expression rather than a structured filter builder — deliberate,
+matching the SQL Editor's own arbitrary-SQL trust model (ADR-021), not a
+missing feature. Export (CSV/JSON/SQL) is client-side from the currently
+loaded page of rows, not a separate streaming endpoint. Row edits are
+always parameterized regardless of the filter/SQL-editor exceptions above.
+Query safety: default row limit 100 (capped at 5000, enforced independently
+by both the Control Server and the runtime), 30s RPC timeout.
+
+Verified against all four real engines
+(`internal/dbconnectors/rows_test.go`: pagination, sort, filter, insert/
+update/delete via `Commit`, raw SELECT/INSERT via `Query`) and a real
+browser smoke test — which caught and fixed a real bug: an edited cell with
+no original value to infer a JS type from (a NULL column, or any cell in a
+freshly added row) was never numeric-coerced, so a plain "11" typed into an
+`int` column reached Postgres as an unquoted string bind parameter and was
+rejected ("invalid input syntax for type integer"). Fixed by coercing from
+the column's actual SQL type (fetched from the columns endpoint) instead of
+guessing from a JS value that might not exist.
+
 ## Slice 10 — Database users/permissions
 
 Deliver database-specific management for:

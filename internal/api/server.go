@@ -110,6 +110,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 		return r.Triggers
 	})))
 
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows", requireSession(db, listRowsHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows", requireSession(db, commitRowsHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/query", requireSession(db, runQueryHandler(db, registry, dbEncryptionKey)))
+
 	// StripPrefix: FileServer maps the full URL path under the root dir, so
 	// /assets/x must lose the /assets/ prefix before hitting http.Dir.
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))

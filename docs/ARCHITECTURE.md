@@ -170,10 +170,10 @@ Control Server  -- REST (internal/api/databases.go) does CRUD against the
       |             database_connections table (internal/dbconnections),
       | db.command   decrypting credentials only to build each RPC payload;
       | (RPC)         dispatches test/schemas/tables/columns/indexes/
-      v              constraints/triggers (runtimes.Conn.SendCommand,
-Development Runtime  Envelope.ID-correlated, same mechanism as
-      |              service.command), and invalidate (fire-and-forget,
-      v              SendEnvelope) after an edit/delete.
+      v              constraints/triggers/rows/commit/query
+Development Runtime  (runtimes.Conn.SendCommand, Envelope.ID-correlated,
+      |              same mechanism as service.command), and invalidate
+      v              (fire-and-forget, SendEnvelope) after an edit/delete.
       |            -- internal/agent/db_manager.go caches one *sql.DB per
       |              connection_id (dbManager.pools), opened lazily via
       |              internal/dbconnectors and reused across RPCs; an idle
@@ -187,11 +187,19 @@ tables/views, columns, indexes, constraints, triggers) via each engine's own
 catalog metadata, plus the runtime-side connection pool cache the repeated
 schema-browsing RPCs need (ADR-021/022) — a plain `map[connectionID]*sql.DB`
 kept by `db_manager.go`, not a second session-tracking layer on top of what
-Slice 4's terminal sessions already have. Data browsing and the SQL editor
-(Slice 9) are a later pass. Credentials are AES-256-GCM sealed at rest under
-`DEVSTATIONONE_DB_ENCRYPTION_KEY` and only ever decrypted server-side,
-immediately before dispatch — never logged, never returned from an API
-response (see `docs/API.md` "Databases" and `docs/SECURITY.md`).
+Slice 4's terminal sessions already have. Slice 9 adds the data browser
+(paginated/sorted/filtered rows, staged insert/edit/delete committed as
+parameterized statements) and the SQL Editor (arbitrary SQL, the same
+trust model as the terminal — `docs/SECURITY.md`, ADR-021). A `filter`
+expression and the SQL Editor's own text are the two places raw,
+unparameterized SQL is deliberately accepted from the browser; every other
+value in this slice — row edits included — is bound, never interpolated.
+Export (CSV/JSON/SQL) happens client-side from whatever page of rows is
+already loaded, not a separate server-side streaming endpoint. Credentials
+are AES-256-GCM sealed at rest under `DEVSTATIONONE_DB_ENCRYPTION_KEY` and
+only ever decrypted server-side, immediately before dispatch — never
+logged, never returned from an API response (see `docs/API.md` "Databases"
+and `docs/SECURITY.md`).
 
 ## Services
 

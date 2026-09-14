@@ -327,6 +327,51 @@ after 5 minutes; editing or deleting a connection's stored credentials
 immediately invalidates its cached pool (see ADR-021/022) so a changed
 password takes effect on the very next request, not after the idle timeout.
 
+### Data browsing and the SQL editor (Slice 9)
+
+```text
+GET   /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows?schema=&limit=&offset=&sort=&sort_desc=&filter=
+PATCH /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows?schema=
+POST  /api/v1/projects/{projectID}/databases/{connectionID}/query
+```
+
+All three are live RPCs, same authorization and offline/timeout status
+codes as the rest of this section.
+
+`GET .../rows` returns one page: `{"columns": [...], "rows": [[...], ...],
+"has_more": bool, "is_exec": false, "rows_affected": 0}`. Each row is an
+array of values in `columns` order. `limit` defaults to 100, capped at
+5000 (validated by both the Control Server and, independently, the
+runtime — defense in depth, `docs/SECURITY.md`). `sort` is a column name
+(quoted as an identifier by the runtime, never interpolated raw);
+`sort_desc=true` reverses it. `filter`, if given, is **a raw SQL boolean
+expression appended after `WHERE`** — not a parameterized value. This is a
+deliberate choice, not an oversight: it mirrors the SQL Editor's own
+arbitrary-execution trust model (ADR-021) rather than inventing a
+structured filter-expression language for what is already the user's own
+database, reachable through the SQL Editor regardless.
+
+`PATCH .../rows` commits staged edits: `{"edits": [{"op": "insert",
+"values": {...}}, {"op": "update", "original": {...}, "values": {...}},
+{"op": "delete", "original": {...}}]}`. `original` is the row's column
+values as most recently fetched by `GET .../rows` — the runtime uses it to
+build the `WHERE` clause locating the row, as **bound parameters**, never
+interpolated (unlike `filter` above). Every column value in `values`/
+`original` is likewise always bound, regardless of the raw-SQL `filter`/
+SQL-Editor exceptions elsewhere in this endpoint group. Response:
+`{"ok": true}`.
+
+`POST .../query` runs `{"sql": "..."}` verbatim — arbitrary SQL, the SQL
+Editor's intentional parallel to the terminal (`docs/SECURITY.md`
+"terminal sessions provide arbitrary code execution by design"; ADR-021
+extends the same posture here). A simple keyword sniff
+(INSERT/UPDATE/DELETE/CREATE/DROP/ALTER/TRUNCATE/GRANT/REVOKE/REPLACE)
+decides whether to run it via Exec (reporting `is_exec: true,
+rows_affected`) or Query (reporting `columns`/`rows`, capped at `limit`
+the same way as `GET .../rows`). A misclassified statement just produces
+an error from the wrong call — not a security issue, since both paths run
+the identical trusted-arbitrary-SQL text either way.
+
 The canonical request/response shapes are `docs/openapi.yaml` (tag
 `Databases`).
 

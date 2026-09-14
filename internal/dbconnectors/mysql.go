@@ -3,9 +3,15 @@ package dbconnectors
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"github.com/go-sql-driver/mysql"
 )
+
+func mysqlQuoteIdent(name string) string {
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+}
 
 type mysqlConnector struct{}
 
@@ -103,6 +109,34 @@ func (mysqlConnector) Triggers(ctx context.Context, db *sql.DB, schema, table st
 	}
 	defer rows.Close()
 	return scanTriggers(rows)
+}
+
+func (mysqlConnector) Rows(ctx context.Context, db *sql.DB, schema, table string, limit, offset int, sort string, sortDesc bool, filter string) (RowsResult, error) {
+	q := "SELECT * FROM " + mysqlQuoteIdent(table)
+	if filter != "" {
+		q += " WHERE " + filter
+	}
+	if sort != "" {
+		q += " ORDER BY " + mysqlQuoteIdent(sort)
+		if sortDesc {
+			q += " DESC"
+		}
+	}
+	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit+1, offset)
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return RowsResult{}, err
+	}
+	defer rows.Close()
+	return scanRows(rows, limit)
+}
+
+func (mysqlConnector) Commit(ctx context.Context, db *sql.DB, schema, table string, edits []RowEdit) error {
+	return buildAndExecCommit(ctx, db, mysqlQuoteIdent(table), edits, mysqlQuoteIdent, func(int) string { return "?" })
+}
+
+func (mysqlConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
+	return genericQuery(ctx, db, sqlText, limit)
 }
 
 // mysqlExtraParams parses a "key=value&key2=value2" free-form string into

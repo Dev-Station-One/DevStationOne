@@ -153,3 +153,41 @@ func (mssqlConnector) Triggers(ctx context.Context, db *sql.DB, schema, table st
 	defer rows.Close()
 	return scanTriggers(rows)
 }
+
+func mssqlQuoteIdent(name string) string {
+	return "[" + strings.ReplaceAll(name, "]", "]]") + "]"
+}
+
+func mssqlPlaceholder(n int) string { return fmt.Sprintf("@p%d", n) }
+
+func (mssqlConnector) Rows(ctx context.Context, db *sql.DB, schema, table string, limit, offset int, sort string, sortDesc bool, filter string) (RowsResult, error) {
+	q := "SELECT * FROM " + mssqlQuoteIdent(schema) + "." + mssqlQuoteIdent(table)
+	if filter != "" {
+		q += " WHERE " + filter
+	}
+	// OFFSET/FETCH requires an ORDER BY; "(SELECT NULL)" is the standard
+	// no-op ordering when the caller didn't ask for a real sort column.
+	if sort != "" {
+		q += " ORDER BY " + mssqlQuoteIdent(sort)
+		if sortDesc {
+			q += " DESC"
+		}
+	} else {
+		q += " ORDER BY (SELECT NULL)"
+	}
+	q += fmt.Sprintf(" OFFSET %d ROWS FETCH NEXT %d ROWS ONLY", offset, limit+1)
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return RowsResult{}, err
+	}
+	defer rows.Close()
+	return scanRows(rows, limit)
+}
+
+func (mssqlConnector) Commit(ctx context.Context, db *sql.DB, schema, table string, edits []RowEdit) error {
+	return buildAndExecCommit(ctx, db, mssqlQuoteIdent(schema)+"."+mssqlQuoteIdent(table), edits, mssqlQuoteIdent, mssqlPlaceholder)
+}
+
+func (mssqlConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
+	return genericQuery(ctx, db, sqlText, limit)
+}

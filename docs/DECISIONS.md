@@ -492,3 +492,62 @@ additive to the Slice 7 card grid, not the full split-pane
 connections-tree-replaces-cards redesign from the brainstorm/design pass;
 that larger UI consolidation, plus data browsing and the SQL editor, remain
 Slice 9 and later.
+
+## ADR-023 — Slice 9: raw-SQL filter, client-side export, and column-type-driven value coercion
+
+Date: 2026-09-14
+
+**Decision.** `internal/dbconnectors.Connector` gains `Rows`, `Commit`,
+`Query`. `Rows` paginates via `LIMIT n+1 OFFSET m` (MSSQL:
+`OFFSET/FETCH`, which forces an `ORDER BY` — `(SELECT NULL)` when the
+caller didn't sort) and reports `has_more` from the extra row rather than a
+separate `COUNT(*)`. `filter` is accepted as a raw SQL boolean expression
+appended after `WHERE`, not a parameterized value or a structured
+filter-builder DSL. `Commit` builds parameterized `INSERT`/`UPDATE`/
+`DELETE` per staged edit — every column value bound, column/table
+identifiers quoted per engine, using whichever placeholder syntax that
+engine's driver actually accepts (`$1` Postgres, `?` MySQL/SQLite, `@p1`
+MSSQL). `Query` runs SQL-Editor text verbatim, routed to `Exec` or `Query`
+by a keyword sniff (INSERT/UPDATE/DELETE/CREATE/DROP/ALTER/TRUNCATE/GRANT/
+REVOKE/REPLACE → Exec).
+
+**Why `filter` is raw SQL, not parameterized or structured.** The
+brainstorm/design pass that scoped Slices 7–9 together already decided the
+SQL Editor gets full, unconfirmed arbitrary-SQL power — the same posture
+`docs/SECURITY.md` already grants the terminal ("arbitrary code execution
+by design"). Building a separate structured filter-expression language for
+the data grid, when the SQL Editor sitting one click away already accepts
+anything, would be real effort spent hiding a boundary that doesn't
+actually exist for this user. `filter` inherits the SQL Editor's trust
+model explicitly rather than accidentally.
+
+**Why row edits stay parameterized despite that.** `filter`/`query` are
+text the user is knowingly typing as SQL. A row edit's *values* are just
+data the user typed into a spreadsheet-like cell — nothing about that
+interaction implies "this is SQL," so binding them is both the safe choice
+and the one that matches user intent (a value with a literal `'` in it
+should be stored as typed, not treated as SQL syntax).
+
+**Why export is client-side.** The rows already sitting in the browser
+after a `GET .../rows` or SQL Editor run are the export — turning them into
+CSV/JSON/SQL text and triggering a `Blob` download needs no round trip.
+A server-side streaming export endpoint would only earn its cost if export
+needed to cover more rows than are practical to page through in the UI
+first, which nothing in this slice's scope requires.
+
+**Consequence — a real bug this design surfaced.** The obvious
+implementation of "coerce an edited cell back to the right type" is to
+inspect the *previous* value's JS type (`typeof original === 'number'`).
+That breaks for exactly the two cases that matter most for editing: a cell
+whose original value is `NULL` (no JS type to infer from) and any cell in
+a row the user just added with "+ Row" (no original value at all). Both
+sent a plain numeric-looking string to the runtime, which Postgres
+correctly rejected as a type mismatch on the bind parameter. Fixed by
+coercing from the column's actual SQL type (already available from the
+columns endpoint, fetched once per table) instead of the previous value's
+JS type — this also makes an empty cell mean "set to NULL" rather than "set
+to empty string," which is the more useful default for a nullable column.
+Caught by a real browser smoke test inserting a new row with a numeric
+column, not by the Go-level `rows_test.go` suite, since that suite only
+exercises `internal/dbconnectors` directly and the coercion bug lived
+entirely in `project.html`'s JavaScript.

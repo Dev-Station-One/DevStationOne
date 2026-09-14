@@ -3,10 +3,18 @@ package dbconnectors
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/url"
+	"strings"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 )
+
+func pgQuoteIdent(name string) string {
+	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+func pgPlaceholder(n int) string { return fmt.Sprintf("$%d", n) }
 
 type postgresConnector struct{}
 
@@ -117,4 +125,32 @@ func (postgresConnector) Triggers(ctx context.Context, db *sql.DB, schema, table
 	}
 	defer rows.Close()
 	return scanTriggers(rows)
+}
+
+func (postgresConnector) Rows(ctx context.Context, db *sql.DB, schema, table string, limit, offset int, sort string, sortDesc bool, filter string) (RowsResult, error) {
+	q := "SELECT * FROM " + pgQuoteIdent(schema) + "." + pgQuoteIdent(table)
+	if filter != "" {
+		q += " WHERE " + filter
+	}
+	if sort != "" {
+		q += " ORDER BY " + pgQuoteIdent(sort)
+		if sortDesc {
+			q += " DESC"
+		}
+	}
+	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit+1, offset)
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return RowsResult{}, err
+	}
+	defer rows.Close()
+	return scanRows(rows, limit)
+}
+
+func (postgresConnector) Commit(ctx context.Context, db *sql.DB, schema, table string, edits []RowEdit) error {
+	return buildAndExecCommit(ctx, db, pgQuoteIdent(schema)+"."+pgQuoteIdent(table), edits, pgQuoteIdent, pgPlaceholder)
+}
+
+func (postgresConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
+	return genericQuery(ctx, db, sqlText, limit)
 }

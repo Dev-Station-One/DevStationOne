@@ -246,27 +246,29 @@ If the 24 MB cap proves too small for real projects, the
 upgrade path is chunked streaming messages, not raising the envelope
 further.
 
-## Implementation (Slice 7/8): database commands
+## Implementation (Slice 7/8/9): database commands
 
-Database connection test and schema discovery reuse the Slice 5 correlated
-request/response machinery unchanged — one message type in each direction,
-`Envelope.ID` correlated:
+Database connection test, schema discovery, data browsing, and the SQL
+editor all reuse the Slice 5 correlated request/response machinery
+unchanged — one message type in each direction, `Envelope.ID` correlated:
 
 ```text
-db.command   server -> runtime   {action, connection_id, connection, schema, table}
-db.result    runtime -> server   {ok} | {schemas} | {tables} | {columns} | {indexes} | {constraints} | {triggers}
+db.command   server -> runtime   {action, connection_id, connection, schema, table, limit, offset, sort, sort_desc, filter, edits, sql}
+db.result    runtime -> server   {ok} | {schemas} | {tables} | {columns} | {indexes} | {constraints} | {triggers} | {rows}
 db.error     runtime -> server   {error}
 ```
 
 `action` is one of `test`, `invalidate`, `schemas`, `tables`, `columns`,
-`indexes`, `constraints`, `triggers` (data browsing and the SQL editor land
-in a later slice). `connection` is a `DBConnectionParams`: engine, host,
-port, username, password, database, ssl_mode, instance_name, search_path,
-extra_params — built server-side from a decrypted `database_connections`
-row (`internal/dbconnections`), never taken from a client request.
+`indexes`, `constraints`, `triggers`, `rows`, `commit`, `query`.
+`connection` is a `DBConnectionParams`: engine, host, port, username,
+password, database, ssl_mode, instance_name, search_path, extra_params —
+built server-side from a decrypted `database_connections` row
+(`internal/dbconnections`), never taken from a client request.
 `connection_id` identifies the stored connection for the runtime's pool
-cache (below) — it is not itself a credential. `schema`/`table` scope a
-`tables`/`columns`/`indexes`/`constraints`/`triggers` request.
+cache (below) — it is not itself a credential. `schema`/`table` scope every
+per-table action. `limit`/`offset`/`sort`/`sort_desc`/`filter` scope
+`rows`; `edits` (a `[]DBRowEdit{op, original, values}`) scopes `commit`;
+`sql` scopes `query`.
 
 `invalidate` is the one exception to the request/response pattern: it's
 sent fire-and-forget via `SendEnvelope` (no `Envelope.ID`, no reply) rather
@@ -289,6 +291,26 @@ at all). `hello.Capabilities.Databases` always advertises all four engine
 names (`dbconnectors.SupportedEngines`), since the drivers are compiled in
 rather than depending on anything else installed on the runtime host —
 unlike `Services`, there's no live-availability check to make here.
+
+For `rows`, each engine builds `SELECT * FROM <quoted schema.table>`, an
+optional `WHERE <filter>` (raw, unquoted — the one deliberate exception
+alongside `query`'s SQL text), an optional `ORDER BY <quoted sort column>`,
+and `LIMIT n+1 OFFSET m` (MSSQL: `OFFSET m ROWS FETCH NEXT n+1 ROWS ONLY`,
+which requires an `ORDER BY` — `ORDER BY (SELECT NULL)` when the caller
+didn't sort) — requesting one extra row lets the runtime report `has_more`
+without a separate `COUNT(*)`. `commit` builds parameterized
+`INSERT`/`UPDATE`/`DELETE` statements per edit — column identifiers quoted,
+every value bound (never interpolated, unlike `filter`), using each
+engine's own placeholder syntax (`$1` Postgres, `?` MySQL/SQLite, `@p1`
+MSSQL — the same `?`-doesn't-work-on-MSSQL discovery from schema
+introspection applies here too). `query` runs the given SQL text verbatim;
+a keyword sniff (`docs/API.md` "Data browsing and the SQL editor") routes
+it to `Exec` or `Query`. All three share one generic row-scanning helper
+(`dbconnectors.scanRows`) that normalizes driver values for JSON transport
+— a `[]byte` that's valid UTF-8 becomes a string (needed for MySQL, whose
+driver returns most column types as `[]byte` even when scanned into
+`any`); genuinely binary data stays `[]byte`, which `encoding/json`
+base64-encodes.
 
 **Connection pool cache.** `internal/agent/db_manager.go` keeps at most one
 `*sql.DB` per `connection_id` (`dbManager.pools`), opened lazily on first

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -420,6 +421,155 @@ func tableStructureHandler(db *database.DB, registry *runtimes.Registry, key []b
 			return
 		}
 		writeJSON(w, http.StatusOK, extract(result))
+	}
+}
+
+// defaultRowLimit/maxRowLimit mirror internal/agent's dbRowLimit — the API
+// layer validates too (defense in depth, docs/SECURITY.md), not just the
+// runtime.
+const (
+	defaultRowLimit = 100
+	maxRowLimit     = 5000
+)
+
+// parseRowLimit reads ?limit=, defaulting and capping it.
+func parseRowLimit(r *http.Request) (int, bool) {
+	v := r.URL.Query().Get("limit")
+	if v == "" {
+		return defaultRowLimit, true
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	if n > maxRowLimit {
+		n = maxRowLimit
+	}
+	return n, true
+}
+
+func listRowsHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		limit, ok := parseRowLimit(r)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		offset := 0
+		if v := r.URL.Query().Get("offset"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n < 0 {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "offset must be a non-negative integer"})
+				return
+			}
+			offset = n
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "rows", ConnectionID: c.ID, Connection: params,
+			Schema: r.URL.Query().Get("schema"), Table: r.PathValue("table"),
+			Limit: limit, Offset: offset,
+			Sort: r.URL.Query().Get("sort"), SortDesc: r.URL.Query().Get("sort_desc") == "true",
+			Filter: r.URL.Query().Get("filter"),
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, rowsResponse(result.Rows))
+	}
+}
+
+type rowEditRequest struct {
+	Op       string         `json:"op"`
+	Original map[string]any `json:"original"`
+	Values   map[string]any `json:"values"`
+}
+
+func commitRowsHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		var req struct {
+			Edits []rowEditRequest `json:"edits"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		edits := make([]protocol.DBRowEdit, 0, len(req.Edits))
+		for _, e := range req.Edits {
+			if e.Op != "insert" && e.Op != "update" && e.Op != "delete" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "edit op must be insert, update, or delete"})
+				return
+			}
+			edits = append(edits, protocol.DBRowEdit{Op: e.Op, Original: e.Original, Values: e.Values})
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "commit", ConnectionID: c.ID, Connection: params,
+			Schema: r.URL.Query().Get("schema"), Table: r.PathValue("table"),
+			Edits: edits,
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": result.Ok})
+	}
+}
+
+func runQueryHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		var req struct {
+			SQL string `json:"sql"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if strings.TrimSpace(req.SQL) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sql is required"})
+			return
+		}
+		limit, ok := parseRowLimit(r)
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "limit must be a positive integer"})
+			return
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "query", ConnectionID: c.ID, Connection: params, SQL: req.SQL, Limit: limit,
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, rowsResponse(result.Rows))
+	}
+}
+
+// rowsResponse normalizes a possibly-nil *protocol.DBRowsResult into a
+// JSON body with empty (not null) slices, matching every other
+// list-shaped endpoint in this package.
+func rowsResponse(r *protocol.DBRowsResult) map[string]any {
+	if r == nil {
+		r = &protocol.DBRowsResult{}
+	}
+	cols, rows := r.Columns, r.Rows
+	if cols == nil {
+		cols = []string{}
+	}
+	if rows == nil {
+		rows = [][]any{}
+	}
+	return map[string]any{
+		"columns": cols, "rows": rows, "has_more": r.HasMore,
+		"is_exec": r.IsExec, "rows_affected": r.RowsAffected,
 	}
 }
 

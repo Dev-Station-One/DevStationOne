@@ -211,8 +211,62 @@ func (m *dbManager) execute(ctx context.Context, cmd protocol.DBCommandPayload) 
 		}
 		return protocol.DBResultPayload{Triggers: toProtocolTriggers(trig)}, nil
 
+	case "rows":
+		res, err := connector.Rows(ctx, db, cmd.Schema, cmd.Table, dbRowLimit(cmd.Limit), cmd.Offset, cmd.Sort, cmd.SortDesc, cmd.Filter)
+		if err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Rows: toProtocolRowsResult(res)}, nil
+
+	case "commit":
+		if err := connector.Commit(ctx, db, cmd.Schema, cmd.Table, toConnectorRowEdits(cmd.Edits)); err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Ok: true}, nil
+
+	case "query":
+		res, err := connector.Query(ctx, db, cmd.SQL, dbRowLimit(cmd.Limit))
+		if err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Rows: toProtocolRowsResult(res)}, nil
+
 	default:
 		return protocol.DBResultPayload{}, fmt.Errorf("unknown db action %q", cmd.Action)
+	}
+}
+
+// defaultDBRowLimit applies when a request omits Limit (or sends <= 0) —
+// defense in depth: the Control Server always sets one, but the runtime
+// doesn't trust that (docs/SECURITY.md).
+const defaultDBRowLimit = 100
+
+// maxDBRowLimit caps a request-supplied Limit, however large the Control
+// Server forwarded.
+const maxDBRowLimit = 5000
+
+func dbRowLimit(n int) int {
+	if n <= 0 {
+		return defaultDBRowLimit
+	}
+	if n > maxDBRowLimit {
+		return maxDBRowLimit
+	}
+	return n
+}
+
+func toConnectorRowEdits(in []protocol.DBRowEdit) []dbconnectors.RowEdit {
+	out := make([]dbconnectors.RowEdit, 0, len(in))
+	for _, e := range in {
+		out = append(out, dbconnectors.RowEdit{Op: e.Op, Original: e.Original, Values: e.Values})
+	}
+	return out
+}
+
+func toProtocolRowsResult(r dbconnectors.RowsResult) *protocol.DBRowsResult {
+	return &protocol.DBRowsResult{
+		Columns: r.Columns, Rows: r.Rows, HasMore: r.HasMore,
+		IsExec: r.IsExec, RowsAffected: r.RowsAffected,
 	}
 }
 

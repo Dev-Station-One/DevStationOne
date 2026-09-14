@@ -1971,6 +1971,185 @@ paths:
           description: The project's runtime is not currently connected
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows:
+    get:
+      summary: Get a page of table/view data
+      description: Live RPC. filter is a raw SQL boolean expression appended after WHERE, not a parameterized value — deliberate, the same arbitrary-SQL trust model as the SQL Editor (docs/DECISIONS.md ADR-021/023).
+      tags: [Databases]
+      operationId: listDatabaseRows
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Defaults to 100, capped at 5000.
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+        - name: sort
+          in: query
+          description: A column name, identifier-quoted by the runtime.
+          schema:
+            type: string
+        - name: sort_desc
+          in: query
+          schema:
+            type: boolean
+        - name: filter
+          in: query
+          description: Raw SQL boolean expression.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: One page of rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBRowsResult"
+        "400":
+          description: limit or offset is not a valid non-negative integer
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+    patch:
+      summary: Commit staged row inserts/updates/deletes
+      description: Every edit is applied as a parameterized statement — column values are always bound, never interpolated, regardless of the raw-SQL filter/query exceptions elsewhere in this API.
+      tags: [Databases]
+      operationId: commitDatabaseRows
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [edits]
+              properties:
+                edits:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/DBRowEdit"
+      responses:
+        "200":
+          description: Committed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: Invalid request body, or an edit's op isn't insert/update/delete
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/query:
+    post:
+      summary: Run arbitrary SQL (the SQL Editor)
+      description: Runs sql verbatim — arbitrary SQL, the same deliberate trust model as the terminal (docs/SECURITY.md, ADR-021). A keyword sniff routes it to Exec (is_exec, rows_affected) or Query (columns/rows, capped at limit).
+      tags: [Databases]
+      operationId: runDatabaseQuery
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: Caps rows read back for a SELECT-shaped statement. Defaults to 100, capped at 5000.
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sql]
+              properties:
+                sql:
+                  type: string
+      responses:
+        "200":
+          description: Query/exec result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DBRowsResult"
+        "400":
+          description: sql is empty, or limit is invalid
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
 components:
   securitySchemes:
     cookieAuth:
@@ -2362,6 +2541,43 @@ components:
           type: string
         timing:
           type: string
+    DBRowsResult:
+      type: object
+      description: The result of a rows or query request. Exactly one of (columns+rows) or (is_exec+rows_affected) is meaningful, matching whether the statement produced a result set. Not a stored resource.
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        rows:
+          type: array
+          description: Each row is an array of values in columns order (numbers/strings/bools/null/timestamps; genuinely binary data is base64-encoded).
+          items:
+            type: array
+            items: {}
+        has_more:
+          type: boolean
+        is_exec:
+          type: boolean
+          description: True for a statement with no result set (query only — rows always produces a result set).
+        rows_affected:
+          type: integer
+    DBRowEdit:
+      type: object
+      description: One staged insert/update/delete for a commit request.
+      required: [op]
+      properties:
+        op:
+          type: string
+          enum: [insert, update, delete]
+        original:
+          type: object
+          description: The row's column values as last fetched by rows — used to build the WHERE clause locating it. Unused for insert.
+          additionalProperties: {}
+        values:
+          type: object
+          description: New column values for insert/update. Unused for delete.
+          additionalProperties: {}
     FileInfo:
       type: object
       description: One filesystem entry inside the Project's working directory. Not a stored resource — see docs/API.md "Files".

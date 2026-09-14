@@ -135,6 +135,20 @@
     }
     #file-editor-preview img { max-width: 100%; }
     #file-editor-preview pre { white-space: pre-wrap; margin: 0; }
+    #db-sql-editor-cm .CodeMirror {
+      height: 20vh;
+      min-height: 160px;
+      border: 1px solid var(--tblr-border-color);
+      border-radius: var(--tblr-border-radius);
+      background: var(--tblr-bg-surface);
+    }
+    .db-data-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .db-data-table { min-width: 480px; margin-bottom: 0; }
+    .db-data-table th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
+    .db-data-table td[contenteditable="true"] { cursor: text; }
+    .db-data-table td.db-cell-dirty { background: var(--tblr-warning-lt); }
+    .db-data-table tr.db-row-new td { background: var(--tblr-success-lt); }
+    .db-data-table tr.db-row-deleted td { background: var(--tblr-danger-lt); text-decoration: line-through; opacity: .6; }
     @media (max-width: 767px) {
       .files-table th, .files-table td { font-size: .875rem; }
       #file-editor-cm .CodeMirror, #file-editor-preview { height: 60vh; max-height: none; }
@@ -310,10 +324,21 @@
               <div id="databases-browser" class="card mt-3" hidden>
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <strong id="databases-browser-title">—</strong>
-                  <button id="databases-browser-close-btn" class="icon-btn" type="button" aria-label="Close browser" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                  <div class="d-flex gap-2">
+                    <button id="db-sql-editor-toggle-btn" class="btn btn-sm btn-outline-secondary" type="button">SQL Editor</button>
+                    <button id="databases-browser-close-btn" class="icon-btn" type="button" aria-label="Close browser" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                  </div>
                 </div>
                 <div class="card-body">
                   <div id="db-tree"></div>
+                  <div id="db-sql-editor" hidden>
+                    <div id="db-sql-editor-cm"></div>
+                    <div class="d-flex gap-2 mt-2">
+                      <button id="db-sql-run-btn" class="btn btn-sm btn-primary">Run</button>
+                      <span id="db-sql-status" class="text-secondary small align-self-center"></span>
+                    </div>
+                    <div id="db-sql-results" class="mt-3"></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -470,6 +495,7 @@
   <script src="/vendor/codemirror/mode/python/python.min.js"></script>
   <script src="/vendor/codemirror/mode/shell/shell.min.js"></script>
   <script src="/vendor/codemirror/mode/go/go.min.js"></script>
+  <script src="/vendor/codemirror/mode/sql/sql.min.js"></script>
   <script src="/vendor/codemirror/addon/edit/matchbrackets.min.js"></script>
   <script src="/vendor/codemirror/addon/edit/closebrackets.min.js"></script>
   <script src="/vendor/codemirror/addon/search/searchcursor.min.js"></script>
@@ -1193,6 +1219,10 @@
       $('#databases-browser-title').text(conn.name + ' (' + (ENGINE_LABELS[conn.engine] || conn.engine) + ')');
       $('#databases-browser').prop('hidden', false);
       document.getElementById('databases-browser').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      dbSqlEditorConn = conn;
+      $('#db-sql-editor').prop('hidden', true);
+      $('#db-tree').prop('hidden', false);
+      $('#db-sql-editor-toggle-btn').text('SQL Editor');
       var $tree = $('#db-tree').empty().append($('<div class="text-secondary small">').text('Loading…'));
       if (conn.engine === 'sqlite') {
         // SQLite has no schema concept — tables sit directly under the
@@ -1234,6 +1264,9 @@
     }
 
     function loadDbTableStructure($container, conn, schema, table) {
+      var $data = $('<div class="mb-3">').appendTo($container);
+      loadDbTableData($data, conn, schema, table);
+
       var $cols = $('<div class="mb-3">').appendTo($container);
       var $idx = $('<div class="mb-3">').appendTo($container);
       var $cons = $('<div class="mb-3">').appendTo($container);
@@ -1287,6 +1320,303 @@
         })
         .fail(function (xhr) { dbLoadError($trig, xhr); });
     }
+
+    // --- Database data grid (Slice 9: docs/PRD.md §6 data browser —
+    // --- paginated data, filtering, sorting, insert/edit/delete) ---
+
+    // dbRowsURL/dbCommitURL share one endpoint (GET reads, PATCH commits).
+    function dbRowsURL(conn, schema, table) {
+      return dbAPI(conn.id, '/tables/' + encodeURIComponent(table) + '/rows') + (schema ? '?schema=' + encodeURIComponent(schema) : '');
+    }
+
+    function dbQueryURL(conn) {
+      return dbAPI(conn.id, '/query');
+    }
+
+    // dbCoerceValue re-types an edited cell's text using the column's real
+    // SQL type (not the fetched value's JS type — a NULL original has no
+    // JS type to infer from, and a brand-new row has no original at all;
+    // both need the same coercion a numeric/boolean column requires or the
+    // engine rejects the bind parameter, e.g. Postgres "invalid input
+    // syntax for type integer" for a string "11" against an int column).
+    // An empty cell means "set to NULL".
+    function dbCoerceValue(type, text) {
+      if (text === '') return null;
+      type = type || '';
+      if (/bool/i.test(type)) return text.trim().toLowerCase() === 'true' || text.trim() === '1';
+      if (/int|serial|numeric|decimal|double|real|float|money/i.test(type)) {
+        var n = parseFloat(text);
+        return isNaN(n) ? text : n;
+      }
+      return text;
+    }
+
+    function loadDbTableData($container, conn, schema, table) {
+      var state = {
+        offset: 0, limit: 100, sort: '', sortDesc: false, filter: '',
+        columns: [], columnTypes: {}, rows: [],
+        dirty: {},    // row index -> { original: {col:val}, values: {col:val} }
+        newRows: [],  // array of {col:val}
+        deleted: {}   // row index -> true
+      };
+      $.get(dbStructureURL(conn, schema, table, 'columns')).done(function (cols) {
+        cols.forEach(function (c) { state.columnTypes[c.name] = c.type; });
+      });
+
+      $container.empty().append($('<div class="fw-bold small mb-1">').text('Data'));
+      var $toolbar = $('<div class="d-flex flex-wrap gap-2 align-items-center mb-2">').appendTo($container);
+      var $filterInput = $('<input type="text" class="form-control form-control-sm" placeholder="Filter (raw SQL WHERE expression)…" style="max-width:260px;">').appendTo($toolbar);
+      var $applyFilterBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">Apply</button>').appendTo($toolbar);
+      var $addRowBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">+ Row</button>').appendTo($toolbar);
+      var $saveBtn = $('<button type="button" class="btn btn-sm btn-primary" disabled>Save changes</button>').appendTo($toolbar);
+      var $discardBtn = $('<button type="button" class="btn btn-sm btn-link" disabled>Discard</button>').appendTo($toolbar);
+      var $exportCsvBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">Export CSV</button>').appendTo($toolbar);
+      var $exportJsonBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">Export JSON</button>').appendTo($toolbar);
+      var $exportSqlBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">Export SQL</button>').appendTo($toolbar);
+
+      var $status = $('<div class="text-secondary small mb-2">').appendTo($container);
+      var $gridWrap = $('<div class="db-data-scroll">').appendTo($container);
+      var $pager = $('<div class="d-flex gap-2 align-items-center mt-2">').appendTo($container);
+      var $prevBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">Prev</button>').appendTo($pager);
+      var $nextBtn = $('<button type="button" class="btn btn-sm btn-outline-secondary">Next</button>').appendTo($pager);
+
+      function markDirty() {
+        var count = Object.keys(state.dirty).length + state.newRows.length + Object.keys(state.deleted).length;
+        $saveBtn.prop('disabled', count === 0).text(count ? 'Save changes (' + count + ')' : 'Save changes');
+        $discardBtn.prop('disabled', count === 0);
+      }
+
+      function render() {
+        $gridWrap.empty();
+        if (!state.columns.length) { $gridWrap.append($('<div class="text-secondary small">').text('No columns.')); return; }
+        var $tbl = $('<table class="table table-sm table-vcenter db-data-table"><thead></thead><tbody></tbody></table>');
+        var $thead = $tbl.find('thead');
+        var $htr = $('<tr>').appendTo($thead);
+        $htr.append('<th style="width:2.5rem;"></th>');
+        state.columns.forEach(function (col) {
+          var $th = $('<th data-sort>').text(col + (state.sort === col ? (state.sortDesc ? ' ↓' : ' ↑') : ''));
+          $th.on('click', function () {
+            if (state.sort === col) { state.sortDesc = !state.sortDesc; } else { state.sort = col; state.sortDesc = false; }
+            state.offset = 0;
+            load();
+          });
+          $htr.append($th);
+        });
+        var $tbody = $tbl.find('tbody');
+
+        state.rows.forEach(function (row, i) {
+          var $tr = $('<tr data-row-index="' + i + '">').toggleClass('db-row-deleted', !!state.deleted[i]);
+          var $del = $('<button type="button" class="icon-btn text-danger" aria-label="Delete row" title="Delete row"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>');
+          $del.on('click', function () {
+            state.deleted[i] = !state.deleted[i];
+            markDirty();
+            render();
+          });
+          $tr.append($('<td>').append($del));
+          state.columns.forEach(function (col, ci) {
+            var original = row[ci];
+            var $td = $('<td contenteditable="true">').text(original === null || original === undefined ? '' : original);
+            $td.on('blur', function () {
+              var text = $td.text();
+              var current = original === null || original === undefined ? '' : String(original);
+              if (text === current) {
+                $td.removeClass('db-cell-dirty');
+                if (state.dirty[i]) { delete state.dirty[i].values[col]; if (!Object.keys(state.dirty[i].values).length) delete state.dirty[i]; }
+              } else {
+                $td.addClass('db-cell-dirty');
+                if (!state.dirty[i]) {
+                  var orig = {};
+                  state.columns.forEach(function (c, j) { orig[c] = row[j]; });
+                  state.dirty[i] = { original: orig, values: {} };
+                }
+                state.dirty[i].values[col] = dbCoerceValue(state.columnTypes[col], text);
+              }
+              markDirty();
+            });
+            $tr.append($td);
+          });
+          $tbody.append($tr);
+        });
+
+        state.newRows.forEach(function (values, ni) {
+          var $tr = $('<tr class="db-row-new">');
+          var $del = $('<button type="button" class="icon-btn text-danger" aria-label="Remove new row" title="Remove"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>');
+          $del.on('click', function () { state.newRows.splice(ni, 1); markDirty(); render(); });
+          $tr.append($('<td>').append($del));
+          state.columns.forEach(function (col) {
+            var $td = $('<td contenteditable="true">').text(values[col] || '');
+            $td.on('blur', function () { values[col] = dbCoerceValue(state.columnTypes[col], $td.text()); markDirty(); });
+            $tr.append($td);
+          });
+          $tbody.append($tr);
+        });
+
+        $gridWrap.append($tbl);
+        $prevBtn.prop('disabled', state.offset === 0);
+      }
+
+      function load() {
+        $status.text('Loading…');
+        var url = dbRowsURL(conn, schema, table) + '&limit=' + state.limit + '&offset=' + state.offset;
+        if (state.sort) url += '&sort=' + encodeURIComponent(state.sort) + '&sort_desc=' + (state.sortDesc ? 'true' : 'false');
+        if (state.filter) url += '&filter=' + encodeURIComponent(state.filter);
+        $.get(url)
+          .done(function (r) {
+            state.columns = r.columns;
+            state.rows = r.rows;
+            state.dirty = {}; state.newRows = []; state.deleted = {};
+            markDirty();
+            $status.text(state.rows.length + ' row' + (state.rows.length === 1 ? '' : 's') + (r.has_more ? ' (more available)' : '') + ', starting at ' + state.offset);
+            $nextBtn.prop('disabled', !r.has_more);
+            render();
+          })
+          .fail(function (xhr) { dbLoadError($gridWrap, xhr); $status.text(''); });
+      }
+
+      $applyFilterBtn.on('click', function () { state.filter = $filterInput.val().trim(); state.offset = 0; load(); });
+      $filterInput.on('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); $applyFilterBtn.click(); } });
+      $prevBtn.on('click', function () { state.offset = Math.max(0, state.offset - state.limit); load(); });
+      $nextBtn.on('click', function () { state.offset += state.limit; load(); });
+      $addRowBtn.on('click', function () {
+        // Deliberately empty, not one '' per column: an untouched cell
+        // (e.g. an auto-increment id the user never meant to set) must be
+        // left out of the insert entirely, not sent as an empty string —
+        // see the insert-edit filter below.
+        state.newRows.push({});
+        markDirty();
+        render();
+      });
+      $discardBtn.on('click', load);
+
+      $saveBtn.on('click', function () {
+        var edits = [];
+        Object.keys(state.dirty).forEach(function (i) {
+          edits.push({ op: 'update', original: state.dirty[i].original, values: state.dirty[i].values });
+        });
+        Object.keys(state.deleted).forEach(function (i) {
+          var orig = {};
+          state.columns.forEach(function (c, j) { orig[c] = state.rows[i][j]; });
+          edits.push({ op: 'delete', original: orig });
+        });
+        state.newRows.forEach(function (values) {
+          var vals = {};
+          Object.keys(values).forEach(function (k) { if (values[k] !== undefined) vals[k] = values[k]; });
+          edits.push({ op: 'insert', values: vals });
+        });
+        if (!edits.length) return;
+        $saveBtn.prop('disabled', true).text('Saving…');
+        $.ajax({
+          url: dbRowsURL(conn, schema, table), method: 'PATCH', contentType: 'application/json',
+          data: JSON.stringify({ edits: edits })
+        }).done(load).fail(function (xhr) {
+          DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save changes.');
+          markDirty();
+        });
+      });
+
+      $exportCsvBtn.on('click', function () { dbExportRows(state.columns, state.rows, table, 'csv'); });
+      $exportJsonBtn.on('click', function () { dbExportRows(state.columns, state.rows, table, 'json'); });
+      $exportSqlBtn.on('click', function () { dbExportRows(state.columns, state.rows, table, 'sql'); });
+
+      load();
+    }
+
+    function dbCsvEscape(v) {
+      var s = v === null || v === undefined ? '' : String(v);
+      if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+
+    function dbSqlLiteral(v) {
+      if (v === null || v === undefined || v === '') return 'NULL';
+      if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+      return "'" + String(v).replace(/'/g, "''") + "'";
+    }
+
+    function dbDownload(filename, mime, text) {
+      var blob = new Blob([text], { type: mime });
+      var url = URL.createObjectURL(blob);
+      var $a = $('<a>').attr({ href: url, download: filename }).appendTo(document.body);
+      $a[0].click();
+      $a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function dbExportRows(columns, rows, table, format) {
+      if (format === 'csv') {
+        var lines = [columns.map(dbCsvEscape).join(',')];
+        rows.forEach(function (row) { lines.push(row.map(dbCsvEscape).join(',')); });
+        dbDownload(table + '.csv', 'text/csv', lines.join('\n'));
+      } else if (format === 'json') {
+        var objs = rows.map(function (row) {
+          var o = {};
+          columns.forEach(function (c, i) { o[c] = row[i]; });
+          return o;
+        });
+        dbDownload(table + '.json', 'application/json', JSON.stringify(objs, null, 2));
+      } else if (format === 'sql') {
+        var stmts = rows.map(function (row) {
+          return 'INSERT INTO ' + table + ' (' + columns.join(', ') + ') VALUES (' + row.map(dbSqlLiteral).join(', ') + ');';
+        });
+        dbDownload(table + '.sql', 'text/plain', stmts.join('\n'));
+      }
+    }
+
+    // --- SQL editor (Slice 9) ---
+
+    var dbSqlEditorConn = null;
+    var dbSqlEditorCM = null;
+
+    function dbSqlEditorInit() {
+      if (dbSqlEditorCM) return;
+      dbSqlEditorCM = CodeMirror(document.getElementById('db-sql-editor-cm'), {
+        mode: 'text/x-sql', theme: 'material-darker', lineNumbers: true,
+        matchBrackets: true, autoCloseBrackets: true
+      });
+    }
+
+    $('#db-sql-editor-toggle-btn').on('click', function () {
+      var toEditor = $('#db-tree').is(':visible');
+      $('#db-tree').prop('hidden', toEditor);
+      $('#db-sql-editor').prop('hidden', !toEditor);
+      $(this).text(toEditor ? 'Back to tree' : 'SQL Editor');
+      if (toEditor) { dbSqlEditorInit(); setTimeout(function () { dbSqlEditorCM.refresh(); dbSqlEditorCM.focus(); }, 0); }
+    });
+
+    $('#db-sql-run-btn').on('click', function () {
+      if (!dbSqlEditorConn || !dbSqlEditorCM) return;
+      var sql = dbSqlEditorCM.getSelection() || dbSqlEditorCM.getValue();
+      if (!sql.trim()) return;
+      $('#db-sql-status').text('Running…');
+      $.ajax({
+        url: dbQueryURL(dbSqlEditorConn), method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ sql: sql })
+      }).done(function (r) {
+        var $results = $('#db-sql-results').empty();
+        if (r.is_exec) {
+          $('#db-sql-status').text('OK — ' + r.rows_affected + ' row(s) affected.');
+          return;
+        }
+        $('#db-sql-status').text(r.rows.length + ' row' + (r.rows.length === 1 ? '' : 's') + (r.has_more ? ' (more available, refine your query)' : ''));
+        if (!r.rows.length) return;
+        var $exportBar = $('<div class="d-flex gap-2 mb-2">').appendTo($results);
+        $('<button type="button" class="btn btn-sm btn-outline-secondary">Export CSV</button>').on('click', function () { dbExportRows(r.columns, r.rows, 'query_result', 'csv'); }).appendTo($exportBar);
+        $('<button type="button" class="btn btn-sm btn-outline-secondary">Export JSON</button>').on('click', function () { dbExportRows(r.columns, r.rows, 'query_result', 'json'); }).appendTo($exportBar);
+        var $wrap = $('<div class="db-data-scroll">').appendTo($results);
+        var $tbl = $('<table class="table table-sm table-vcenter db-data-table"><thead><tr></tr></thead><tbody></tbody></table>');
+        var $htr = $tbl.find('thead tr');
+        r.columns.forEach(function (c) { $htr.append($('<th>').text(c)); });
+        var $tbody = $tbl.find('tbody');
+        r.rows.forEach(function (row) {
+          var $tr = $('<tr>');
+          row.forEach(function (v) { $tr.append($('<td>').text(v === null || v === undefined ? '' : v)); });
+          $tbody.append($tr);
+        });
+        $wrap.append($tbl);
+      }).fail(function (xhr) {
+        $('#db-sql-status').text('Error: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText));
+      });
+    });
 
     // --- Files (docs/PRD.md §5, docs/WEB_UI_DESIGN.md Files,
     // --- docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md File Manager) ---

@@ -318,10 +318,10 @@ type DBConnectionParams struct {
 // DBCommandPayload is the payload of a MessageDBCommand envelope.
 type DBCommandPayload struct {
 	// Action is one of: test, invalidate, schemas, tables, columns,
-	// indexes, constraints, triggers (Slice 7/8). Data browsing and the SQL
-	// editor (Slice 9) add more. "invalidate" is a fire-and-forget
-	// notice (sent via SendEnvelope, no reply) telling the runtime to drop
-	// its cached connection pool for ConnectionID — see ADR-021/022.
+	// indexes, constraints, triggers (Slice 7/8), rows, commit, query
+	// (Slice 9). "invalidate" is a fire-and-forget notice (sent via
+	// SendEnvelope, no reply) telling the runtime to drop its cached
+	// connection pool for ConnectionID — see ADR-021/022.
 	Action string `json:"action"`
 	// ConnectionID keys the runtime's connection pool cache — a stored
 	// connection is opened at most once per runtime process and reused
@@ -329,10 +329,35 @@ type DBCommandPayload struct {
 	ConnectionID string             `json:"connection_id"`
 	Connection   DBConnectionParams `json:"connection"`
 	// Schema/Table scope a schemas/tables/columns/indexes/constraints/
-	// triggers request. Schema is "" for an engine with no schema concept
-	// (SQLite) or a single implicit one (MySQL/MariaDB).
+	// triggers/rows/commit request. Schema is "" for an engine with no
+	// schema concept (SQLite) or a single implicit one (MySQL/MariaDB).
 	Schema string `json:"schema,omitempty"`
 	Table  string `json:"table,omitempty"`
+	// Limit/Offset/Sort/SortDesc/Filter scope a "rows" request. Filter is a
+	// raw SQL boolean expression, not a parameterized value — the same
+	// deliberate arbitrary-SQL trust model as SQL (ADR-021).
+	Limit    int    `json:"limit,omitempty"`
+	Offset   int    `json:"offset,omitempty"`
+	Sort     string `json:"sort,omitempty"`
+	SortDesc bool   `json:"sort_desc,omitempty"`
+	Filter   string `json:"filter,omitempty"`
+	// Edits carries a "commit" request's staged inserts/updates/deletes.
+	Edits []DBRowEdit `json:"edits,omitempty"`
+	// SQL carries a "query" request's arbitrary SQL Editor text.
+	SQL string `json:"sql,omitempty"`
+}
+
+// DBRowEdit is one staged insert/update/delete for a "commit" request.
+type DBRowEdit struct {
+	// Op is "insert", "update", or "delete".
+	Op string `json:"op"`
+	// Original identifies the row being updated/deleted — the column
+	// values as originally fetched by "rows", used to build a WHERE
+	// clause. Unused for insert.
+	Original map[string]any `json:"original,omitempty"`
+	// Values are the new column values for insert/update. Unused for
+	// delete.
+	Values map[string]any `json:"values,omitempty"`
 }
 
 // DBTableInfo describes one table or view.
@@ -378,6 +403,21 @@ type DBTriggerInfo struct {
 	Timing string `json:"timing,omitempty"`
 }
 
+// DBRowsResult is the result of a "rows" or "query" request. Exactly one of
+// (Columns+Rows) or (IsExec+RowsAffected) is meaningful, matching whether
+// the statement produced a result set.
+type DBRowsResult struct {
+	Columns []string `json:"columns,omitempty"`
+	// Rows holds each row's values in Columns order, JSON-marshaled as-is
+	// (numbers/strings/bools/null/RFC3339 timestamps; a []byte value that
+	// wasn't valid UTF-8 text is base64-encoded by encoding/json).
+	Rows [][]any `json:"rows,omitempty"`
+	// HasMore is true when more rows exist beyond Limit.
+	HasMore      bool  `json:"has_more,omitempty"`
+	IsExec       bool  `json:"is_exec,omitempty"`
+	RowsAffected int64 `json:"rows_affected,omitempty"`
+}
+
 // DBResultPayload is the payload of a MessageDBResult envelope. Exactly one
 // of the non-Ok fields is populated, matching the request's Action.
 type DBResultPayload struct {
@@ -388,6 +428,7 @@ type DBResultPayload struct {
 	Indexes     []DBIndexInfo      `json:"indexes,omitempty"`
 	Constraints []DBConstraintInfo `json:"constraints,omitempty"`
 	Triggers    []DBTriggerInfo    `json:"triggers,omitempty"`
+	Rows        *DBRowsResult      `json:"rows,omitempty"`
 }
 
 // DBErrorPayload is the payload of a MessageDBError envelope. Same shape as

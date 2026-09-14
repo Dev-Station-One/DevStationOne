@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // Params identifies and authenticates one database connection. Built by the
@@ -75,6 +76,38 @@ type Trigger struct {
 	Timing string
 }
 
+// RowEdit is one staged insert/update/delete for Commit.
+type RowEdit struct {
+	// Op is "insert", "update", or "delete".
+	Op string
+	// Original identifies the row being updated/deleted — the column
+	// values as originally fetched by Rows, used to build a WHERE clause.
+	// Unused for insert.
+	Original map[string]any
+	// Values are the new column values for insert/update. Unused for
+	// delete.
+	Values map[string]any
+}
+
+// RowsResult is the result of Rows or Query. Exactly one of (Columns+Rows)
+// or (IsExec+RowsAffected) is meaningful, matching whether the statement
+// produced a result set.
+type RowsResult struct {
+	Columns []string
+	// Rows holds each row's values in Columns order. A []byte value has
+	// already been normalized to a UTF-8 string where possible (see
+	// normalizeValue) — only genuinely non-text data stays []byte, which
+	// encoding/json base64-encodes.
+	Rows [][]any
+	// HasMore is true when more rows exist beyond what was returned
+	// (Limit was reached).
+	HasMore bool
+	// IsExec is true for a statement with no result set (Query's raw SQL
+	// only — Rows always produces a result set).
+	IsExec       bool
+	RowsAffected int64
+}
+
 // Connector opens a verified connection for one database engine and
 // introspects its schema. schema is "" for an engine with no schema concept
 // (SQLite) or a single implicit schema (MySQL/MariaDB — see Schemas).
@@ -96,6 +129,25 @@ type Connector interface {
 	Indexes(ctx context.Context, db *sql.DB, schema, table string) ([]Index, error)
 	Constraints(ctx context.Context, db *sql.DB, schema, table string) ([]Constraint, error)
 	Triggers(ctx context.Context, db *sql.DB, schema, table string) ([]Trigger, error)
+
+	// Rows returns a page of table/view data. sort is a column name (already
+	// validated against the table's own columns by the caller) or "";
+	// sortDesc reverses it. filter, if non-empty, is a raw SQL boolean
+	// expression appended after WHERE — the same deliberate arbitrary-SQL
+	// trust model as Query (docs/DECISIONS.md ADR-021), not a parameterized
+	// value.
+	Rows(ctx context.Context, db *sql.DB, schema, table string, limit, offset int, sort string, sortDesc bool, filter string) (RowsResult, error)
+
+	// Commit applies edits to table as parameterized statements — never by
+	// interpolating a row's values into SQL text, unlike filter/Query above.
+	Commit(ctx context.Context, db *sql.DB, schema, table string, edits []RowEdit) error
+
+	// Query runs sqlText verbatim — arbitrary SQL, the SQL Editor's
+	// intentional parallel to the terminal (ADR-021). limit caps how many
+	// result rows are read back for a SELECT-shaped statement; an
+	// INSERT/UPDATE/DELETE/DDL statement is run via Exec instead and
+	// reports RowsAffected.
+	Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error)
 }
 
 // SupportedEngines lists every engine name this build can connect to,
@@ -270,6 +322,161 @@ func groupConstraints(rows *sql.Rows) ([]Constraint, error) {
 		out = append(out, c)
 	}
 	return out, rows.Err()
+}
+
+// normalizeValue converts a scanned driver value into something
+// JSON-friendly: a []byte that's valid UTF-8 becomes a string (most
+// TEXT/VARCHAR/DECIMAL columns come back as []byte from at least the MySQL
+// driver even when scanned into `any`); genuinely binary []byte is left
+// alone, which encoding/json base64-encodes.
+func normalizeValue(v any) any {
+	b, ok := v.([]byte)
+	if !ok {
+		return v
+	}
+	if utf8.Valid(b) {
+		return string(b)
+	}
+	return b
+}
+
+// scanRows reads up to limit+1 rows from rows (already-executed), so the
+// caller — whose SQL requested limit+1 — can tell whether more rows exist
+// without a separate COUNT(*). Used by both Rows (whose SQL bakes in
+// limit+1) and Query (whose arbitrary SQL doesn't; the cap is enforced
+// purely by stopping iteration early, which works either way).
+func scanRows(rows *sql.Rows, limit int) (RowsResult, error) {
+	cols, err := rows.Columns()
+	if err != nil {
+		return RowsResult{}, err
+	}
+	result := RowsResult{Columns: cols}
+	values := make([]any, len(cols))
+	ptrs := make([]any, len(cols))
+	for i := range values {
+		ptrs[i] = &values[i]
+	}
+	for rows.Next() {
+		if len(result.Rows) >= limit {
+			result.HasMore = true
+			break
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return RowsResult{}, err
+		}
+		row := make([]any, len(cols))
+		for i, v := range values {
+			row[i] = normalizeValue(v)
+		}
+		result.Rows = append(result.Rows, row)
+	}
+	return result, rows.Err()
+}
+
+// isExecStatement reports whether sqlText looks like a statement with no
+// result set — a simple keyword sniff (the same approach general-purpose
+// SQL clients use), not a parser. Good enough to route the SQL Editor's
+// arbitrary text to Exec vs Query; a false classification just produces an
+// error from the wrong call, not a security issue.
+func isExecStatement(sqlText string) bool {
+	upper := strings.ToUpper(strings.TrimSpace(sqlText))
+	for _, kw := range []string{"INSERT", "UPDATE", "DELETE", "CREATE", "DROP", "ALTER", "TRUNCATE", "GRANT", "REVOKE", "REPLACE"} {
+		if strings.HasPrefix(upper, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// genericQuery implements Connector.Query identically for every engine —
+// running arbitrary SQL verbatim needs no engine-specific building.
+func genericQuery(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
+	if isExecStatement(sqlText) {
+		res, err := db.ExecContext(ctx, sqlText)
+		if err != nil {
+			return RowsResult{}, err
+		}
+		affected, _ := res.RowsAffected() // not every driver reports this; 0 is a reasonable default
+		return RowsResult{IsExec: true, RowsAffected: affected}, nil
+	}
+	rows, err := db.QueryContext(ctx, sqlText)
+	if err != nil {
+		return RowsResult{}, err
+	}
+	defer rows.Close()
+	return scanRows(rows, limit)
+}
+
+// buildAndExecCommit applies edits against quotedTable (already fully
+// identifier-quoted and schema-qualified by the caller) using quoteIdent
+// for column names and placeholder for bound-parameter markers — the only
+// two things that differ across engines; the statement shapes themselves
+// are identical. Every value is bound, never interpolated — the one
+// deliberate exception to that rule in this package is Query's raw SQL
+// text, not this function.
+func buildAndExecCommit(ctx context.Context, db *sql.DB, quotedTable string, edits []RowEdit, quoteIdent func(string) string, placeholder func(int) string) error {
+	for _, e := range edits {
+		switch e.Op {
+		case "insert":
+			cols := make([]string, 0, len(e.Values))
+			phs := make([]string, 0, len(e.Values))
+			args := make([]any, 0, len(e.Values))
+			n := 1
+			for col, val := range e.Values {
+				cols = append(cols, quoteIdent(col))
+				phs = append(phs, placeholder(n))
+				args = append(args, val)
+				n++
+			}
+			q := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quotedTable, strings.Join(cols, ", "), strings.Join(phs, ", "))
+			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+				return fmt.Errorf("insert: %w", err)
+			}
+
+		case "update":
+			if len(e.Original) == 0 {
+				return fmt.Errorf("update requires the row's original values to build a WHERE clause")
+			}
+			var sets, where []string
+			var args []any
+			n := 1
+			for col, val := range e.Values {
+				sets = append(sets, quoteIdent(col)+" = "+placeholder(n))
+				args = append(args, val)
+				n++
+			}
+			for col, val := range e.Original {
+				where = append(where, quoteIdent(col)+" = "+placeholder(n))
+				args = append(args, val)
+				n++
+			}
+			q := fmt.Sprintf("UPDATE %s SET %s WHERE %s", quotedTable, strings.Join(sets, ", "), strings.Join(where, " AND "))
+			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+				return fmt.Errorf("update: %w", err)
+			}
+
+		case "delete":
+			if len(e.Original) == 0 {
+				return fmt.Errorf("delete requires the row's original values to build a WHERE clause")
+			}
+			var where []string
+			var args []any
+			n := 1
+			for col, val := range e.Original {
+				where = append(where, quoteIdent(col)+" = "+placeholder(n))
+				args = append(args, val)
+				n++
+			}
+			q := fmt.Sprintf("DELETE FROM %s WHERE %s", quotedTable, strings.Join(where, " AND "))
+			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+				return fmt.Errorf("delete: %w", err)
+			}
+
+		default:
+			return fmt.Errorf("unknown row edit op %q", e.Op)
+		}
+	}
+	return nil
 }
 
 // constraintTypeName normalizes information_schema.table_constraints'

@@ -250,3 +250,31 @@ func (sqliteConnector) Triggers(ctx context.Context, db *sql.DB, schema, table s
 	}
 	return out, rows.Err()
 }
+
+func (sqliteConnector) Rows(ctx context.Context, db *sql.DB, schema, table string, limit, offset int, sort string, sortDesc bool, filter string) (RowsResult, error) {
+	q := "SELECT * FROM " + quoteSQLiteIdent(table)
+	if filter != "" {
+		q += " WHERE " + filter
+	}
+	if sort != "" {
+		q += " ORDER BY " + quoteSQLiteIdent(sort)
+		if sortDesc {
+			q += " DESC"
+		}
+	}
+	q += fmt.Sprintf(" LIMIT %d OFFSET %d", limit+1, offset)
+	rows, err := db.QueryContext(ctx, q)
+	if err != nil {
+		return RowsResult{}, err
+	}
+	defer rows.Close()
+	return scanRows(rows, limit)
+}
+
+func (sqliteConnector) Commit(ctx context.Context, db *sql.DB, schema, table string, edits []RowEdit) error {
+	return buildAndExecCommit(ctx, db, quoteSQLiteIdent(table), edits, quoteSQLiteIdent, func(int) string { return "?" })
+}
+
+func (sqliteConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
+	return genericQuery(ctx, db, sqlText, limit)
+}
