@@ -365,11 +365,8 @@
             <div id="code-panel" class="tab-pane" role="tabpanel" tabindex="0">
               <div class="d-flex code-pane" style="height:calc(100vh - 14rem);min-height:24rem">
                 <div id="code-tree" class="flex-shrink-0 overflow-auto bg-body-tertiary pe-1" style="width:17rem;min-width:10rem"></div>
-                <div class="d-flex flex-column flex-fill min-w-0" style="border-left:1px solid rgba(128,128,128,.25)">
+                <div class="min-w-0" style="border-left:1px solid rgba(128,128,128,.25)">
                   <ul id="code-tabs" class="nav nav-tabs code-tabs flex-nowrap" role="tablist"></ul>
-                  <div id="code-empty" class="flex-fill d-flex align-items-center justify-content-center text-secondary">
-                    Open a file from the tree to start editing.
-                  </div>
                   <div id="code-editor-stack" class="flex-fill d-flex min-w-0" style="overflow:hidden"></div>
                 </div>
               </div>
@@ -1877,7 +1874,7 @@
     function dbSqlEditorInit() {
       if (dbSqlEditorCM) return;
       dbSqlEditorCM = CodeMirror(document.getElementById('db-sql-editor-cm'), {
-        mode: 'text/x-sql', theme: 'material-darker', lineNumbers: true,
+        mode: 'text/x-sql', theme: 'material-darker', lineNumbers: true, lineWrapping: true,
         matchBrackets: true, autoCloseBrackets: true
       });
     }
@@ -2857,6 +2854,7 @@
         lineNumbers: true,
         matchBrackets: true,
         autoCloseBrackets: true,
+        lineWrapping: true,
         theme: cmThemeName(),
         extraKeys: { 'Ctrl-F': 'findPersistent', 'Cmd-F': 'findPersistent' }
       });
