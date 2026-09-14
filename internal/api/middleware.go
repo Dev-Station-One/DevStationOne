@@ -104,6 +104,19 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// noCache forces the browser to revalidate every static file request rather
+// than trust a heuristically-cached copy (RFC 7234 §4.2.2). There is no
+// build step or hashed filenames in web/static (docs/DECISIONS.md), so
+// without this a changed file can silently keep serving a stale cached
+// version indefinitely. `no-cache` still allows a conditional GET (cheap
+// 304 in the common case) rather than forcing a full re-download.
+func noCache(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		next.ServeHTTP(w, r)
+	})
+}
+
 // mutatingMethods are the HTTP methods csrfProtect checks — state-changing
 // requests, where a forged cross-site request could do damage. GET/HEAD are
 // exempt: they must not have side effects (and are how top-level navigation

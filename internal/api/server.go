@@ -158,9 +158,9 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 
 	// StripPrefix: FileServer maps the full URL path under the root dir, so
 	// /assets/x must lose the /assets/ prefix before hitting http.Dir.
-	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
+	mux.Handle("GET /assets/", noCache(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets")))))
 
-	mux.Handle("GET /", http.FileServer(http.Dir(staticDir)))
+	mux.Handle("GET /", noCache(http.FileServer(http.Dir(staticDir))))
 
 	var handler http.Handler = mux
 	handler = rateLimitAPI(apiRateLimit, handler)
