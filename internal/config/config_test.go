@@ -1,11 +1,26 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
-func TestLoadServer_RequiresDatabaseURL(t *testing.T) {
-	t.Setenv("DEVSTATIONONE_DATABASE_URL", "")
-	if _, err := LoadServer(); err == nil {
-		t.Fatal("expected error when DEVSTATIONONE_DATABASE_URL is unset")
+func TestLoadServer_DefaultsDatabaseURL(t *testing.T) {
+	orig, had := os.LookupEnv("DEVSTATIONONE_DATABASE_URL")
+	os.Unsetenv("DEVSTATIONONE_DATABASE_URL")
+	t.Cleanup(func() {
+		if had {
+			os.Setenv("DEVSTATIONONE_DATABASE_URL", orig)
+		}
+	})
+
+	cfg, err := LoadServer()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable"
+	if cfg.DatabaseURL != want {
+		t.Errorf("DatabaseURL = %q, want %q", cfg.DatabaseURL, want)
 	}
 }
 
