@@ -12,6 +12,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
   <link rel="apple-touch-icon" href="/assets/logo/favicon-256.png">
   <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/fonts.css">
   <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
   <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
   <script>try { if (window.localStorage.getItem('tabler-sidebar') === 'folded-hover') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { /* private mode: fine */ }</script>
@@ -43,6 +44,54 @@
                 </div>
                 <div class="col-12 small text-secondary" id="display-name-saved" hidden>Saved.</div>
               </form>
+            </div>
+          </div>
+
+          <div class="card mb-4">
+            <div class="card-body">
+              <h3 class="card-title">Fonts</h3>
+              <p class="text-secondary mb-3">Default monospace fonts and size for the terminal and the project Code editor.</p>
+              <form id="fonts-form" class="row g-2 align-items-end" autocomplete="off">
+                <div class="col-12 col-md-4">
+                  <label class="form-label mb-1" for="terminal-font-select">Terminal font</label>
+                  <select id="terminal-font-select" class="form-select">
+                    <option value="system">System</option>
+                    <option value="jetbrainsmono-nerd">JetBrains Mono Nerd</option>
+                    <option value="fira-code">Fira Code</option>
+                    <option value="cascadia-code">Cascadia Code</option>
+                    <option value="source-code-pro">Source Code Pro</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-4">
+                  <label class="form-label mb-1" for="editor-font-select">Editor font</label>
+                  <select id="editor-font-select" class="form-select">
+                    <option value="system">System</option>
+                    <option value="fira-code">Fira Code</option>
+                    <option value="cascadia-code">Cascadia Code</option>
+                    <option value="source-code-pro">Source Code Pro</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-2">
+                  <label class="form-label mb-1" for="font-size-select">Font size</label>
+                  <select id="font-size-select" class="form-select">
+                    <option value="12">12px</option>
+                    <option value="13">13px</option>
+                    <option value="14">14px</option>
+                    <option value="15">15px</option>
+                    <option value="16">16px</option>
+                    <option value="17">17px</option>
+                    <option value="18">18px</option>
+                  </select>
+                </div>
+                <div class="col-12 col-md-2">
+                  <button class="btn btn-primary w-100" type="submit">Save</button>
+                </div>
+                <div class="col-12 small text-secondary" id="fonts-saved" hidden>Saved.</div>
+              </form>
+              <div class="mt-3 d-flex gap-4 flex-wrap">
+                <span id="terminal-font-preview">The quick brown fox</span>
+                <span id="editor-font-preview">The quick brown fox</span>
+              </div>
             </div>
           </div>
 
@@ -81,6 +130,10 @@
         $('#account-email').text(user.email);
         $('#account-role').text(user.is_admin ? 'Administrator' : 'User');
         $('#display-name-input').val(user.display_name || '');
+        $('#terminal-font-select').val(user.terminal_font || 'system');
+        $('#editor-font-select').val(user.editor_font || 'system');
+        $('#font-size-select').val(String(user.font_size || 14));
+        applyFontPreviews();
       }).fail(function () {
         window.location.href = '/login.html';
       });
@@ -97,6 +150,46 @@
         $('#display-name-saved').prop('hidden', false);
       }).fail(function (xhr) {
         DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save display name.');
+      });
+    });
+
+    var FONT_FAMILIES = {
+      'system': null,
+      'jetbrainsmono-nerd': '"JetBrains Mono NFM", monospace',
+      'fira-code': '"Fira Code", monospace',
+      'cascadia-code': '"Cascadia Code", monospace',
+      'source-code-pro': '"Source Code Pro", monospace'
+    };
+
+    function applyFontPreviews() {
+      var size = $('#font-size-select').val() + 'px';
+      $('#terminal-font-preview').css({
+        'font-family': FONT_FAMILIES[$('#terminal-font-select').val()] || 'monospace',
+        'font-size': size
+      });
+      $('#editor-font-preview').css({
+        'font-family': FONT_FAMILIES[$('#editor-font-select').val()] || 'monospace',
+        'font-size': size
+      });
+    }
+
+    $('#fonts-form select').on('change', applyFontPreviews);
+
+    $('#fonts-form').on('submit', function (e) {
+      e.preventDefault();
+      $.ajax({
+        url: '/api/v1/auth/preferences',
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          terminal_font: $('#terminal-font-select').val(),
+          editor_font: $('#editor-font-select').val(),
+          font_size: parseInt($('#font-size-select').val(), 10)
+        })
+      }).done(function () {
+        $('#fonts-saved').prop('hidden', false);
+      }).fail(function (xhr) {
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save font preferences.');
       });
     });
 

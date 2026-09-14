@@ -131,7 +131,14 @@ paths:
               properties:
                 terminal_font:
                   type: string
-                  enum: [system, jetbrainsmono-nerd]
+                  enum: [system, jetbrainsmono-nerd, fira-code, cascadia-code, source-code-pro]
+                editor_font:
+                  type: string
+                  enum: [system, fira-code, cascadia-code, source-code-pro]
+                font_size:
+                  type: integer
+                  minimum: 12
+                  maximum: 18
                 theme:
                   type: string
                   enum: [dark, light]
@@ -3341,7 +3348,7 @@ components:
           type: [string, "null"]
     User:
       type: object
-      required: [id, email, display_name, is_admin, terminal_font, theme, created_at]
+      required: [id, email, display_name, is_admin, terminal_font, theme, editor_font, font_size, created_at]
       properties:
         id:
           type: string
@@ -3355,7 +3362,14 @@ components:
           type: boolean
         terminal_font:
           type: string
-          enum: [system, jetbrainsmono-nerd]
+          enum: [system, jetbrainsmono-nerd, fira-code, cascadia-code, source-code-pro]
+        editor_font:
+          type: string
+          enum: [system, fira-code, cascadia-code, source-code-pro]
+        font_size:
+          type: integer
+          minimum: 12
+          maximum: 18
         theme:
           type: string
           enum: [dark, light]

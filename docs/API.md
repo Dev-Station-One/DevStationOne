@@ -797,12 +797,18 @@ Never return secrets in errors.
 
 Browser authentication: server-side session, identified by a random 256-bit token stored in an `HttpOnly`, `SameSite=Lax` cookie. The cookie carries the `Secure` attribute only when the request arrived over TLS (directly or via `X-Forwarded-Proto: https`), because browsers drop `Secure` cookies on plain-`http` origins other than localhost. The server stores only a SHA-256 hash of the token, never the raw value. Sessions expire 7 days after creation and are individually revocable (`/api/v1/auth/sessions`). See `docs/openapi.yaml` for the concrete contract.
 
-User preferences (docs/REQUIREMENTS_NERD_FONT.md): read through
-`GET /api/v1/auth/session` (`terminal_font`: `system` | `jetbrainsmono-nerd`;
+User preferences (docs/REQUIREMENTS_NERD_FONT.md, docs/CODE_TAB_REQUIREMENTS.md): read through
+`GET /api/v1/auth/session` (`terminal_font`: `system` | `jetbrainsmono-nerd` |
+`fira-code` | `cascadia-code` | `source-code-pro`;
+`editor_font`: `system` | `fira-code` | `cascadia-code` | `source-code-pro`;
+`font_size`: 12–18 shared by terminal + editor;
 `theme`: `dark` | `light`; `display_name`), updated with a partial `PUT
-/api/v1/auth/preferences` (`{"terminal_font": ...}`, `{"theme": ...}`,
-and/or `{"display_name": ...}` — trimmed, ≤80 chars, empty clears it)
-→ `204`. Per-account, server-stored. `display_name` is the friendly name
+/api/v1/auth/preferences` (`{"terminal_font": ...}`, `{"editor_font": ...}`,
+`{"font_size": ...}`, `{"theme": ...}`, and/or `{"display_name": ...}` —
+trimmed, ≤80 chars, empty clears it) → `204`. Per-account, server-stored.
+The plain coding faces lose the Nerd Font's glyph icons in the terminal —
+an accepted trade. The coding faces apply to both the terminal and the
+Code tab's editor; `web/static/css/fonts.css` self-hosts all of them. `display_name` is the friendly name
 shown instead of the email (journal creator column; empty falls back to
 the email). Theme applies the
 `docs/BOOTSTRAP_COLORS.md` dark workstation palette (default) or its light

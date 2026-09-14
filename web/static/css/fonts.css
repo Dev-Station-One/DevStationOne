@@ -1,0 +1,30 @@
+/* Self-hosted coding fonts shared by the terminal and the Code tab's editor.
+   Each face is loaded by the browser only once a preference selects it. */
+@font-face {
+  font-family: 'JetBrains Mono NFM';
+  src: url('/vendor/fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Fira Code';
+  src: url('/vendor/fonts/FiraCode-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Cascadia Code';
+  src: url('/vendor/fonts/CascadiaCode-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Source Code Pro';
+  src: url('/vendor/fonts/SourceCodePro-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

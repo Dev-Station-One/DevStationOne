@@ -20,16 +20,9 @@
   <link rel="stylesheet" href="/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="/vendor/codemirror/addon/dialog/dialog.min.css">
   <link rel="stylesheet" href="/vendor/codemirror/theme/material-darker.min.css">
+  <link rel="stylesheet" href="/css/fonts.css">
   <style>
-    /* Nerd Font for the terminal (docs/REQUIREMENTS_NERD_FONT.md). Loaded by
-       the browser only once a terminal actually uses it. */
-    @font-face {
-      font-family: 'JetBrains Mono NFM';
-      src: url('/vendor/fonts/JetBrainsMonoNerdFontMono-Regular.woff2') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
+    /* Shared coding fonts live in /css/fonts.css (terminal + Code tab). */
     /* Terminal session tabs and app tabs scroll horizontally instead of
        wrapping, per docs/WEB_UI_DESIGN.md "Mobile" and
        VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md mobile terminal priority. */
@@ -240,6 +233,9 @@
                     <select id="terminal-font-select" class="form-select form-select-sm" style="width: auto;" title="Terminal font" aria-label="Terminal font">
                       <option value="system">Font: system</option>
                       <option value="jetbrainsmono-nerd">Font: Nerd</option>
+                      <option value="fira-code">Font: Fira Code</option>
+                      <option value="cascadia-code">Font: Cascadia</option>
+                      <option value="source-code-pro">Font: Source Code</option>
                     </select>
                     <span id="session-status-text" class="text-secondary small me-2">—</span>
                     <button id="force-stop-btn" class="icon-btn text-danger" title="Send SIGTERM to this session's process" aria-label="Force stop"><i class="fa-solid fa-circle-stop" aria-hidden="true"></i></button>
@@ -900,22 +896,30 @@
 
     // --- Terminal font preference (docs/REQUIREMENTS_NERD_FONT.md) ---
 
-    var terminalFontPref = 'system'; // server-stored per-account; 'system' | 'jetbrainsmono-nerd'
-    var NERD_FONT_STACK = '"JetBrains Mono NFM", monospace';
+    var terminalFontPref = 'system'; // server-stored per-account (docs/CODE_TAB_REQUIREMENTS.md)
+    var TERMINAL_FONT_STACKS = {
+      'fira-code': '"Fira Code", monospace',
+      'cascadia-code': '"Cascadia Code", monospace',
+      'source-code-pro': '"Source Code Pro", monospace',
+      'jetbrainsmono-nerd': '"JetBrains Mono NFM", monospace'
+    };
+    var fontPref = { terminal: 'system', editor: 'system', size: 14 }; // shared with the Code tab's editor (Stage 4)
 
     function applyTerminalFont() {
-      var family = terminalFontPref === 'jetbrainsmono-nerd' ? NERD_FONT_STACK : null;
+      var family = TERMINAL_FONT_STACKS[terminalFontPref] || 'courier-new, courier, monospace';
       Object.keys(termState).forEach(function (id) {
         var st = termState[id];
         if (!st.term) return;
-        st.term.options.fontFamily = family || 'courier-new, courier, monospace';
+        st.term.options.fontFamily = family;
+        st.term.options.fontSize = fontPref.size;
         if (st.fit && id === activeSessionID) st.fit.fit();
       });
     }
 
     function setTerminalFont(pref, persist) {
-      if (pref !== 'system' && pref !== 'jetbrainsmono-nerd') pref = 'system';
+      if (!TERMINAL_FONT_STACKS[pref] && pref !== 'system') pref = 'system';
       terminalFontPref = pref;
+      fontPref.terminal = pref;
       $('#terminal-font-select').val(pref);
       applyTerminalFont();
       if (!persist) return;
@@ -934,6 +938,8 @@
 
     $.get('/api/v1/auth/session').done(function (u) {
       setTerminalFont(u.terminal_font || 'system', false);
+      fontPref.editor = u.editor_font || 'system';
+      fontPref.size = u.font_size || 14;
     });
 
     function statusLabel(status) {

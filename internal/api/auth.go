@@ -25,11 +25,13 @@ type userResponse struct {
 	IsAdmin      bool      `json:"is_admin"`
 	TerminalFont string    `json:"terminal_font"`
 	Theme        string    `json:"theme"`
+	EditorFont   string    `json:"editor_font"`
+	FontSize     int       `json:"font_size"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 func toUserResponse(u auth.User) userResponse {
-	return userResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, CreatedAt: u.CreatedAt}
+	return userResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, EditorFont: u.EditorFont, FontSize: u.FontSize, CreatedAt: u.CreatedAt}
 }
 
 // updatePreferencesHandler PUT /api/v1/auth/preferences — partial update of
@@ -46,17 +48,27 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 			TerminalFont *string `json:"terminal_font"`
 			Theme        *string `json:"theme"`
 			DisplayName  *string `json:"display_name"`
+			EditorFont   *string `json:"editor_font"`
+			FontSize     *int    `json:"font_size"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
-		if req.TerminalFont == nil && req.Theme == nil && req.DisplayName == nil {
+		if req.TerminalFont == nil && req.Theme == nil && req.DisplayName == nil && req.EditorFont == nil && req.FontSize == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nothing to update"})
 			return
 		}
 		if req.TerminalFont != nil && !auth.ValidTerminalFont(*req.TerminalFont) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown terminal_font"})
+			return
+		}
+		if req.EditorFont != nil && !auth.ValidEditorFont(*req.EditorFont) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown editor_font"})
+			return
+		}
+		if req.FontSize != nil && !auth.ValidFontSize(*req.FontSize) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "font_size must be between 12 and 18"})
 			return
 		}
 		if req.Theme != nil && !auth.ValidTheme(*req.Theme) {
@@ -76,6 +88,18 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 		}
 		if req.TerminalFont != nil {
 			if err := auth.SetTerminalFont(r.Context(), db.Pool, user.ID, *req.TerminalFont); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
+				return
+			}
+		}
+		if req.EditorFont != nil {
+			if err := auth.SetEditorFont(r.Context(), db.Pool, user.ID, *req.EditorFont); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
+				return
+			}
+		}
+		if req.FontSize != nil {
+			if err := auth.SetFontSize(r.Context(), db.Pool, user.ID, *req.FontSize); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
 				return
 			}

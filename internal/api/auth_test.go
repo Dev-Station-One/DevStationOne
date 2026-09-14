@@ -231,6 +231,56 @@ func TestTerminalFontPreference(t *testing.T) {
 		t.Fatalf("after theme put: theme = %q, terminal_font = %q (partial update must not touch the other field)", u.Theme, u.TerminalFont)
 	}
 
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"editor_font":"fira-code","font_size":16}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("put editor font prefs: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	u = get()
+	if u.EditorFont != "fira-code" || u.FontSize != 16 {
+		t.Fatalf("editor prefs after put = %+v", u)
+	}
+	if u.TerminalFont != "jetbrainsmono-nerd" {
+		t.Fatalf("terminal_font = %q, want unchanged", u.TerminalFont)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"editor_font":"comic-sans"}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid editor_font: status = %d, want 400", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"font_size":11}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("font_size 11: status = %d, want 400", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"font_size":19}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("font_size 19: status = %d, want 400", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"terminal_font":"cascadia-code"}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("put extended terminal font: status = %d", rec.Code)
+	}
+	if got := get().TerminalFont; got != "cascadia-code" {
+		t.Fatalf("terminal_font after put = %q, want cascadia-code", got)
+	}
+
 	req = httptest.NewRequest(http.MethodPut, "/api/v1/auth/preferences", bytes.NewReader([]byte(`{"theme":"solarized"}`)))
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()

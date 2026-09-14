@@ -129,3 +129,11 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 JetBrainsMonoNerdFontMono-Regular.woff2 is JetBrains Mono (SIL Open Font
 License 1.1, https://www.jetbrains.com/lp/mono/) patched by Nerd Fonts
 (MIT, https://www.nerdfonts.com), converted to woff2.
+
+---
+FiraCode-Regular.woff2 is Fira Code 6.2 by Nikita Prokopov
+(SIL Open Font License 1.1, https://github.com/tonsky/FiraCode).
+CascadiaCode-Regular.woff2 is Cascadia Code v2407.24 by Microsoft
+(SIL Open Font License 1.1, https://github.com/microsoft/cascadia-code).
+SourceCodePro-Regular.ttf is Source Code Pro 2.042R by Adobe
+(SIL Open Font License 1.1, https://github.com/adobe-fonts/source-code-pro).
