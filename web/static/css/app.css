@@ -200,3 +200,8 @@ body {
 .ds-logo-login {
   height: 100px;
 }
+
+.page-body {
+  margin-top: 10px !important;
+  margin-bottom: 0 !important;
+}
