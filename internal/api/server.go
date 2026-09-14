@@ -4,6 +4,9 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"devstationone/internal/database"
 	"devstationone/internal/protocol"
@@ -19,10 +22,17 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
 
+	// Per-IP rate limits (docs/SECURITY.md). One limiter instance per
+	// server process (not a package-level var): each Control Server, and
+	// each test's own router, gets an independent budget.
+	apiRateLimit := newIPLimiter(rate.Limit(20), 40)
+	loginRateLimit := newIPLimiter(rate.Every(6*time.Second), 5)
+
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler(db))
+	mux.HandleFunc("GET /api/v1/metrics", requireAdmin(db, metricsHandler(registry, hub)))
 
-	mux.HandleFunc("POST /api/v1/auth/login", loginHandler(db))
+	mux.HandleFunc("POST /api/v1/auth/login", rateLimit(loginRateLimit, loginHandler(db)))
 	mux.HandleFunc("POST /api/v1/auth/logout", logoutHandler(db))
 	mux.HandleFunc("GET /api/v1/auth/session", requireSession(db, currentSessionHandler))
 	mux.HandleFunc("PUT /api/v1/auth/preferences", requireSession(db, updatePreferencesHandler(db)))
@@ -132,12 +142,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 
 	mux.Handle("GET /", http.FileServer(http.Dir(staticDir)))
 
-	return withRequestLogging(logger, mux)
-}
-
-func withRequestLogging(logger *slog.Logger, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-		logger.Info("request", "method", r.Method, "path", r.URL.Path)
-	})
+	var handler http.Handler = mux
+	handler = rateLimitAPI(apiRateLimit, handler)
+	handler = csrfProtect(handler)
+	handler = securityHeaders(handler)
+	handler = withRequestLogging(logger, handler)
+	return handler
 }

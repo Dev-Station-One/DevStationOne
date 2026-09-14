@@ -20,6 +20,7 @@ tags:
   - name: Databases
   - name: Services
   - name: Audit
+  - name: Metrics
 paths:
   /healthz:
     get:
@@ -39,6 +40,25 @@ paths:
           description: Ready
         "503":
           description: Not ready
+  /api/v1/metrics:
+    get:
+      summary: Basic operational counters
+      description: Go expvar JSON format (docs/API.md "Metrics", docs/DECISIONS.md ADR-026) — not a Prometheus exposition endpoint.
+      tags: [Metrics]
+      operationId: getMetrics
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: expvar-format JSON
+          content:
+            application/json:
+              schema:
+                type: object
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
   /api/v1/auth/login:
     post:
       summary: Log in with email and password

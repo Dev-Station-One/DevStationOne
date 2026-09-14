@@ -50,6 +50,14 @@ func (r *Registry) Unregister(runtimeID string, c Conn) {
 	}
 }
 
+// Count returns how many runtimes currently have a live connection
+// (docs/SECURITY.md "metrics").
+func (r *Registry) Count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.conns)
+}
+
 // IsOnline reports whether runtimeID currently has a live connection.
 func (r *Registry) IsOnline(runtimeID string) bool {
 	_, ok := r.Get(runtimeID)

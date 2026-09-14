@@ -38,6 +38,14 @@ func NewHub() *Hub {
 	}
 }
 
+// AttachedCount returns how many sessions currently have a live browser
+// connection attached (docs/SECURITY.md "metrics").
+func (h *Hub) AttachedCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.attached)
+}
+
 // AwaitOpen registers a wait for the runtime's response to a just-sent
 // session.open command, returning a channel that receives nil on
 // session.ready or an error on session.error.

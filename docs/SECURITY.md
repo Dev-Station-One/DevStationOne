@@ -75,6 +75,66 @@ Validate:
 
 Prevent session hijacking.
 
+Both WebSocket upgrade points (`GET /api/v1/runtimes/connect`,
+`GET /api/v1/sessions/{sessionID}/stream`) share `wsAcceptOptions`
+(`internal/api/middleware.go`): compression disabled (a per-message-deflate
+side channel is a real, if narrow, risk on a connection carrying any
+attacker-influenced content, and terminal I/O isn't bandwidth-constrained
+enough to need it) and origin validation via `coder/websocket`'s own
+default (an upgrade request with a cross-origin `Origin` header is
+rejected before the handler ever runs).
+
+## CSRF
+
+The session cookie is `SameSite=Lax` (ADR-009/ADR-026) — a browser already
+withholds it on a cross-site `POST`/`fetch`, which is the classic CSRF
+vector. `csrfProtect` (`internal/api/middleware.go`) adds defense in depth:
+any state-changing request (`POST`/`PUT`/`PATCH`/`DELETE`) carrying an
+`Origin` header that disagrees with the request's own `Host` is rejected
+with `403`, regardless of cookie/session validity. A request with no
+`Origin` header at all is not blocked by this check (see ADR-026 for why).
+
+## Rate limits
+
+Per-client-IP token buckets (`internal/api/middleware.go` `ipLimiter`),
+one instance per Control Server process:
+- `POST /api/v1/auth/login` specifically: ~10/minute after a small burst,
+  to blunt password guessing.
+- Every other mutating (`POST`/`PUT`/`PATCH`/`DELETE`) `/api/v1/...`
+  request: a much larger general budget. Read (`GET`) requests are
+  exempt — the UI polls read endpoints by design (runtime/session/service
+  status), and the actual abuse surface is state-changing requests.
+
+Exceeding a bucket returns `429`.
+
+## Security headers
+
+Every response carries `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: same-origin`,
+`Permissions-Policy` (denying geolocation/camera/microphone), and a
+`Content-Security-Policy` restricting everything to same-origin
+(`securityHeaders`, `internal/api/middleware.go`) — plus
+`Strict-Transport-Security` when the request arrived over TLS (directly or
+via `X-Forwarded-Proto: https`, matching the session cookie's own `Secure`
+logic). The CSP keeps `'unsafe-inline'` for `script-src`/`style-src`: every
+page under `web/static/` uses inline `<script>`/`<style>` by design (no
+build step), so a stricter policy would break the app while adding little
+— everything is same-origin already, which is what this policy actually
+enforces.
+
+## Observability
+
+Every request is logged as one structured line (method, path, status,
+duration, a random per-request correlation ID, client IP —
+`withRequestLogging`, `internal/api/middleware.go`) and the same
+correlation ID is echoed back as an `X-Request-Id` response header. It is
+a debugging aid, not a secret or a security boundary.
+
+`GET /api/v1/metrics` (administrator session required) exposes basic
+counters — total requests, 5xx count, connected runtimes, attached
+terminal sessions — as JSON (Go's `expvar` format; see ADR-026 for why not
+Prometheus exposition format in this MVP).
+
 ## Audit
 
 Audit security-relevant events:

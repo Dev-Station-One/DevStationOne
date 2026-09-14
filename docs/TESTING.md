@@ -19,6 +19,32 @@ make openapi-lint
 Note: without `DEVSTATIONONE_DATABASE_URL` the integration tests silently skip.
 Check the `internal/api` timing — a 0.005s run means everything skipped.
 
+## Browser end-to-end test (Slice 12)
+
+`internal/api/e2e_test.go` drives a real headless Chrome/Chromium through
+the actual static HTML/JS (`web/static/`) against a real router+Postgres —
+proof the login form, session cookie, sidebar client-side render, and a
+live API fetch (the Activity page, Slice 11) all work together in an
+actual browser JS engine, which the rest of `internal/api`'s httptest-based
+tests structurally cannot check (they never execute JavaScript).
+
+Needs a `google-chrome`/`chromium-browser`/`chromium` binary on `PATH` (in
+that preference order — a bare `chromium` that resolves to a snap wrapper
+is unreliable to drive over CDP; see the comment in `findChromium`) in
+addition to `DEVSTATIONONE_DATABASE_URL`; it `t.Skip`s, not fails, if none
+is found. `make test` already runs it as part of `internal/api`'s normal
+suite — no separate command.
+
+## Mobile QA
+
+No separate suite — the responsive/mobile-first requirement
+(docs/WEB_UI_DESIGN.md) is checked by hand at a phone-width viewport
+(resize to ~390×844) whenever a page changes: no page-level horizontal
+scroll, the sidebar folds to a hamburger toggle, and any data table stays
+inside its own `.table-responsive` scroll container rather than the whole
+page (the same convention every existing data table in the app already
+follows).
+
 ## Manual smoke run
 
 **Before starting**: this machine runs many projects. Port 8080 is usually

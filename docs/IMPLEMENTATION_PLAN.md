@@ -329,6 +329,51 @@ Deliver:
 - end-to-end test suite
 - mobile QA
 
+**Status: Complete.** All cross-cutting hardening lands in
+`internal/api/middleware.go`/`metrics.go` (ADR-026): per-IP rate limits
+(`ipLimiter`, tight on login, general on every other mutating request),
+security headers + a same-origin `Content-Security-Policy` on every
+response, an `Origin`-based CSRF check on mutating requests (defense in
+depth alongside the existing `SameSite=Lax` session cookie), structured
+per-request logging with a correlation ID (`X-Request-Id`), and
+`GET /api/v1/metrics` (admin-only, `expvar` format). WebSocket hardening
+and runtime revocation were found already solid from Slices 2/4/7
+(`coder/websocket`'s own origin check, immediate close-on-revoke,
+token-hash-only storage) — this slice's addition there is disabling
+per-message compression (`wsAcceptOptions`) as one more real hardening
+step, not a re-implementation.
+
+New docs: docs/DEPLOYMENT.md (build/config/systemd/reverse-proxy/upgrade)
+and docs/BACKUPS.md (what to back up — PostgreSQL and the DB encryption
+key, and explicitly *not* runtime-side files — plus restore steps).
+docs/SECURITY.md gained matching Rate limits/CSRF/Security headers/
+Observability sections.
+
+`internal/api/e2e_test.go` (`github.com/chromedp/chromedp`, a new but
+narrowly-scoped Go dependency — no Node/Playwright toolchain added) is a
+real headless-browser test: login form → session cookie → Activity page
+→ sidebar render, the one piece of the stack `internal/api`'s httptest-only
+suite structurally cannot exercise (no JS execution). Mobile QA was a
+manual phone-width (390×844) pass over the login and Activity pages —
+no page-level horizontal scroll, sidebar folds correctly, tables scroll
+within their own container like every other table in the app.
+
+A real bug surfaced and was fixed during this slice: wrapping
+`http.ResponseWriter` for per-request logging (`statusRecorder`) without an
+`Unwrap() http.ResponseWriter` method broke every WebSocket upgrade
+(`runtimes/connect`, `sessions/{id}/stream`) — `http.ResponseController`
+(used by `coder/websocket` to hijack the connection) couldn't see through
+the wrapper to the real `http.Hijacker`. Caught by the existing
+`internal/api` integration suite (nine tests failed with "condition not met
+before timeout" — every online-runtime/session-open wait, since none of
+those WebSocket connections could complete) before this reached any real
+deployment.
+
+Verified: full `go test -p 1 ./...` green (including the new E2E test),
+`gofmt`/`go vet` clean, `redocly lint` valid (`GET /api/v1/metrics` added),
+and a real browser smoke test against the dev Control Server confirming
+security headers/`X-Request-Id` are live on real responses.
+
 ## Slice 13 — Packaging and deployment
 
 Deliver:

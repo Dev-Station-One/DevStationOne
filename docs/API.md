@@ -559,6 +559,31 @@ logged and never blocks the action it describes.
 the Control Server (`cmd/devstationone-server` `auditPurgeLoop`) deletes
 events older than the policy; it also runs once at startup.
 
+## Metrics
+
+```text
+GET /api/v1/metrics
+```
+
+Administrator-only. Returns Go's `expvar` JSON format: every published
+counter plus two live gauges, `runtime_connections` and
+`terminal_sessions_attached`. See docs/SECURITY.md "Observability" and
+docs/DECISIONS.md ADR-026 for why `expvar` rather than a Prometheus
+exposition endpoint in this MVP.
+
+## Cross-cutting hardening (Slice 12)
+
+Every response — not just `/api/v1/...` — carries security headers
+(`X-Content-Type-Options`, `X-Frame-Options`, `Content-Security-Policy`,
+etc.) and an `X-Request-Id` correlation header; every request is logged as
+one structured line (method, path, status, duration, request ID, client
+IP). Every mutating (`POST`/`PUT`/`PATCH`/`DELETE`) request is checked
+against an `Origin`-based CSRF guard and a per-IP rate limit (a much
+tighter one specifically on `POST /api/v1/auth/login`). None of this
+changes any endpoint's request/response shape — see docs/SECURITY.md for
+the specifics and docs/DECISIONS.md ADR-026 for why each was built the way
+it was.
+
 ## Errors
 
 Use consistent machine-readable errors with:

@@ -679,3 +679,89 @@ security review of old events still shows who did what even after the
 account is gone. It's also the only actor identity available at all for a
 failed login (`auth.login_failed`), which by definition has no
 authenticated user to reference.
+
+## ADR-026 — Slice 12: production hardening choices — expvar over Prometheus, Origin-check CSRF over tokens, per-process rate limiters, no CSP nonce infrastructure
+
+Date: 2026-09-14
+
+**Decision.** Four independent hardening mechanisms land together as
+`internal/api/middleware.go`: `securityHeaders`, `csrfProtect`,
+`rateLimit`/`rateLimitAPI` (backed by `ipLimiter`, a per-IP
+`golang.org/x/time/rate` token bucket), plus `withRequestLogging` rewritten
+to emit one structured line per request (status, duration, a random
+correlation ID) and stamp `X-Request-Id`. `internal/api/metrics.go` adds
+`GET /api/v1/metrics`. `wsAcceptOptions` (shared by both WebSocket upgrade
+points) disables per-message compression. None of this touches the
+protocol (`docs/PROTOCOL.md`) or introduces a stored resource — it's all
+process-level, HTTP-layer hardening.
+
+**Why `expvar` (stdlib) instead of a Prometheus client library.** This MVP
+has no metrics backend deployed to actually scrape a Prometheus exposition
+endpoint yet — adding that dependency now would be speculative. `expvar`'s
+default JSON format is trivially scrapeable by a script if/when one is
+needed, at zero new dependency cost. `metricsHandler` deliberately doesn't
+call `expvar.Publish` for the two live gauges (`runtime_connections`,
+`terminal_sessions_attached`): `Publish` panics if the same name is
+registered twice, and `NewRouter` — the function that would need to call
+it — runs once per test in `internal/api`'s own suite, each with a fresh
+`*runtimes.Registry`/`*sessions.Hub`. The handler instead re-implements
+`expvar.Handler`'s own JSON-object format inline and appends the two
+gauges by reading the request-scoped registry/hub directly.
+
+**Why CSRF defense is an `Origin` header check, not a token
+(double-submit or synchronizer).** The session cookie is already
+`SameSite=Lax` (ADR-009) — a browser withholds it on a cross-site
+`POST`/`fetch` by construction, which is the entire CSRF attack surface for
+a cookie-authenticated API. A token scheme would duplicate a protection
+this app already has for free, at the cost of every mutating request
+needing to carry and every handler needing to verify a second credential.
+The `Origin` check in `csrfProtect` is deliberately narrow: it only
+rejects a request whose `Origin` header is present *and* disagrees with
+the request's own `Host` — never a request with no `Origin` header at
+all, which includes the runtime's own bearer-token-authenticated
+`POST`-free WebSocket upgrade and any legitimately same-site request an
+older browser sends without one.
+
+**Why rate limiters are constructed fresh inside `NewRouter`, not as
+package-level variables.** A package-level `*ipLimiter` would be shared
+process-wide — fine for the one real Control Server process, but every
+test in `internal/api` calls `NewRouter` at least once (some many times
+per test via `sessionsTestSetupIn`), all in the same test binary process.
+A shared limiter's token bucket would drain across unrelated tests,
+producing spurious `429`s with no relationship to what any individual test
+is doing. Scoping the limiter to the `NewRouter` call it's used in — one
+instance per Control Server, and incidentally one independent instance per
+test — is simpler than adding test-only bypass logic and correct in both
+contexts.
+
+**Why the general (non-login) rate limit only applies to
+`POST`/`PUT`/`PATCH`/`DELETE`, not `GET`.** The UI polls read endpoints by
+design — `pollUntil`-style waits for runtime-online/session-ready state
+exist throughout `internal/api`'s own test suite, hitting a `GET` endpoint
+every 10ms, and the same pattern exists in the real browser client
+(service/session status). The actual abuse surface a rate limit needs to
+address — brute-forcing login, mass resource creation/deletion — is
+entirely mutating requests; exempting `GET` avoids the false choice
+between a limit loose enough not to break legitimate polling and one tight
+enough to matter.
+
+**Why the Content-Security-Policy keeps `'unsafe-inline'` instead of a
+nonce/hash-based policy.** Every page under `web/static/` carries its
+page-specific logic as an inline `<script>` block (and some inline
+`<style>`) — there is no bundler/build step (a deliberate absence; see the
+"Files"/UI sections of docs/ARCHITECTURE.md), so a nonce would have to be
+generated per-request and templated into static files that are currently
+served byte-for-byte from disk via `http.FileServer`. That's a real
+templating layer this slice doesn't add. The policy still restricts every
+resource type to `'self'` (plus `data:` for images and `ws:`/`wss:` for
+the terminal/runtime connections) — the meaningful boundary (no
+third-party origin can be a load-bearing dependency, and a reflected-HTML
+injection can't pull in an external script) holds either way.
+
+**Why `/api/v1/metrics` requires an administrator session instead of being
+open for an unauthenticated scraper.** There's no scrape infrastructure
+defined for this MVP (see above) to weigh against the cost of exposing
+even coarse operational counts (request volume, connected runtime count)
+without authentication. Gating it the same way every other admin-only
+endpoint already is costs nothing today; loosening it later for a specific
+scrape setup is a one-line change when that setup exists.

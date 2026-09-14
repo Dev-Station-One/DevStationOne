@@ -48,7 +48,7 @@ func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *se
 			return
 		}
 
-		conn, err := websocket.Accept(w, r, nil)
+		conn, err := websocket.Accept(w, r, wsAcceptOptions)
 		if err != nil {
 			return // Accept already wrote the HTTP error response.
 		}
