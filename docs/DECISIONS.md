@@ -1083,3 +1083,43 @@ because `save` records the post-save stat; a content push equal to the
 current buffer is a client-side no-op, so no echo-suppression bookkeeping
 exists. If 2 MiB ever bites, chunked/partial sync is the upgrade path
 (`ponytail:` marker at the constant).
+
+## ADR-034 — Project workspace tabs use the real Bootstrap 5.3 Tab component, not tabler.min.js's copy, and skip the Data API
+
+**Decision.** `web/static/project.html` now vendors the official Bootstrap
+5.3.8 bundle (`web/static/vendor/bootstrap/js/bootstrap.bundle.min.js`,
+fetched from jsDelivr like the other vendor libs) and uses `bootstrap.Tab`
+for both the app-level workspace tabs (Overview/Terminal/Files/Code/Source
+Control/Databases/Services/Journal — now real `role="tablist"`/`role="tab"`
+markup with panels wrapped in a `.tab-content`) and the Code tab's dynamic
+per-file tab strip (`web/static/js/editor.js`). Neither uses the
+`data-bs-toggle="tab"` Data API; both wire a click handler that calls
+`bootstrap.Tab.getOrCreateInstance(el).show()` directly, then react to the
+`shown.bs.tab` event for side effects (lazy-loading a tab's data, toggling
+`#overview-actions`, re-showing the Code tab's editor host).
+
+**Why.** `tabler.min.js` (already loaded, for `Modal`) is Tabler's own
+rebuild of the same Bootstrap component sources under `window.tabler`
+instead of `window.bootstrap`. It registers the identical
+document-delegated `[data-bs-toggle="tab"]` click listener that real
+Bootstrap's Data API registers. Loading both scripts and using
+`data-bs-toggle="tab"` would fire *two* independent `Tab` instances (one
+per library) per click, double-dispatching `shown.bs.tab` and double-running
+every lazy-load side effect. Calling `bootstrap.Tab` explicitly — the
+documented "via JavaScript" pattern
+(https://getbootstrap.com/docs/5.3/components/navs-tabs/#javascript-behavior)
+— sidesteps the Data API entirely, so only the real Bootstrap component
+ever runs. Terminal session tabs (`.session-tab`) are deliberately left
+alone: they are a session-manager widget (status dot, activity dot, close
+button, single shared `#terminal-canvas` reattached per session), not a
+content-pane switcher, so the Tab component doesn't fit them.
+
+**Consequence.** The Code tab's file-tab hosts are plain `hidden`-toggled
+divs, not `.tab-pane` elements — `bootstrap.Tab.show()` still resolves them
+via `data-bs-target` and applies `role="tabpanel"`/`active`/`show`, which is
+harmless bookkeeping since our own `activate()` (called from `shown.bs.tab`)
+is the actual visibility switch. Two overlapping Tab implementations
+(tabler's and real Bootstrap's) now ship on `project.html`; migrating
+`modalInstance()` off `tabler.Modal` onto `bootstrap.Modal` and dropping
+`tabler.min.js`'s component layer entirely is the natural follow-up if a
+similar `data-bs-toggle` collision is ever hit for another component.

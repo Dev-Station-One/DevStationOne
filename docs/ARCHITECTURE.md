@@ -326,6 +326,10 @@ Sensitive credentials require protected storage.
 
 Tabler 1.5.x folded layout.
 
+Tab components (workspace tabs, Code tab file strip) use the vendored
+Bootstrap 5.3 `bootstrap.Tab` JS API directly, not `tabler.min.js`'s
+bundled copy or its `data-bs-toggle` Data API — see ADR-034.
+
 Use a mature terminal emulator such as xterm.js.
 
 The UI must consume the public API rather than reaching directly into application internals.

@@ -1,6 +1,6 @@
 # Code Tab — Requirements Specification
 
-Status: requirements discovery complete (2026-09-14). Architecture/design phase next.
+Status: implemented (Slice 19, `docs/IMPLEMENTATION_PLAN.md`).
 
 ## Goal
 

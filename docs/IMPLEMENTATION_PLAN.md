@@ -795,7 +795,9 @@ account-level font preferences for terminal + editor. Requirements:
   from `dialogs.js`'s directory picker; `web/static/js/editor.js` pane
   (tabs, dirty dot, 300ms debounced save, conflict prompts, always-dark
   theme, tab-state restore); `Code` app tab in `project.html`; Files-tab
-  deep-link.
+  deep-link. All workspace-level tabs and the Code tab's file-tab strip run
+  on the real vendored Bootstrap 5.3 `bootstrap.Tab` component rather than
+  `tabler.min.js`'s bundled copy (ADR-034).
 
 **Tests**: runtime-side edit manager unit tests
 (`internal/agent/edit_manager_test.go`); hub union/drop/publish tests
@@ -806,7 +808,7 @@ two-connection fan-out, binary refusal, project authorization, state
 round-trip + size cap). Frontend behavior verified by a manual smoke of
 the requirements doc's acceptance criteria (no JS test infra in this repo).
 
-**Status: In Progress.** Stage 1 and Stage 2 complete; Stages 3–4 pending.
+**Status: Complete.** Stages 1–4 done.
 
 ## Future, explicitly not MVP
 
