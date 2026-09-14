@@ -765,3 +765,65 @@ even coarse operational counts (request volume, connected runtime count)
 without authentication. Gating it the same way every other admin-only
 endpoint already is costs nothing today; loosening it later for a specific
 scrape setup is a one-line change when that setup exists.
+
+## ADR-027 — Slice 13: packaging closed a real gap — the Control Server unit ran as root
+
+Date: 2026-09-14
+
+**Context.** `install.sh` and `.github/workflows/release.yml` (release
+tarball build/publish, checksum verification, systemd unit generation for
+both binaries) already existed from ADR-019, ahead of this plan formally
+reaching Slice 13 — that ADR's "Consequence" section notes the release
+tooling picking up the third binary, but Slice 13 itself was never marked
+against it. This slice is the verification/close-out pass, not a rewrite.
+
+**What verification found: the generated Control Server unit had no
+`User=`, so it ran as root.** `ProtectSystem=strict`/`ProtectHome`/
+`NoNewPrivileges` were already present, but none of them drop privilege —
+they narrow what root can still do, they don't stop being root. Every
+other privilege-boundary decision in this project (the Development Runtime
+never needing root; `docs/SECURITY.md`'s whole "defense in depth" section)
+argues the same standard should apply to the Control Server's own unit.
+Fixed: `install_server` now creates a dedicated `devstationone` system
+account (`useradd --system --no-create-home --shell /usr/sbin/nologin`,
+idempotent) and the unit runs as it (`User=`/`Group=devstationone`).
+
+**Why this account creation is skipped under `DEVSTATIONONE_INSTALL_ROOT`.**
+That variable exists (per the script's own header comment) so a sandboxed
+run can be smoke-tested without touching the real host — actually calling
+`useradd` there would create a real system user on whatever machine runs
+the test (a CI runner, a developer's laptop), which is exactly the side
+effect the sandbox exists to prevent. The generated unit file still gets
+`User=devstationone` either way; only the real account mutation is gated.
+
+**A second real gap, found the same way: the generated `server.env` had
+no `DEVSTATIONONE_DB_ENCRYPTION_KEY`, a required setting** —
+`config.LoadServer` refuses to start without it, so a fresh install would
+crash-loop until an operator noticed and added it by hand. Fixed by
+generating one with `openssl rand -base64 32` the first time `server.env`
+is written (never on a later re-install — that branch is the same
+already-existing idempotency guard that also preserves a hand-edited
+`server.env`, so an upgrade never silently rotates the key, which would
+orphan every stored database connection's credentials per ADR-021). A
+placeholder value was rejected outright: unlike `DATABASE_URL`'s
+`change-me` (an obviously-fake value an operator is expected to notice and
+edit), a fixed example encryption key is the kind of placeholder someone
+plausibly leaves in place, and doing so would be catastrophic rather than
+merely broken.
+
+**Verification.** `scripts/test-install.sh` (`make test-install`) is a new
+smoke test — not present before this pass — exercising both `install.sh
+--server`/`--runtime` against a locally built release tarball, sandboxed
+under `DEVSTATIONONE_INSTALL_ROOT`: binaries land in the right places, the
+generated unit carries `User=devstationone`, `server.env` gets a real
+generated key, and re-running install preserves a hand-edited env file.
+The real-GitHub download+checksum branch (`DEVSTATIONONE_TARBALL_URL`
+unset) isn't covered — that needs an actual release to fetch from, so it's
+exercised by real installs instead, not something worth building network-
+mocking infrastructure for. Also fixed while verifying: two stale docs
+(`README.md` claimed "Go 1.22+" against an actual `go.mod` of 1.26;
+`docs/TESTING.md` claimed `/readyz` answers `{"status":"ok"}`, but
+`readyHandler` answers `{"status":"ready"}`) and a broken README
+instruction (`sudo -u devstationone devstationone-admin ...` with no
+environment sourced — `devstationone-admin` needs the same two env vars
+the server does, and `sudo -u` doesn't inherit them).

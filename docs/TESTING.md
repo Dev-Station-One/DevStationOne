@@ -62,7 +62,7 @@ DEVSTATIONONE_SERVER_ADDR=':18080' /tmp/devstationone-server &
 echo 'smoke-admin-pass' | /tmp/devstationone-admin --email admin@devstationone.local
 ```
 
-`http://localhost:18080/healthz` and `/readyz` must answer `{"status":"ok"}`.
+`http://localhost:18080/healthz` must answer `{"status":"ok"}`, `/readyz` must answer `{"status":"ready"}`.
 
 ### 2. Enroll a runtime and create a Project
 

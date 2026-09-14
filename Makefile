@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt lint openapi-lint db-up dbtest-up db-down run-server run-runtime
+.PHONY: build test test-install vet fmt lint openapi-lint db-up dbtest-up db-down run-server run-runtime
 
 build:
 	go build ./...
@@ -6,6 +6,12 @@ build:
 test:
 	# -p 1: integration tests share one Postgres instance, so packages must not run concurrently.
 	go test -p 1 ./...
+
+# Smoke-tests install.sh --server/--runtime against a locally built tarball
+# (docs/IMPLEMENTATION_PLAN.md Slice 13). Separate from `test`: it shells
+# out and writes to a temp dir rather than running as a Go test.
+test-install:
+	bash scripts/test-install.sh
 
 vet:
 	go vet ./...

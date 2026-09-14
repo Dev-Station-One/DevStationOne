@@ -76,22 +76,41 @@ install_server() {
   if [ -z "$INSTALL_ROOT" ] && [ "$(id -u)" -ne 0 ]; then
     die "--server installs system-wide and must run as root (sudo bash -s -- --server)"
   fi
+  command -v openssl >/dev/null 2>&1 || die "openssl is required (to generate DEVSTATIONONE_DB_ENCRYPTION_KEY)"
 
   install -Dm755 "$WORK/bin/devstationone-server" "$INSTALL_ROOT/usr/local/bin/devstationone-server"
   install -Dm755 "$WORK/bin/devstationone-admin" "$INSTALL_ROOT/usr/local/bin/devstationone-admin"
 
+  # Run as a dedicated, unprivileged system account rather than root
+  # (docs/SECURITY.md "least privilege"/"defense in depth" — the same
+  # posture already applied to the Development Runtime, which never needs
+  # root either). Skipped under INSTALL_ROOT: that's a test/staging
+  # sandbox, not a real host to add a system user to.
+  if [ -z "$INSTALL_ROOT" ] && ! id -u devstationone >/dev/null 2>&1; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin devstationone
+  fi
+
   local env_file="$INSTALL_ROOT/etc/devstationone/server.env"
   mkdir -p "$(dirname "$env_file")"
   if [ ! -f "$env_file" ]; then
-    cat > "$env_file" <<'EOF'
+    # Generated fresh per install, not a placeholder: DEVSTATIONONE_DB_ENCRYPTION_KEY
+    # is required (encrypts stored database connection credentials, ADR-021) and a
+    # shared/example value would be actively dangerous rather than merely wrong.
+    # Back it up alongside the database (docs/BACKUPS.md) — never regenerated on
+    # an existing install (this whole block is skipped once the file exists).
+    local db_key
+    db_key="$(openssl rand -base64 32)"
+    cat > "$env_file" <<EOF
 # DevStationOne Control Server configuration.
 # Edit, then: sudo systemctl enable --now devstationone-server
 DEVSTATIONONE_ENV=production
 DEVSTATIONONE_LOG_LEVEL=info
 DEVSTATIONONE_SERVER_ADDR=:8080
 DEVSTATIONONE_DATABASE_URL=postgres://devstation:change-me@localhost:5432/devstation?sslmode=disable
+DEVSTATIONONE_DB_ENCRYPTION_KEY=$db_key
 EOF
     chmod 600 "$env_file"
+    [ -z "$INSTALL_ROOT" ] && chown devstationone:devstationone "$env_file"
     info "wrote $env_file — edit it before starting the service"
   else
     info "keeping existing $env_file"
@@ -106,6 +125,8 @@ Wants=network-online.target
 After=network-online.target
 
 [Service]
+User=devstationone
+Group=devstationone
 EnvironmentFile=/etc/devstationone/server.env
 ExecStart=/usr/local/bin/devstationone-server
 Restart=on-failure
@@ -124,7 +145,8 @@ EOF
   else
     systemctl daemon-reload
     info "next steps: sudoedit $env_file && sudo systemctl enable --now devstationone-server"
-    info "then seed an administrator: echo 'your-password' | devstationone-admin --email you@example.com"
+    info "then seed an administrator (as root, so it can read $env_file):"
+    info "  set -a; source $env_file; set +a; echo 'your-password' | devstationone-admin --email you@example.com"
   fi
 }
 

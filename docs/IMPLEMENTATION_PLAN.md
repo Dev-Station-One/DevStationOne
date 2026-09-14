@@ -386,6 +386,29 @@ Deliver:
 - production build
 - CI release artifacts
 
+**Status: Complete.** Most of this slice's groundwork — `install.sh`,
+`.github/workflows/release.yml` (cross-arch trimmed static builds, checksum
+verification, GitHub release publish on `v*` tags) — was actually built
+under ADR-019, ahead of the plan formally reaching Slice 13; this pass is
+the verification/close-out, and it found and fixed two real gaps rather
+than just rubber-stamping what existed (ADR-027): the generated Control
+Server systemd unit had no `User=` (ran as root — now a dedicated
+`devstationone` system account), and the generated `server.env` had no
+`DEVSTATIONONE_DB_ENCRYPTION_KEY` (a required setting — a fresh install
+would crash-loop; now generated with `openssl rand -base64 32` on first
+install only). New: `scripts/test-install.sh` (`make test-install`), a
+smoke test for `install.sh --server`/`--runtime` against a locally built
+tarball — this class of bug (a missing `User=` line, a missing required
+env var) is exactly what an actual run catches and a code-read alone
+easily misses, and neither had a runnable check before this pass. Also
+fixed: two stale docs (README's "Go 1.22+" vs. `go.mod`'s 1.26;
+docs/TESTING.md's `/readyz` response shape) and a broken README admin-CLI
+instruction (missing environment).
+
+PostgreSQL setup, upgrade path, configuration reference, and health checks
+were already documented (README.md, docs/DEPLOYMENT.md — Slice 12) and
+needed no new work beyond the fixes above.
+
 ## Future, explicitly not MVP
 
 - Android client

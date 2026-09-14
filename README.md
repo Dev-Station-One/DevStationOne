@@ -95,19 +95,21 @@ sudoedit /etc/devstationone/server.env
 sudo systemctl enable --now devstationone-server
 ```
 
-`/etc/devstationone/server.env` — the values you must set:
+`/etc/devstationone/server.env` — `install.sh` generates a random `DEVSTATIONONE_DB_ENCRYPTION_KEY` for you (back it up — see [docs/BACKUPS.md](docs/BACKUPS.md)); the value you must still set yourself is the database URL:
 
 ```bash
 DEVSTATIONONE_DATABASE_URL=postgres://devstation:password@localhost:5432/devstation?sslmode=disable
 DEVSTATIONONE_SERVER_ADDR=:8080        # default
 DEVSTATIONONE_ENV=production
 DEVSTATIONONE_LOG_LEVEL=info           # default
+DEVSTATIONONE_DB_ENCRYPTION_KEY=...    # generated for you
 ```
 
-Seed the initial administrator with the `devstationone-admin` CLI (reads `DEVSTATIONONE_DATABASE_URL` the same as the server):
+Seed the initial administrator with the `devstationone-admin` CLI. It reads `DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY` the same as the server, so source `server.env` first (as root, since it's `600`):
 
 ```bash
-echo 'choose-a-strong-password' | sudo -u devstationone devstationone-admin --email you@example.com
+set -a; source /etc/devstationone/server.env; set +a
+echo 'choose-a-strong-password' | devstationone-admin --email you@example.com
 ```
 
 Re-running it with the same email resets that account's password (and promotes it to admin if it wasn't already) — use it to recover a lost admin password too. Open `http://your-server:8080`, log in, and you're in.
@@ -207,7 +209,8 @@ rm -r ~/.config/devstationone
 
 # Server
 sudo systemctl disable --now devstationone-server
-sudo rm -r /etc/devstationone /usr/local/bin/devstationone-server
+sudo rm -r /etc/devstationone /usr/local/bin/devstationone-server /usr/local/bin/devstationone-admin
+sudo userdel devstationone
 # drop the PostgreSQL database when you're done
 ```
 
@@ -220,13 +223,15 @@ Also revoke the runtime on the server (**Runtimes → revoke**) so its credentia
 | Variable | Default | Description |
 |---|---|---|
 | `DEVSTATIONONE_DATABASE_URL` | *(required)* | PostgreSQL connection string |
+| `DEVSTATIONONE_DB_ENCRYPTION_KEY` | *(required)* | Base64, 32 raw bytes — encrypts stored database connection credentials. `install.sh` generates this for you on first install; never rotate it without re-entering every stored connection's credentials (docs/BACKUPS.md) |
 | `DEVSTATIONONE_SERVER_ADDR` | `:8080` | Listen address |
 | `DEVSTATIONONE_ENV` | `development` | Set to `production` on real deployments |
 | `DEVSTATIONONE_LOG_LEVEL` | `info` | `debug` · `info` · `warn` · `error` |
 
-Administrator accounts are seeded with the `devstationone-admin` CLI (same `DEVSTATIONONE_DATABASE_URL`), not with server env vars:
+Administrator accounts are seeded with the `devstationone-admin` CLI (same `DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY`), not with server env vars:
 
 ```bash
+set -a; source /etc/devstationone/server.env; set +a
 echo 'the-password' | devstationone-admin --email you@example.com
 ```
 
@@ -276,6 +281,7 @@ Do not want it internet-facing at all? Bind to a private interface (`DEVSTATIONO
 
 ## Security hardening
 
+- **The Control Server runs as an unprivileged system account, not root.** `install.sh` creates a `devstationone` system user (no login shell, no home directory) and the systemd unit runs as it, alongside `NoNewPrivileges`/`ProtectSystem=strict`/`ProtectHome`.
 - **Always terminate TLS.** Terminal bytes, file contents, and credentials cross this connection.
 - **Strong admin password, changed after first login.** The bootstrap password exists only to get you in the door.
 - **Revoke runtimes you decommission** — revoked enrollment tokens stop working immediately.
@@ -299,7 +305,7 @@ Run `loginctl enable-linger $USER` once — without linger, user services stop w
 Check the server log for runtime connection errors: `journalctl -u devstationone-server -f`. If you're behind nginx without the `Upgrade`/`Connection` headers above, WebSockets fail — terminals included.
 
 **Can't log in / forgot admin password**
-Run `devstationone-admin --email you@example.com` again with a new password on stdin — it resets that account's password in place, no need to touch the database or restart the server. (Set `DEVSTATIONONE_LOG_LEVEL=debug` for detail while diagnosing; never leave debug on in production.)
+Run `devstationone-admin --email you@example.com` again (source `server.env` first, as above) with a new password on stdin — it resets that account's password in place, no need to touch the database or restart the server. (Set `DEVSTATIONONE_LOG_LEVEL=debug` for detail while diagnosing; never leave debug on in production.)
 
 **Database connection fails in the Databases panel**
 Connections are made **by the runtime, from the dev machine** — the database must be reachable from that machine, not from the Control Server. Check host/port/credentials from the dev machine first.
@@ -332,14 +338,15 @@ Yes — real PTYs, real filesystem operations, real database drivers, real syste
 
 ## Building from source
 
-Requires Go 1.22+ and Docker (for the dev database):
+Requires Go 1.26+ (see `go.mod`) and Docker (for the dev database):
 
 ```bash
 git clone https://github.com/Dev-Station-One/DevStationOne.git
 cd DevStationOne
-make db-up      # dev PostgreSQL on localhost:55432
-make build      # builds both binaries
-make test       # full test suite
+make db-up        # dev PostgreSQL on localhost:55432
+make build        # builds all three binaries
+make test         # full test suite
+make test-install # smoke-tests install.sh against a local build
 ```
 
 ## Documentation

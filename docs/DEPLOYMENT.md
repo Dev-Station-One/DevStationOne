@@ -52,6 +52,18 @@ echo '<password>' | ./devstationone-admin -email admin@example.com
 
 ### systemd (recommended)
 
+Two supported paths:
+
+- **`install.sh` (packaged, root-invoked)** — `curl ... | sudo bash -s -- --server`
+  installs a system-wide unit running as a dedicated, unprivileged
+  `devstationone` system account (`useradd --system --no-create-home`) and
+  auto-generates `DEVSTATIONONE_DB_ENCRYPTION_KEY` on first install. See
+  README.md "Installing the Control Server" — the recommended path for a
+  real deployment.
+- **Manual, user-level (below)** — for building from source and running
+  under your own account (e.g. a personal homelab instance), no root
+  required at all:
+
 Run as a normal user-level service (no root required):
 
 ```ini
