@@ -1,5 +1,7 @@
 // Rebuild: cd web/static/vendor/codemirror6 && bun install && bun run build.mjs
-// Output: cm6.bundle.js (committed; node_modules is not). Never edit
-// cm6.bundle.js by hand — rerun this script.
+// Output: cm6.bundle.js + chunks/*.js (all committed; node_modules is not).
+// Never edit them by hand — rerun this script. ESM+splitting (not IIFE) so
+// @codemirror/language-data's per-language dynamic import()s lazy-load as
+// separate chunk files instead of bundling all ~180 languages eagerly.
 import { execSync } from "node:child_process";
-execSync("bunx esbuild entry.js --bundle --minify --format=iife --global-name=CM6 --target=es2018 --outfile=cm6.bundle.js", { stdio: "inherit" });
+execSync("bunx esbuild entry.js --bundle --minify --format=esm --splitting --outdir=. --entry-names=cm6.bundle --chunk-names=chunks/[name]-[hash] --target=es2018", { stdio: "inherit" });

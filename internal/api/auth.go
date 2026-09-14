@@ -19,19 +19,20 @@ type loginRequest struct {
 }
 
 type userResponse struct {
-	ID           string    `json:"id"`
-	Email        string    `json:"email"`
-	DisplayName  string    `json:"display_name"`
-	IsAdmin      bool      `json:"is_admin"`
-	TerminalFont string    `json:"terminal_font"`
-	Theme        string    `json:"theme"`
-	EditorFont   string    `json:"editor_font"`
-	FontSize     int       `json:"font_size"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID               string    `json:"id"`
+	Email            string    `json:"email"`
+	DisplayName      string    `json:"display_name"`
+	IsAdmin          bool      `json:"is_admin"`
+	TerminalFont     string    `json:"terminal_font"`
+	Theme            string    `json:"theme"`
+	EditorFont       string    `json:"editor_font"`
+	FontSize         int       `json:"font_size"`
+	EnabledLanguages []string  `json:"enabled_languages"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 func toUserResponse(u auth.User) userResponse {
-	return userResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, EditorFont: u.EditorFont, FontSize: u.FontSize, CreatedAt: u.CreatedAt}
+	return userResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, EditorFont: u.EditorFont, FontSize: u.FontSize, EnabledLanguages: u.EnabledLanguages, CreatedAt: u.CreatedAt}
 }
 
 // updatePreferencesHandler PUT /api/v1/auth/preferences — partial update of
@@ -45,17 +46,18 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 			return
 		}
 		var req struct {
-			TerminalFont *string `json:"terminal_font"`
-			Theme        *string `json:"theme"`
-			DisplayName  *string `json:"display_name"`
-			EditorFont   *string `json:"editor_font"`
-			FontSize     *int    `json:"font_size"`
+			TerminalFont     *string   `json:"terminal_font"`
+			Theme            *string   `json:"theme"`
+			DisplayName      *string   `json:"display_name"`
+			EditorFont       *string   `json:"editor_font"`
+			FontSize         *int      `json:"font_size"`
+			EnabledLanguages *[]string `json:"enabled_languages"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
-		if req.TerminalFont == nil && req.Theme == nil && req.DisplayName == nil && req.EditorFont == nil && req.FontSize == nil {
+		if req.TerminalFont == nil && req.Theme == nil && req.DisplayName == nil && req.EditorFont == nil && req.FontSize == nil && req.EnabledLanguages == nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "nothing to update"})
 			return
 		}
@@ -73,6 +75,10 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 		}
 		if req.Theme != nil && !auth.ValidTheme(*req.Theme) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unknown theme"})
+			return
+		}
+		if req.EnabledLanguages != nil && !auth.ValidEnabledLanguages(*req.EnabledLanguages) {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid enabled_languages"})
 			return
 		}
 		if req.DisplayName != nil {
@@ -106,6 +112,12 @@ func updatePreferencesHandler(db *database.DB) http.HandlerFunc {
 		}
 		if req.Theme != nil {
 			if err := auth.SetTheme(r.Context(), db.Pool, user.ID, *req.Theme); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
+				return
+			}
+		}
+		if req.EnabledLanguages != nil {
+			if err := auth.SetEnabledLanguages(r.Context(), db.Pool, user.ID, *req.EnabledLanguages); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save preference"})
 				return
 			}

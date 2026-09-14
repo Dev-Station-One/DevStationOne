@@ -18,24 +18,35 @@
     return (w && w.EditorState) ? w : (w && (w.CM6 || w.default)) || w;
   }
 
+  // Automatic language detection: @codemirror/language-data's ~180-entry
+  // filename/pattern table (docs.codemirror.net LanguageDescription),
+  // lazy-loaded per language as a separate esbuild chunk (see build.mjs) so
+  // opening one file doesn't pull in every language's parser. Gated by the
+  // account's enabled-languages preference (window.dsLangPref, set by
+  // project.html from /api/v1/auth/session) — an unmatched or disabled file
+  // still opens as plain text and can be set manually via the tab toolbar
+  // picker, which is not gated.
   function languageFor(path) {
-    var n = path.toLowerCase();
-    var i = n.lastIndexOf('.');
-    var ext = i === -1 ? '' : n.slice(i + 1);
     var C = CM6API();
-    switch (ext) {
-      case 'js': case 'mjs': case 'jsx': return C.javascript({ jsx: true });
-      case 'ts': case 'tsx': return C.javascript({ jsx: true, typescript: true });
-      case 'html': case 'htm': return C.html();
-      case 'css': return C.css();
-      case 'json': return C.json();
-      case 'yml': case 'yaml': return C.yaml();
-      case 'md': case 'markdown': return C.markdown();
-      case 'sql': return C.sql();
-      case 'py': return C.python();
-      case 'go': return C.go();
-      default: return null;
+    var desc = C.LanguageDescription.matchFilename(C.languages, path);
+    if (!desc) return null;
+    var enabled = (window.dsLangPref && window.dsLangPref.enabled) || null;
+    if (enabled && enabled.indexOf(desc.name) === -1) return null;
+    return desc;
+  }
+
+  // Loads desc (if any) into tab's language compartment. Shared by
+  // auto-detect on open and the manual toolbar override.
+  function applyLanguage(tab, desc) {
+    tab.langDesc = desc;
+    if (!desc) {
+      tab.view.dispatch({ effects: tab.langCompartment.reconfigure([]) });
+      return;
     }
+    desc.load().then(function (support) {
+      if (tab.langDesc !== desc) return; // superseded by a later pick
+      tab.view.dispatch({ effects: tab.langCompartment.reconfigure(support) });
+    });
   }
 
   // Always-dark syntax palette (One-Dark-ish). The editor pane is dark
@@ -135,7 +146,22 @@
     var $tabs = $('#code-tabs');
     var $empty = $('#code-empty');
     var $stack = $('#code-editor-stack');
+    var $langPicker = $('#code-lang-picker');
     var stateURL = '/api/v1/projects/' + projectID + '/editor/state';
+
+    // Toolbar language picker: plain text + every language-data entry,
+    // sorted. Not gated by dsLangPref — an override is an explicit choice.
+    $langPicker.append('<option value="">Plain text</option>');
+    C.languages.slice().sort(function (a, b) { return a.name < b.name ? -1 : 1; }).forEach(function (desc) {
+      $langPicker.append($('<option>').val(desc.name).text(desc.name));
+    });
+    $langPicker.on('change', function () {
+      var tab = activeTab();
+      if (!tab) return;
+      var name = $langPicker.val();
+      var desc = name ? C.languages.filter(function (d) { return d.name === name; })[0] : null;
+      applyLanguage(tab, desc);
+    });
 
     var activePath = null;
     var restoring = false;
@@ -221,8 +247,9 @@
          { key: 'Mod-w', preventDefault: true, run: function () { closeTab(tabFor(path)); return true; } }],
         [C.indentWithTab]
       ));
-      var langExt = languageFor(path);
-      var stateExts = [].concat(theme(), [fontExt().of(fontSpec())], langExt ? [langExt] : [], [
+      var langDesc = languageFor(path);
+      tab.langCompartment = new C.Compartment();
+      var stateExts = [].concat(theme(), [fontExt().of(fontSpec())], [tab.langCompartment.of([])], [
         C.lineNumbers(),
         C.EditorView.lineWrapping,
         C.autocompletion(),
@@ -245,6 +272,7 @@
           }
         }
       });
+      applyLanguage(tab, langDesc);
       tabs.push(tab);
       renderTabs();
       sendWatch();
@@ -434,6 +462,8 @@
         $t.append($x);
         $tabs.append($t);
       });
+      var at = activeTab();
+      $langPicker.prop('hidden', !at).val(at && at.langDesc ? at.langDesc.name : '');
     }
 
     // Ctrl+S anywhere in the pane flushes the active tab's save.

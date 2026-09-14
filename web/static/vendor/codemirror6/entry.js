@@ -9,15 +9,7 @@ import * as language from "@codemirror/language";
 import * as autocomplete from "@codemirror/autocomplete";
 import * as search from "@codemirror/search";
 import { basicSetup } from "codemirror";
-import { javascript } from "@codemirror/lang-javascript";
-import { html } from "@codemirror/lang-html";
-import { css } from "@codemirror/lang-css";
-import { json } from "@codemirror/lang-json";
-import { yaml } from "@codemirror/lang-yaml";
-import { markdown } from "@codemirror/lang-markdown";
-import { sql } from "@codemirror/lang-sql";
-import { python } from "@codemirror/lang-python";
-import { go } from "@codemirror/lang-go";
+import { languages } from "@codemirror/language-data";
 import { tags } from "@lezer/highlight";
 
 export const CM6 = {
@@ -58,16 +50,11 @@ export const CM6 = {
   lineComment: commands.lineComment,
   toggleComment: commands.toggleComment,
   basicSetup: basicSetup,
-  javascript: javascript,
-  html: html,
-  css: css,
-  json: json,
-  yaml: yaml,
-  markdown: markdown,
-  sql: sql,
-  python: python,
-  go: go,
+  languages: languages,
+  LanguageDescription: language.LanguageDescription,
   tags: tags,
 };
+
+if (typeof window !== "undefined") window.CM6 = CM6;
 
 export default CM6;

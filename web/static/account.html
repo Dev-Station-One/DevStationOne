@@ -95,6 +95,17 @@
             </div>
           </div>
 
+          <div class="card mb-4">
+            <div class="card-body">
+              <h3 class="card-title">Code tab languages</h3>
+              <p class="text-secondary mb-3">Which languages the Code tab auto-detects by filename. Unchecked languages can still be picked manually per file.</p>
+              <input id="lang-filter" class="form-control form-control-sm mb-2" placeholder="Filter…" autocomplete="off">
+              <div id="lang-checklist" class="row row-cols-2 row-cols-md-4 g-1" style="max-height:16rem;overflow-y:auto"></div>
+              <button id="lang-save-btn" class="btn btn-primary btn-sm mt-3" type="button">Save</button>
+              <span id="lang-saved" class="small text-secondary ms-2" hidden>Saved.</span>
+            </div>
+          </div>
+
           <h3 class="mb-3">Active sessions</h3>
           <div class="card">
             <div class="table-responsive">
@@ -134,10 +145,64 @@
         $('#editor-font-select').val(user.editor_font || 'system');
         $('#font-size-select').val(String(user.font_size || 14));
         applyFontPreviews();
+        pendingEnabledLanguages = user.enabled_languages || [];
+        if (checklistBuilt) applyEnabledLanguages(pendingEnabledLanguages);
       }).fail(function () {
         window.location.href = '/login.html';
       });
     }
+
+    // Code tab language checklist — names come from the same CM6 bundle the
+    // Code tab uses (web/static/js/editor.js), not duplicated here.
+    var checklistBuilt = false;
+    var pendingEnabledLanguages = null;
+
+    function applyEnabledLanguages(enabled) {
+      var set = {};
+      enabled.forEach(function (n) { set[n] = true; });
+      $('#lang-checklist input[type=checkbox]').each(function () {
+        this.checked = !!set[this.value];
+      });
+    }
+
+    function buildLanguageChecklist(names) {
+      var $list = $('#lang-checklist').empty();
+      names.forEach(function (name) {
+        $list.append(
+          '<div class="col lang-item">' +
+            '<label class="form-check">' +
+              '<input class="form-check-input" type="checkbox" value="' + escapeHtml(name) + '">' +
+              '<span class="form-check-label">' + escapeHtml(name) + '</span>' +
+            '</label>' +
+          '</div>'
+        );
+      });
+      checklistBuilt = true;
+      if (pendingEnabledLanguages) applyEnabledLanguages(pendingEnabledLanguages);
+    }
+
+    $('#lang-filter').on('input', function () {
+      var q = this.value.toLowerCase();
+      $('.lang-item').each(function () {
+        $(this).toggle($(this).text().toLowerCase().indexOf(q) !== -1);
+      });
+    });
+
+    $('#lang-save-btn').on('click', function () {
+      var enabled = $('#lang-checklist input[type=checkbox]:checked').map(function () {
+        return this.value;
+      }).get();
+      $.ajax({
+        url: '/api/v1/auth/preferences',
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({ enabled_languages: enabled })
+      }).done(function () {
+        $('#lang-saved').prop('hidden', false);
+      }).fail(function (xhr) {
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save language preferences.');
+      });
+    });
 
     $('#display-name-form').on('submit', function (e) {
       e.preventDefault();
@@ -217,6 +282,11 @@
 
     loadAccount();
     loadSessions();
+  </script>
+  <script type="module">
+    import CM6 from '/vendor/codemirror6/cm6.bundle.js';
+    var names = CM6.languages.map(function (d) { return d.name; }).sort();
+    buildLanguageChecklist(names);
   </script>
 </body>
 </html>

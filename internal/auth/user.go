@@ -33,6 +33,13 @@ type User struct {
 	// the shared terminal+editor size, 12-18px).
 	EditorFont string
 	FontSize   int
+	// EnabledLanguages gates which CodeMirror language-data entries
+	// participate in the Code tab's filename-based auto-detect (docs/CODE_TAB_REQUIREMENTS.md).
+	// Names match @codemirror/language-data's LanguageDescription.name; not
+	// validated against that list server-side (ponytail: no real trust
+	// boundary here — an unrecognized name just never matches client-side;
+	// add a whitelist if that stops being true).
+	EnabledLanguages []string
 }
 
 // ValidTerminalFont reports whether font is a supported users.terminal_font
@@ -63,6 +70,22 @@ func ValidFontSize(n int) bool {
 	return n >= 12 && n <= 18
 }
 
+// ValidEnabledLanguages reports whether langs is an acceptable
+// users.enabled_languages value: a reasonably-sized list of reasonably-sized
+// names. Not checked against the actual language-data table (see the
+// EnabledLanguages field comment).
+func ValidEnabledLanguages(langs []string) bool {
+	if len(langs) > 200 {
+		return false
+	}
+	for _, l := range langs {
+		if l == "" || len(l) > 64 {
+			return false
+		}
+	}
+	return true
+}
+
 // ValidTheme reports whether theme is a supported users.theme value.
 func ValidTheme(theme string) bool {
 	return theme == "dark" || theme == "light"
@@ -85,8 +108,8 @@ func CreateUser(ctx context.Context, pool *pgxpool.Pool, email, password string,
 	err = pool.QueryRow(ctx, `
 		INSERT INTO users (email, password_hash, is_admin)
 		VALUES ($1, $2, $3)
-		RETURNING id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size
-	`, email, hash, isAdmin).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize)
+		RETURNING id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, enabled_languages
+	`, email, hash, isAdmin).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &u.EnabledLanguages)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.ConstraintName == "users_email_key" {
@@ -113,8 +136,8 @@ func UpsertAdmin(ctx context.Context, pool *pgxpool.Pool, email, password string
 		INSERT INTO users (email, password_hash, is_admin)
 		VALUES ($1, $2, true)
 		ON CONFLICT (email) DO UPDATE SET password_hash = $2, is_admin = true
-		RETURNING id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, (xmax = 0) AS inserted
-	`, email, hash).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &created)
+		RETURNING id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, enabled_languages, (xmax = 0) AS inserted
+	`, email, hash).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &u.EnabledLanguages, &created)
 	if err != nil {
 		return User{}, false, err
 	}
@@ -133,8 +156,8 @@ func Authenticate(ctx context.Context, pool *pgxpool.Pool, email, password strin
 	var u User
 	var hash string
 	err := pool.QueryRow(ctx, `
-		SELECT id, email, password_hash, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size FROM users WHERE email = $1
-	`, email).Scan(&u.ID, &u.Email, &hash, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize)
+		SELECT id, email, password_hash, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, enabled_languages FROM users WHERE email = $1
+	`, email).Scan(&u.ID, &u.Email, &hash, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &u.EnabledLanguages)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Run a hash comparison anyway so login timing doesn't reveal whether the email exists.
 		_ = bcrypt.CompareHashAndPassword([]byte("$2a$10$invalidsaltinvalidsaltinvalidsaltinvalidsal"), []byte(password))
@@ -176,6 +199,19 @@ func SetEditorFont(ctx context.Context, pool *pgxpool.Pool, userID, font string)
 // SetFontSize persists a user's shared terminal+editor font size.
 func SetFontSize(ctx context.Context, pool *pgxpool.Pool, userID string, size int) error {
 	tag, err := pool.Exec(ctx, `UPDATE users SET font_size = $1 WHERE id = $2`, size, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetEnabledLanguages persists which languages participate in the Code
+// tab's auto-detect.
+func SetEnabledLanguages(ctx context.Context, pool *pgxpool.Pool, userID string, langs []string) error {
+	tag, err := pool.Exec(ctx, `UPDATE users SET enabled_languages = $1 WHERE id = $2`, langs, userID)
 	if err != nil {
 		return err
 	}
