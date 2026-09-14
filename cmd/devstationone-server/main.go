@@ -16,13 +16,22 @@ import (
 	"devstationone/internal/audit"
 	"devstationone/internal/config"
 	"devstationone/internal/database"
+	"devstationone/internal/events"
 	"devstationone/internal/logging"
+	"devstationone/internal/notifications"
+	"devstationone/internal/projects"
+	"devstationone/internal/sessions"
 )
 
 // auditPurgeInterval is how often the retention policy is enforced
 // (docs/IMPLEMENTATION_PLAN.md Slice 11) — daily is frequent enough for a
 // day-granularity retention_days setting.
 const auditPurgeInterval = 24 * time.Hour
+
+// idleScanInterval is how often the awaiting-input idle heuristic scans
+// attached sessions (docs/IMPLEMENTATION_PLAN.md Slice 15) — independent of
+// DEVSTATIONONE_IDLE_NOTIFY_SECONDS, which sets the idle threshold itself.
+const idleScanInterval = 10 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -55,7 +64,8 @@ func run() error {
 
 	go auditPurgeLoop(ctx, db, logger)
 
-	handler := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
+	handler, hub, bus := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
+	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      handler,
@@ -113,6 +123,37 @@ func auditPurgeLoop(ctx context.Context, db *database.DB, logger *slog.Logger) {
 			return
 		case <-ticker.C:
 			purge()
+		}
+	}
+}
+
+// idleNotifyLoop implements the "awaiting input" notification heuristic
+// (docs/IMPLEMENTATION_PLAN.md Slice 15): every idleScanInterval it asks hub
+// which sessions have gone quiet for longer than threshold and records a
+// notification for each one's project owner.
+func idleNotifyLoop(ctx context.Context, hub *sessions.Hub, db *database.DB, bus *events.Bus, logger *slog.Logger, threshold time.Duration) {
+	ticker := time.NewTicker(idleScanInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			for _, sessionID := range hub.IdleSessions(threshold) {
+				sess, err := sessions.Get(ctx, db.Pool, sessionID)
+				if err != nil {
+					logger.Error("idle notify: session lookup failed", "session_id", sessionID, "error", err)
+					continue
+				}
+				proj, err := projects.Get(ctx, db.Pool, sess.ProjectID)
+				if err != nil {
+					logger.Error("idle notify: project lookup failed", "project_id", sess.ProjectID, "error", err)
+					continue
+				}
+				notifications.Record(ctx, db.Pool, bus, proj.CreatedBy, notifications.TypeAwaitingInput,
+					sess.Name+" is waiting for input", proj.Name,
+					map[string]any{"session_id": sess.ID, "project_id": proj.ID})
+			}
 		}
 	}
 }

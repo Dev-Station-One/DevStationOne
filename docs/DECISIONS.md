@@ -886,3 +886,63 @@ pre-commit check that refuses to commit unless every staged path is under
 `root` was considered and deferred as unneeded engineering unless a real
 deployment actually uses Projects rooted inside larger checkouts (the
 documented/expected configuration is one Project, one repository).
+
+## ADR-029 — Notifications: idle heuristic lives in sessions.Hub, offset/limit pagination over the design's cursor note, NewRouter returns its Hub/Bus (Slice 15)
+
+Date: 2026-09-14
+
+**Decision.** Slice 15's `internal/notifications` package mirrors
+`internal/audit`'s shape and best-effort `Record`/logged-and-swallowed-error
+convention, but scoped per-user with a read flag instead of being a
+system-wide log, and it additionally publishes each recorded row on the
+Slice 14 `events.Bus` as `notification.created` so an open dashboard updates
+live. There is no separate REST/wire DTO the way `internal/api`'s
+`auditEventResponse` exists for audit events — `notifications.Notification`
+carries its own `json` tags and is used directly both as the REST list
+response element and as the live event payload, since no field needs
+hiding or reshaping for either consumer (unlike audit, nothing here is
+security-log-only).
+
+**Idle heuristic stays inside sessions.Hub.** The "awaiting input" signal
+needs two things: knowing when a session last produced output, and not
+re-notifying on every scan once a session is already flagged idle. Both are
+in-memory, per-session, and `Hub.Forward` is already the single choke point
+every runtime output byte passes through (docs/PROTOCOL.md), so
+`lastActivity`/`idleNotified` maps and a new `Hub.IdleSessions(threshold)`
+method live there rather than in a new type. `IdleSessions` is
+self-contained — it never imports `internal/notifications` or
+`internal/database` — so `internal/sessions` gains no new dependency; the
+10s-interval scan loop that calls it, resolves each session's project
+owner, and calls `notifications.Record` lives in
+`cmd/devstationone-server/main.go`'s new `idleNotifyLoop`, next to the
+existing `auditPurgeLoop` it mirrors.
+
+**Deviation from the design note: offset/limit, not a cursor.** The Slice
+15 design entry called `GET /api/v1/notifications` "cursor-paginated,
+mirrors audit.List shape" — but `audit.List` itself is offset/limit, not
+cursor-based, so the two clauses conflicted. `notifications.ListForUser`
+follows `audit.List` literally (limit capped at 200, default 50, plus a
+total count) rather than inventing a second, cursor-based pagination
+convention for one endpoint. The bell dropdown only ever asks for the most
+recent page, so a cursor bought nothing here; product intent (a working,
+paginated notification list) is preserved.
+
+**NewRouter now returns its Hub and Bus.** `idleNotifyLoop` needs the exact
+`sessions.Hub` instance that `Forward` (driven by real terminal output)
+updates, and the exact `events.Bus` instance browsers are subscribed to —
+not a second, disconnected pair. `internal/api.NewRouter` already
+constructs both internally (as it does `runtimes.Registry`), so rather than
+inverting that ownership (callers constructing infrastructure and passing
+it in, unlike the existing `registry`/`hub`/`bus` convention) it now
+returns `(http.Handler, *sessions.Hub, *events.Bus)`; `main.go` passes them
+to `idleNotifyLoop` the same way it already owns `auditPurgeLoop`. All
+Go-side test call sites were updated to discard the two new return values.
+
+**Awaiting-input notifications are not started per browser attach/detach,
+only per Forward.** A session can go idle while nobody is watching (no
+browser attached) just as easily as while attached; gating the idle clock
+on attach state would miss the common "left a long build running and
+closed the tab" case the whole feature exists for. `Forward` runs
+regardless of whether a browser is currently attached (scrollback keeps
+buffering either way), so the idle clock is armed the moment a session
+produces any output, attached or not.

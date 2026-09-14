@@ -173,26 +173,16 @@
     // (runtime online/offline, a project's session activity) — the
     // dashboard just refetches both lists rather than patching individual
     // rows, which is simpler and plenty fast for a low-frequency channel
-    // like this one.
-    // ponytail: reconnect is a fixed 3s retry, not exponential backoff —
-    // this is a low-value background channel (the dashboard still works
-    // from the initial REST snapshot without it), add backoff if repeated
-    // reconnect storms ever show up in practice.
-    function connectEvents() {
-      var proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      var ws = new WebSocket(proto + '//' + window.location.host + '/api/v1/events/stream');
-      ws.onmessage = function (evt) {
-        var msg;
-        try { msg = JSON.parse(evt.data); } catch (e) { return; }
-        if (msg.type === 'runtime.status') loadRuntimes();
-        if (msg.type === 'project.status') loadProjects();
-      };
-      ws.onclose = function () { setTimeout(connectEvents, 3000); };
-    }
+    // like this one. The connection itself is shared page-wide by
+    // app.js (also used by the notifications bell); this just reacts to it.
+    document.addEventListener('ds-ws-event', function (evt) {
+      var msg = evt.detail || {};
+      if (msg.type === 'runtime.status') loadRuntimes();
+      if (msg.type === 'project.status') loadProjects();
+    });
 
     loadRuntimes();
     loadProjects();
-    connectEvents();
   </script>
 </body>
 </html>

@@ -16,10 +16,14 @@ import (
 	"devstationone/internal/sessions"
 )
 
-// NewRouter builds the top-level HTTP handler for the Control Server.
+// NewRouter builds the top-level HTTP handler for the Control Server. It
+// also returns the Hub and Bus it constructed internally so the caller can
+// run background loops that need them (main.go's idle-notification loop,
+// docs/IMPLEMENTATION_PLAN.md Slice 15) without a second, disconnected
+// instance.
 // dbEncryptionKey decrypts stored database connection credentials
 // (docs/SECURITY.md) — see internal/dbconnections.
-func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) http.Handler {
+func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) (http.Handler, *sessions.Hub, *events.Bus) {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
@@ -146,6 +150,11 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/audit/settings", requireAdmin(db, getAuditSettingsHandler(db)))
 	mux.HandleFunc("PUT /api/v1/audit/settings", requireAdmin(db, updateAuditSettingsHandler(db)))
 
+	mux.HandleFunc("GET /api/v1/notifications", requireSession(db, listNotificationsHandler(db)))
+	mux.HandleFunc("GET /api/v1/notifications/unread-count", requireSession(db, unreadNotificationCountHandler(db)))
+	mux.HandleFunc("POST /api/v1/notifications/{id}/read", requireSession(db, markNotificationReadHandler(db)))
+	mux.HandleFunc("POST /api/v1/notifications/read-all", requireSession(db, markAllNotificationsReadHandler(db)))
+
 	// StripPrefix: FileServer maps the full URL path under the root dir, so
 	// /assets/x must lose the /assets/ prefix before hitting http.Dir.
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))
@@ -157,5 +166,5 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	handler = csrfProtect(handler)
 	handler = securityHeaders(handler)
 	handler = withRequestLogging(logger, handler)
-	return handler
+	return handler, hub, bus
 }

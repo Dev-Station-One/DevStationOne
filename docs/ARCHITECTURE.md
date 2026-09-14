@@ -136,11 +136,45 @@ Control Server   -- internal/events.Bus fans out to every subscribed
 ```
 
 Not a general event bus for arbitrary application state — just the two
-triggers above (Slice 14). Payloads are intentionally thin (an ID, not a
-full resource) — a receiving browser is expected to refetch the relevant
-REST resource rather than trust a payload that may represent several
-coalesced changes. See `docs/API.md` "Dashboard events" for the wire
-format.
+triggers above (Slice 14) plus `notification.created` (Slice 15, below).
+Payloads are intentionally thin (an ID, not a full resource) for the first
+two — a receiving browser is expected to refetch the relevant REST resource
+rather than trust a payload that may represent several coalesced changes.
+`notification.created` is the one exception: it carries the full
+notification, since a notification's fields are immutable after creation
+(other than `read_at`), so there is nothing to coalesce. See `docs/API.md`
+"Dashboard events" for the wire format.
+
+## Notifications
+
+```text
+                          sessions.Hub.Forward (every runtime output byte)
+                                |
+                                v
+                    lastActivity[id] = now(); idleNotified[id] cleared
+                                |
+      cmd/devstationone-server idleNotifyLoop (10s tick)
+                                |
+                    Hub.IdleSessions(threshold) -- idle, not yet flagged
+                                |
+                                v
+              notifications.Record(pool, bus, ownerID, type, ...)
+                     |                                |
+                     v                                v
+              INSERT notifications                events.Bus.Publish
+                                                  ("notification.created")
+```
+
+`internal/agent/manager.go`'s `MessageSessionExit` handling
+(`internal/api/runtime_ws.go`) calls the same `notifications.Record` for
+`task.completed`, outside the idle loop — a session exit is an immediate
+event, not something to poll for.
+
+The idle heuristic's state (`lastActivity`, `idleNotified`) lives on
+`sessions.Hub` itself, not a separate tracker, because `Forward` is already
+the one place every byte of runtime output passes through. It shares the
+same single-process, in-memory scope as the rest of `Hub` and
+`runtimes.Registry` (ADR-012). See `docs/DECISIONS.md` ADR-029.
 
 ## Project execution
 

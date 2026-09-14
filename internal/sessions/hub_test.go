@@ -125,6 +125,39 @@ func TestHub_AwaitOpenResolvedByError(t *testing.T) {
 	}
 }
 
+func TestHub_IdleSessionsFlaggedOnceResetOnActivityClearedOnDiscard(t *testing.T) {
+	h := NewHub()
+	const threshold = 20 * time.Millisecond
+
+	h.Forward("s1", []byte("x"))
+	if got := h.IdleSessions(threshold); len(got) != 0 {
+		t.Fatalf("IdleSessions immediately after Forward = %v, want none", got)
+	}
+
+	time.Sleep(2 * threshold)
+	got := h.IdleSessions(threshold)
+	if len(got) != 1 || got[0] != "s1" {
+		t.Fatalf("IdleSessions after threshold = %v, want [s1]", got)
+	}
+
+	// Already flagged: a repeat scan must not notify again.
+	if got := h.IdleSessions(threshold); len(got) != 0 {
+		t.Fatalf("IdleSessions on repeat scan = %v, want none (already flagged)", got)
+	}
+
+	// New activity resets the flag.
+	h.Forward("s1", []byte("y"))
+	time.Sleep(2 * threshold)
+	if got := h.IdleSessions(threshold); len(got) != 1 || got[0] != "s1" {
+		t.Fatalf("IdleSessions after new activity + threshold = %v, want [s1]", got)
+	}
+
+	h.Discard("s1")
+	if got := h.IdleSessions(threshold); len(got) != 0 {
+		t.Fatalf("IdleSessions after Discard = %v, want none", got)
+	}
+}
+
 func TestHub_DiscardClearsScrollbackAndAttachment(t *testing.T) {
 	h := NewHub()
 	c := &fakeBrowserConn{}

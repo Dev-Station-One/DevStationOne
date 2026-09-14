@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
 	"devstationone/internal/events"
+	"devstationone/internal/notifications"
 	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
@@ -307,6 +309,13 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 		if sess, err := sessions.Get(ctx, db.Pool, p.SessionID); err == nil {
 			if proj, err := projects.Get(ctx, db.Pool, sess.ProjectID); err == nil {
 				publishProjectStatus(bus, proj.CreatedBy, proj.ID)
+				body := "Exited successfully"
+				if p.ExitCode != 0 {
+					body = fmt.Sprintf("Exited with code %d", p.ExitCode)
+				}
+				notifications.Record(ctx, db.Pool, bus, proj.CreatedBy, notifications.TypeTaskCompleted,
+					sess.Name+" finished", body,
+					map[string]any{"session_id": sess.ID, "project_id": proj.ID, "exit_code": p.ExitCode})
 			}
 		}
 		hub.Discard(p.SessionID)

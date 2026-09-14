@@ -68,7 +68,7 @@ func sessionsTestSetupIn(t *testing.T, workingDir string) (router http.Handler, 
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router = NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _ = NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server = httptest.NewServer(router)
 	t.Cleanup(server.Close)
 

@@ -5,15 +5,17 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // Server holds configuration for the devstationone-server binary.
 type Server struct {
-	Addr            string
-	DatabaseURL     string
-	LogLevel        string
-	Environment     string
-	DBEncryptionKey []byte
+	Addr              string
+	DatabaseURL       string
+	LogLevel          string
+	Environment       string
+	DBEncryptionKey   []byte
+	IdleNotifySeconds int
 }
 
 // Runtime holds configuration for the devstationone-runtime binary.
@@ -27,10 +29,11 @@ type Runtime struct {
 // LoadServer reads Server config from the environment, applying defaults.
 func LoadServer() (Server, error) {
 	cfg := Server{
-		Addr:        getenv("DEVSTATIONONE_SERVER_ADDR", ":8080"),
-		DatabaseURL: getenv("DEVSTATIONONE_DATABASE_URL", "postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable"),
-		LogLevel:    getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
-		Environment: getenv("DEVSTATIONONE_ENV", "development"),
+		Addr:              getenv("DEVSTATIONONE_SERVER_ADDR", ":8080"),
+		DatabaseURL:       getenv("DEVSTATIONONE_DATABASE_URL", "postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable"),
+		LogLevel:          getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
+		Environment:       getenv("DEVSTATIONONE_ENV", "development"),
+		IdleNotifySeconds: getenvInt("DEVSTATIONONE_IDLE_NOTIFY_SECONDS", 120),
 	}
 	keyB64 := os.Getenv("DEVSTATIONONE_DB_ENCRYPTION_KEY")
 	if keyB64 == "" {
@@ -67,6 +70,15 @@ func LoadRuntime() (Runtime, error) {
 func getenv(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok {
 		return v
+	}
+	return fallback
+}
+
+func getenvInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return fallback
 }

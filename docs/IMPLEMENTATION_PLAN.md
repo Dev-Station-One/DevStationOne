@@ -548,7 +548,13 @@ MarkRead); idle-detection ticker test (idle session flagged once, reset on
 activity, cleared on discard); notification REST + WS integration tests
 (ownership-scoped, no cross-user leakage).
 
-**Status**: Not Started
+**Status**: Complete. `internal/notifications` (Record/ListForUser/
+UnreadCount/MarkRead/MarkAllRead), migration `0011_notifications`, REST at
+`/api/v1/notifications*`, `sessions.Hub.IdleSessions` idle heuristic,
+`cmd/devstationone-server` `idleNotifyLoop`, `task.completed` wired at
+`MessageSessionExit`, bell dropdown in `web/static/js/app.js` shared across
+every page. Design deviation from this entry (offset/limit pagination
+instead of a cursor) recorded in `docs/DECISIONS.md` ADR-029.
 
 ## Slice 16 — Git client (status/diff/stage/commit)
 

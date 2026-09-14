@@ -46,6 +46,22 @@ func TestLoadServer_Defaults(t *testing.T) {
 	if len(cfg.DBEncryptionKey) != 32 {
 		t.Errorf("DBEncryptionKey length = %d, want 32", len(cfg.DBEncryptionKey))
 	}
+	if cfg.IdleNotifySeconds != 120 {
+		t.Errorf("IdleNotifySeconds = %d, want 120", cfg.IdleNotifySeconds)
+	}
+}
+
+func TestLoadServer_IdleNotifySecondsOverride(t *testing.T) {
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", testEncryptionKey)
+	t.Setenv("DEVSTATIONONE_IDLE_NOTIFY_SECONDS", "60")
+	cfg, err := LoadServer()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.IdleNotifySeconds != 60 {
+		t.Errorf("IdleNotifySeconds = %d, want 60", cfg.IdleNotifySeconds)
+	}
 }
 
 func TestLoadServer_RequiresEncryptionKey(t *testing.T) {

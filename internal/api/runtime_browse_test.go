@@ -29,7 +29,7 @@ func browseTestSetup(t *testing.T) (router http.Handler, cookie *http.Cookie, ru
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router = NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _ = NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 

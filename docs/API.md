@@ -137,6 +137,11 @@ shaped `{"type": "...", "payload": {...}}`:
   several changes.
 - `ping` — no payload, sent every 30s on an otherwise idle connection to
   keep intermediate proxies from timing it out.
+- `notification.created` — a full notification object (see "Notifications"
+  below), sent only to the notification's own user. Unlike the other event
+  types, the receiving browser can render it directly (update the bell
+  badge/dropdown) without a REST refetch, since a notification's fields
+  never change after creation other than `read_at`.
 
 The bus is in-memory and scoped to a single Control Server process, the
 same limitation already documented on the runtime registry and terminal
@@ -617,6 +622,65 @@ logged and never blocks the action it describes.
 `retention_days <= 0` means keep events forever. A daily background job on
 the Control Server (`cmd/devstationone-server` `auditPurgeLoop`) deletes
 events older than the policy; it also runs once at startup.
+
+## Notifications
+
+```text
+GET  /api/v1/notifications
+GET  /api/v1/notifications/unread-count
+POST /api/v1/notifications/{id}/read
+POST /api/v1/notifications/read-all
+```
+
+All four require an authenticated session and are always scoped to the
+caller's own notifications — there is no admin/cross-user view, unlike
+Audit.
+
+`GET /api/v1/notifications` lists the caller's notifications, most recent
+first:
+```json
+{
+  "notifications": [
+    {
+      "id": "...",
+      "user_id": "...",
+      "type": "task.completed",
+      "title": "bash finished",
+      "body": "Exited successfully",
+      "detail": {"session_id": "...", "project_id": "...", "exit_code": 0},
+      "read_at": null,
+      "created_at": "2026-01-01T00:00:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+Query parameters: `limit` (default 50, capped at 200), `offset`. `total`
+reflects the caller's full notification count, ignoring `limit`/`offset`.
+
+`GET /api/v1/notifications/unread-count` returns `{"unread": 3}`.
+
+`POST /api/v1/notifications/{id}/read` marks one notification read
+(idempotent — marking an already-read notification again is a no-op success)
+and returns `204`. `404` if `id` doesn't exist or belongs to another user.
+
+`POST /api/v1/notifications/read-all` marks every unread notification for
+the caller read and returns `204`.
+
+Recorded notification types (`notifications.Type*` in
+`internal/notifications/notifications.go`):
+- `task.completed` — a terminal session exited (`internal/api/runtime_ws.go`
+  `MessageSessionExit`), for the session's Project owner. `detail` carries
+  `session_id`, `project_id`, `exit_code`.
+- `session.awaiting_input` — a session has produced no output for
+  `DEVSTATIONONE_IDLE_NOTIFY_SECONDS` (default 120s; see
+  `cmd/devstationone-server` `idleNotifyLoop`), for the session's Project
+  owner. Re-armed by new output — a session is only notified once per idle
+  period, and again the next time it goes idle after producing more output.
+  `detail` carries `session_id`, `project_id`.
+
+Recording is best-effort, like `internal/audit.Record`: a write failure is
+logged and never blocks the action it describes.
 
 ## Metrics
 

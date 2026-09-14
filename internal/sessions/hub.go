@@ -1,6 +1,9 @@
 package sessions
 
-import "sync"
+import (
+	"sync"
+	"time"
+)
 
 // scrollbackLimit bounds how many recent output bytes are buffered per
 // session so a reattaching browser sees recent output immediately, without
@@ -23,18 +26,22 @@ type BrowserConn interface {
 // connections and attached browser connections. It is in-memory and scoped
 // to a single Control Server process, matching runtimes.Registry.
 type Hub struct {
-	mu         sync.Mutex
-	attached   map[string]BrowserConn
-	scrollback map[string][]byte
-	pending    map[string]chan error
+	mu           sync.Mutex
+	attached     map[string]BrowserConn
+	scrollback   map[string][]byte
+	pending      map[string]chan error
+	lastActivity map[string]time.Time
+	idleNotified map[string]bool
 }
 
 // NewHub creates an empty Hub.
 func NewHub() *Hub {
 	return &Hub{
-		attached:   make(map[string]BrowserConn),
-		scrollback: make(map[string][]byte),
-		pending:    make(map[string]chan error),
+		attached:     make(map[string]BrowserConn),
+		scrollback:   make(map[string][]byte),
+		pending:      make(map[string]chan error),
+		lastActivity: make(map[string]time.Time),
+		idleNotified: make(map[string]bool),
 	}
 }
 
@@ -106,7 +113,11 @@ func (h *Hub) ForceDetach(sessionID string) {
 }
 
 // Forward delivers runtime output for sessionID to its attached browser (if
-// any) and appends it to the session's scrollback buffer.
+// any) and appends it to the session's scrollback buffer. It is also the
+// single choke point every runtime output byte passes through, so it doubles
+// as the "this session just produced output" signal for the awaiting-input
+// idle heuristic (docs/IMPLEMENTATION_PLAN.md Slice 15): it resets the idle
+// clock and clears any prior idle notification flag.
 func (h *Hub) Forward(sessionID string, data []byte) {
 	h.mu.Lock()
 	buf := append(h.scrollback[sessionID], data...)
@@ -114,11 +125,32 @@ func (h *Hub) Forward(sessionID string, data []byte) {
 		buf = buf[len(buf)-scrollbackLimit:]
 	}
 	h.scrollback[sessionID] = buf
+	h.lastActivity[sessionID] = time.Now()
+	delete(h.idleNotified, sessionID)
 	c := h.attached[sessionID]
 	h.mu.Unlock()
 	if c != nil {
 		_ = c.WriteOutput(data)
 	}
+}
+
+// IdleSessions returns the IDs of sessions that have produced output before
+// (via Forward) but not within threshold, and have not already been flagged
+// idle since their last activity. Each returned session is marked flagged so
+// a repeat scan doesn't notify again until Forward next resets the flag.
+func (h *Hub) IdleSessions(threshold time.Duration) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	cutoff := time.Now().Add(-threshold)
+	var out []string
+	for id, t := range h.lastActivity {
+		if h.idleNotified[id] || t.After(cutoff) {
+			continue
+		}
+		h.idleNotified[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // Discard drops a session's in-memory state once it is closed/exited and
@@ -128,5 +160,7 @@ func (h *Hub) Discard(sessionID string) {
 	delete(h.scrollback, sessionID)
 	delete(h.attached, sessionID)
 	delete(h.pending, sessionID)
+	delete(h.lastActivity, sessionID)
+	delete(h.idleNotified, sessionID)
 	h.mu.Unlock()
 }
