@@ -163,12 +163,11 @@
     }
     #file-editor-preview img { max-width: 100%; }
     #file-editor-preview pre { white-space: pre-wrap; margin: 0; }
-    #db-sql-editor-cm .CodeMirror {
+    #db-sql-editor-cm .cm-editor {
       height: 20vh;
       min-height: 160px;
       border: 1px solid var(--tblr-border-color);
       border-radius: var(--tblr-border-radius);
-      background: var(--tblr-bg-surface);
     }
     .db-data-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .db-data-table { min-width: 480px; margin-bottom: 0; }
@@ -677,7 +676,7 @@
                   <div class="modal-body">
                     <div class="row g-2">
                       <div class="col-12 col-md-6">
-                        <label class="form-label">Name</label>
+                        <label class="form-label">Connection Name</label>
                         <input id="db-name" type="text" class="form-control">
                       </div>
                       <div class="col-12 col-md-6">
@@ -1526,6 +1525,7 @@
       $('#databases-browser').prop('hidden', false);
       document.getElementById('databases-browser').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       dbSqlEditorConn = conn;
+      dbSqlEditorOnConnChange();
       $('#db-sql-editor').prop('hidden', true);
       $('#db-users').prop('hidden', true).empty();
       $('#db-tree').prop('hidden', false);
@@ -1870,17 +1870,119 @@
       }
     }
 
-    // --- SQL editor (Slice 9) ---
+    // --- SQL editor (Slice 9). CodeMirror 6 + @marimo-team/codemirror-sql
+    // (docs/IMPLEMENTATION_PLAN.md Slice 9 update) for dialect-aware
+    // linting/hover/navigation and schema-aware completion — schema is
+    // fetched once per connection from the same tree endpoints
+    // (/schemas, /tables, /tables/{t}/columns) and cached.
 
     var dbSqlEditorConn = null;
     var dbSqlEditorCM = null;
+    var dbSqlCompartment = null;
+    var dbSchemaCache = {}; // conn.id -> {table: [column, ...]}
+
+    function dbDialectFor(engine) {
+      var D = window.CM6.SQLDialect;
+      switch (engine) {
+        case 'postgresql': return D.PostgreSQL;
+        case 'mysql': return D.MySQL;
+        case 'mssql': return D.MSSQL;
+        case 'sqlite': return D.SQLite;
+        default: return D.PostgreSQL;
+      }
+    }
+
+    function dbSqlExtensions(engine, schema) {
+      var C = window.CM6;
+      var dialect = dbDialectFor(engine);
+      return [
+        C.sql({ dialect: dialect, schema: schema, upperCaseKeywords: true }),
+        C.sqlSchemaFacet.of(schema),
+        C.sqlCompletion({ dialect: dialect }),
+        C.sqlExtension({
+          gutterConfig: { backgroundColor: '#3b82f6', errorBackgroundColor: '#ef4444', hideWhenNotFocused: true },
+          hoverConfig: { hoverTime: 300, enableKeywords: true, enableTables: true, enableColumns: true }
+        })
+      ];
+    }
+
+    // dbFetchColumnsForTables fetches each table's columns in parallel and
+    // reduces to {table: [column names]}; a table that fails to introspect
+    // (e.g. a view without column metadata on some engines) just gets no
+    // completions rather than failing the whole schema.
+    function dbFetchColumnsForTables(conn, schema, tables) {
+      return Promise.all(tables.map(function (tb) {
+        return $.get(dbStructureURL(conn, schema, tb.name, 'columns')).then(
+          function (cols) { return [tb.name, cols.map(function (c) { return c.name; })]; },
+          function () { return [tb.name, []]; }
+        );
+      })).then(function (pairs) {
+        var m = {};
+        pairs.forEach(function (p) { m[p[0]] = p[1]; });
+        return m;
+      });
+    }
+
+    function dbFetchSchema(conn) {
+      if (conn.engine === 'sqlite') {
+        return $.get(dbAPI(conn.id, '/tables')).then(function (tables) {
+          return dbFetchColumnsForTables(conn, null, tables);
+        });
+      }
+      return $.get(dbAPI(conn.id, '/schemas')).then(function (schemas) {
+        return Promise.all(schemas.map(function (schema) {
+          return $.get(dbAPI(conn.id, '/tables') + '?schema=' + encodeURIComponent(schema)).then(function (tables) {
+            return dbFetchColumnsForTables(conn, schema, tables);
+          });
+        })).then(function (maps) {
+          return Object.assign.apply(Object, [{}].concat(maps));
+        });
+      });
+    }
+
+    // dbSqlEditorLoadSchema fetches once per connection (cached) and
+    // reconfigures the live editor if it's still showing that connection.
+    function dbSqlEditorLoadSchema() {
+      var conn = dbSqlEditorConn;
+      if (!conn || dbSchemaCache[conn.id]) return;
+      dbFetchSchema(conn).then(function (schema) {
+        dbSchemaCache[conn.id] = schema;
+        if (dbSqlEditorConn === conn && dbSqlEditorCM) {
+          dbSqlEditorCM.dispatch({ effects: dbSqlCompartment.reconfigure(dbSqlExtensions(conn.engine, schema)) });
+        }
+      }, function () { /* schema unavailable — editor still usable without completion/hover */ });
+    }
+
+    // Called from openDatabaseBrowser whenever the selected connection
+    // changes, so a live editor picks up the new dialect/schema.
+    function dbSqlEditorOnConnChange() {
+      if (!dbSqlEditorCM) return;
+      var conn = dbSqlEditorConn;
+      dbSqlEditorCM.dispatch({ effects: dbSqlCompartment.reconfigure(dbSqlExtensions(conn.engine, dbSchemaCache[conn.id] || {})) });
+      dbSqlEditorLoadSchema();
+    }
 
     function dbSqlEditorInit() {
       if (dbSqlEditorCM) return;
-      dbSqlEditorCM = CodeMirror(document.getElementById('db-sql-editor-cm'), {
-        mode: 'text/x-sql', theme: 'material-darker', lineNumbers: true, lineWrapping: true,
-        matchBrackets: true, autoCloseBrackets: true
+      var C = window.CM6;
+      var conn = dbSqlEditorConn;
+      dbSqlCompartment = new C.Compartment();
+      dbSqlEditorCM = new C.EditorView({
+        state: C.EditorState.create({
+          extensions: [
+            C.oneDark,
+            C.lineNumbers(),
+            C.EditorView.lineWrapping,
+            C.autocompletion(),
+            C.closeBrackets(),
+            C.history(),
+            C.keymap.of([].concat(C.defaultKeymap, C.historyKeymap, C.completionKeymap, [C.indentWithTab])),
+            dbSqlCompartment.of(dbSqlExtensions(conn.engine, dbSchemaCache[conn.id] || {}))
+          ]
+        }),
+        parent: document.getElementById('db-sql-editor-cm')
       });
+      dbSqlEditorLoadSchema();
     }
 
     $('#db-sql-editor-toggle-btn').on('click', function () {
@@ -1890,7 +1992,7 @@
       $('#db-sql-editor').prop('hidden', !toEditor);
       $('#db-users-toggle-btn').text('Users');
       $(this).text(toEditor ? 'Back to tree' : 'SQL Editor');
-      if (toEditor) { dbSqlEditorInit(); setTimeout(function () { dbSqlEditorCM.refresh(); dbSqlEditorCM.focus(); }, 0); }
+      if (toEditor) { dbSqlEditorInit(); setTimeout(function () { dbSqlEditorCM.focus(); }, 0); }
     });
 
     $('#db-users-toggle-btn').on('click', function () {
@@ -1905,7 +2007,8 @@
 
     $('#db-sql-run-btn').on('click', function () {
       if (!dbSqlEditorConn || !dbSqlEditorCM) return;
-      var sql = dbSqlEditorCM.getSelection() || dbSqlEditorCM.getValue();
+      var sel = dbSqlEditorCM.state.selection.main;
+      var sql = sel.empty ? dbSqlEditorCM.state.doc.toString() : dbSqlEditorCM.state.sliceDoc(sel.from, sel.to);
       if (!sql.trim()) return;
       $('#db-sql-status').text('Running…');
       $.ajax({

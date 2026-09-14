@@ -11,6 +11,9 @@ import * as search from "@codemirror/search";
 import { basicSetup } from "codemirror";
 import { languages } from "@codemirror/language-data";
 import { tags } from "@lezer/highlight";
+import { sql, PostgreSQL, MySQL, MSSQL, SQLite } from "@codemirror/lang-sql";
+import { sqlExtension, sqlCompletion, sqlSchemaFacet } from "@marimo-team/codemirror-sql";
+import { oneDark } from "@codemirror/theme-one-dark";
 
 export const CM6 = {
   EditorState: state.EditorState,
@@ -53,6 +56,12 @@ export const CM6 = {
   languages: languages,
   LanguageDescription: language.LanguageDescription,
   tags: tags,
+  sql: sql,
+  SQLDialect: { PostgreSQL: PostgreSQL, MySQL: MySQL, MSSQL: MSSQL, SQLite: SQLite },
+  sqlExtension: sqlExtension,
+  sqlCompletion: sqlCompletion,
+  sqlSchemaFacet: sqlSchemaFacet,
+  oneDark: oneDark,
 };
 
 if (typeof window !== "undefined") window.CM6 = CM6;

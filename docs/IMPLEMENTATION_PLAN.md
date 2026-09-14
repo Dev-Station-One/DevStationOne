@@ -249,6 +249,22 @@ rejected ("invalid input syntax for type integer"). Fixed by coercing from
 the column's actual SQL type (fetched from the columns endpoint) instead of
 guessing from a JS value that might not exist.
 
+**Update:** the SQL Editor moved from CodeMirror 5 to CodeMirror 6 +
+`@marimo-team/codemirror-sql` (`web/static/vendor/codemirror6/entry.js`,
+`web/static/project.html`) for dialect-aware syntax/linting (Postgres/
+MySQL/MSSQL/SQLite via `@codemirror/lang-sql`'s dialects) and schema-aware
+completion/hover. Schema (`{table: [columns]}`) is fetched once per
+connection from the existing `/schemas`, `/tables`, `/tables/{t}/columns`
+endpoints and cached client-side; not re-fetched on every editor toggle, so
+schema changes made mid-session need a page reload to show up in
+completions. `node-sql-parser` (the linter/completion parser) lazy-loads as
+its own ~2.5MB chunk only when the SQL editor is actually opened, same
+lazy-chunk mechanism as the Code tab's language-data (Slice 9's original
+CM5 note above still applies otherwise). Verified live against the app's
+own dev Postgres connection: dialect highlighting, the statement gutter,
+schema-aware table/column completion (real `users` table surfaced), and
+Run still execute correctly.
+
 ## Slice 10 — Database users/permissions
 
 Deliver database-specific management for:
