@@ -53,6 +53,8 @@ func Run(ctx context.Context, cfg config.Runtime, logger *slog.Logger) error {
 			OSUsername: osUsername,
 			HomeDir:    homeDir,
 			Shells:     readShells("/etc/shells"),
+			Users:      readColonNames("/etc/passwd"),
+			Groups:     readColonNames("/etc/group"),
 		},
 	}
 
@@ -79,6 +81,35 @@ func parseShells(data []byte) []string {
 			continue
 		}
 		out = append(out, line)
+	}
+	return out
+}
+
+// readColonNames returns the first colon-separated field of every
+// non-comment, non-blank line in an /etc/passwd- or /etc/group-shaped file —
+// the account or group name; both files share that column-zero shape. nil
+// if path can't be read, matching readShells: no fallback, no filtering by
+// uid/gid range — the file properties owner/group dropdowns show exactly
+// what the runtime host reports, system accounts included.
+func readColonNames(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	return parseColonNames(data)
+}
+
+func parseColonNames(data []byte) []string {
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, _, ok := strings.Cut(line, ":")
+		if ok && name != "" {
+			out = append(out, name)
+		}
 	}
 	return out
 }

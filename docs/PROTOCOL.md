@@ -213,12 +213,19 @@ Slice 6 adds three message types, reusing the Slice 5 correlated
 request/response machinery unchanged:
 
 - `file.command` (server→runtime): `{action, root, path, to, data, query,
-  dirs_only}`. `action` is one of `list`, `stat`, `read`, `write`, `create`,
-  `mkdir`, `rename`, `copy`, `move`, `delete`, `search`. `dirs_only`
-  restricts a `search` action's matches to directories (used by the
-  Project setup UI's tree search).
+  dirs_only, mode, owner, group, recursive}`. `action` is one of `list`,
+  `stat`, `read`, `write`, `create`, `mkdir`, `rename`, `copy`, `move`,
+  `delete`, `search`, `chmod`, `chown`. `dirs_only` restricts a `search`
+  action's matches to directories (used by the Project setup UI's tree
+  search). `chmod` takes `mode` (an octal permission string, e.g. `"755"` —
+  only the low 9 bits are honored; setuid/setgid/sticky are dropped) and
+  optional `recursive`. `chown` takes `owner`/`group` (account/group names,
+  either omittable to leave that half unchanged) and optional `recursive`;
+  see ADR-032 for why an owner change almost always fails on a non-root
+  runtime.
 - `file.result` (runtime→server): exactly one of `{entries}`, `{info}`,
-  `{data}`, `{matches}` populated, matching the action.
+  `{data}`, `{matches}` populated, matching the action (`chmod`/`chown`
+  populate none — success is the empty `file.result` itself).
 - `file.error` (runtime→server): `{error}` — the same payload shape as
   `service.error`; the correlation resolver (`wsConn.tryResolve`) treats
   both types as failures.

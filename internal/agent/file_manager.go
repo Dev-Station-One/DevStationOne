@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/user"
+	"strconv"
 	"sync"
 	"time"
 
@@ -128,6 +131,26 @@ func executeFile(ctx context.Context, cmd protocol.FileCommandPayload) (protocol
 	case "delete":
 		return protocol.FileResultPayload{}, f.Delete(cmd.Path)
 
+	case "chmod":
+		mode, err := parseMode(cmd.Mode)
+		if err != nil {
+			return protocol.FileResultPayload{}, err
+		}
+		if cmd.Recursive {
+			return protocol.FileResultPayload{}, f.ChmodRecursive(cmd.Path, mode)
+		}
+		return protocol.FileResultPayload{}, f.Chmod(cmd.Path, mode)
+
+	case "chown":
+		uid, gid, err := resolveOwnerGroup(cmd.Owner, cmd.Group)
+		if err != nil {
+			return protocol.FileResultPayload{}, err
+		}
+		if cmd.Recursive {
+			return protocol.FileResultPayload{}, f.ChownRecursive(cmd.Path, uid, gid)
+		}
+		return protocol.FileResultPayload{}, f.Chown(cmd.Path, uid, gid)
+
 	case "search":
 		matches, err := f.Search(cmd.Path, cmd.Query, cmd.DirsOnly)
 		if err != nil {
@@ -138,4 +161,44 @@ func executeFile(ctx context.Context, cmd protocol.FileCommandPayload) (protocol
 	default:
 		return protocol.FileResultPayload{}, fmt.Errorf("unknown file action %q", cmd.Action)
 	}
+}
+
+// parseMode parses a "chmod" action's octal mode string (e.g. "755" or
+// "0755").
+func parseMode(s string) (os.FileMode, error) {
+	v, err := strconv.ParseUint(s, 8, 32)
+	if err != nil {
+		return 0, fmt.Errorf("invalid mode %q: must be an octal permission string, e.g. \"755\"", s)
+	}
+	return os.FileMode(v), nil
+}
+
+// resolveOwnerGroup looks up owner/group by name and returns the uid/gid
+// pair filesystem.FS.Chown expects, using -1 for either that's empty (POSIX
+// chown's "leave unchanged" convention). It does not check whether this
+// process is actually permitted to apply the change — that's the OS's job
+// when Chown/Chown actually runs (ADR-032).
+func resolveOwnerGroup(owner, group string) (uid, gid int, err error) {
+	uid, gid = -1, -1
+	if owner != "" {
+		u, err := user.Lookup(owner)
+		if err != nil {
+			return 0, 0, fmt.Errorf("unknown user %q", owner)
+		}
+		uid, err = strconv.Atoi(u.Uid)
+		if err != nil {
+			return 0, 0, fmt.Errorf("unexpected non-numeric uid for %q: %w", owner, err)
+		}
+	}
+	if group != "" {
+		g, err := user.LookupGroup(group)
+		if err != nil {
+			return 0, 0, fmt.Errorf("unknown group %q", group)
+		}
+		gid, err = strconv.Atoi(g.Gid)
+		if err != nil {
+			return 0, 0, fmt.Errorf("unexpected non-numeric gid for %q: %w", group, err)
+		}
+	}
+	return uid, gid, nil
 }

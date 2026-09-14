@@ -151,7 +151,10 @@ Acceptance:
 - upload/download a file
 - traversal attacks rejected
 
-**Status: Complete.**
+**Status: Complete.** Extended post-Slice-17 with permission/ownership
+editing (chmod/chgrp/chown) in the file properties modal — `chmod`/`chown`
+`file.command` actions, `RuntimeCapabilities.users`/`.groups`, see
+ADR-032.
 
 ## Slice 7 — Database foundation
 

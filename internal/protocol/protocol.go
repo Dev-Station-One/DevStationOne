@@ -129,6 +129,16 @@ type Capabilities struct {
 	// fallback list is offered, matching the Project setup UI's strict
 	// dropdown (a client must not be able to type an arbitrary shell path).
 	Shells []string `json:"shells,omitempty"`
+	// Users and Groups are parsed from /etc/passwd and /etc/group (account/
+	// group names only — no passwords, no other columns). They back the
+	// file properties owner/group dropdowns. A non-root runtime (the only
+	// supported mode, ADR-014) can only chown to a user it already owns the
+	// file as, and can only chgrp to a group it belongs to — the dropdown
+	// still lists every system account/group verbatim, same "report reality,
+	// don't curate" rule as Shells; a chown/chgrp the OS rejects surfaces as
+	// a normal file.error.
+	Users  []string `json:"users,omitempty"`
+	Groups []string `json:"groups,omitempty"`
 }
 
 // HelloPayload is the payload of a MessageHello envelope.
@@ -254,7 +264,7 @@ const MaxMessageBytes = 48 << 20
 // Server already checked (docs/SECURITY.md, defense in depth).
 type FileCommandPayload struct {
 	// Action is one of: list, stat, read, write, create, mkdir, rename,
-	// copy, move, delete, search.
+	// copy, move, delete, search, chmod, chown.
 	Action string `json:"action"`
 	Root   string `json:"root"`
 	// Path is the target entry, relative to Root. "." refers to the root
@@ -269,6 +279,22 @@ type FileCommandPayload struct {
 	Query string `json:"query,omitempty"`
 	// DirsOnly restricts a "search" action's matches to directories.
 	DirsOnly bool `json:"dirs_only,omitempty"`
+	// Mode is a "chmod" action's new permission bits, as an octal string
+	// (e.g. "755"). Only the low 9 bits (owner/group/other rwx) are
+	// honored — setuid/setgid/sticky are intentionally not settable through
+	// this path.
+	Mode string `json:"mode,omitempty"`
+	// Owner and Group are a "chown" action's new username/group name. Either
+	// may be empty to leave that half unchanged (POSIX chown's -1 uid/gid
+	// convention). Resolved to a uid/gid by the runtime, which is also where
+	// the OS-level permission check happens — a non-root runtime can only
+	// ever succeed at changing the group to one it belongs to, and cannot
+	// change the owning user at all (ADR-032).
+	Owner string `json:"owner,omitempty"`
+	Group string `json:"group,omitempty"`
+	// Recursive applies a "chmod" or "chown" action to every entry beneath
+	// Path as well, when Path is a directory.
+	Recursive bool `json:"recursive,omitempty"`
 }
 
 // FileInfo describes one filesystem entry.
@@ -280,6 +306,13 @@ type FileInfo struct {
 	// Mode is the POSIX mode string, e.g. "-rw-r--r--".
 	Mode    string    `json:"mode"`
 	ModTime time.Time `json:"mtime"`
+	// Owner/Group are the resolved account/group names for OwnerID/GroupID,
+	// empty when the uid/gid has no matching /etc/passwd or /etc/group
+	// entry (a deleted account, a container image with a bare numeric ID).
+	Owner   string `json:"owner,omitempty"`
+	OwnerID int    `json:"owner_id"`
+	Group   string `json:"group,omitempty"`
+	GroupID int    `json:"group_id"`
 }
 
 // FileResultPayload is the payload of a MessageFileResult envelope.

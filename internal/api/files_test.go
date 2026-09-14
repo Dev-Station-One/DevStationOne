@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -174,6 +175,87 @@ func TestFileHTTP_RenameCopyMoveDelete(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "copied.txt")); !os.IsNotExist(err) {
 		t.Errorf("copied.txt should be gone, err = %v", err)
+	}
+}
+
+func TestFileHTTP_Chmod(t *testing.T) {
+	router, cookie, projectID, dir, _ := filesTestSetup(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := fileReq(t, router, cookie, http.MethodPatch, fileURL(projectID, "/mode", ""), []byte(`{"path":"a.txt","mode":"640"}`))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("chmod: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	info, err := os.Stat(filepath.Join(dir, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o640 {
+		t.Errorf("perm = %o, want 640", info.Mode().Perm())
+	}
+
+	rec = fileReq(t, router, cookie, http.MethodPatch, fileURL(projectID, "/mode", ""), []byte(`{"path":"a.txt"}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("chmod without mode: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestFileHTTP_ChmodRecursive(t *testing.T) {
+	router, cookie, projectID, dir, _ := filesTestSetup(t)
+	if err := os.Mkdir(filepath.Join(dir, "d"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "d", "a.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := fileReq(t, router, cookie, http.MethodPatch, fileURL(projectID, "/mode", ""), []byte(`{"path":"d","mode":"700","recursive":true}`))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("chmod recursive: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	info, err := os.Stat(filepath.Join(dir, "d", "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Errorf("child perm = %o, want 700", info.Mode().Perm())
+	}
+}
+
+func TestFileHTTP_ChownToSelf(t *testing.T) {
+	u, err := user.Current()
+	if err != nil {
+		t.Skip("no current user available")
+	}
+
+	router, cookie, projectID, dir, _ := filesTestSetup(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	body, _ := json.Marshal(map[string]any{"path": "a.txt", "owner": u.Username})
+	rec := fileReq(t, router, cookie, http.MethodPatch, fileURL(projectID, "/owner", ""), body)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("chown to self: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	rec = fileReq(t, router, cookie, http.MethodPatch, fileURL(projectID, "/owner", ""), []byte(`{"path":"a.txt"}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("chown without owner/group: status = %d, want 400", rec.Code)
+	}
+}
+
+func TestFileHTTP_ChownUnknownUser(t *testing.T) {
+	router, cookie, projectID, dir, _ := filesTestSetup(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("data"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rec := fileReq(t, router, cookie, http.MethodPatch, fileURL(projectID, "/owner", ""), []byte(`{"path":"a.txt","owner":"devstationone-nonexistent-user-xyz"}`))
+	if rec.Code == http.StatusNoContent {
+		t.Fatal("chown to an unknown user should fail")
 	}
 }
 

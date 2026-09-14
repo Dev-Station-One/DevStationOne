@@ -1542,6 +1542,104 @@ paths:
           description: The runtime could not move the entry
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/mode:
+    patch:
+      summary: Change an entry's permission bits
+      description: Only the low 9 bits (owner/group/other rwx) are settable — setuid/setgid/sticky are dropped. `recursive` applies to every entry beneath `path` when it is a directory.
+      tags: [Files]
+      operationId: chmodFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path, mode]
+              properties:
+                path:
+                  type: string
+                mode:
+                  type: string
+                  description: Octal permission string, e.g. "755".
+                recursive:
+                  type: boolean
+      responses:
+        "204":
+          description: Permissions changed
+        "400":
+          description: Invalid or missing path/mode
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not change the entry's permissions
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/files/owner:
+    patch:
+      summary: Change an entry's owner and/or group
+      description: |
+        `owner`/`group` are account/group names, not numeric ids — see
+        RuntimeCapabilities `users`/`groups`. Either may be omitted to leave
+        that half unchanged. `recursive` applies to every entry beneath
+        `path` when it is a directory.
+
+        The runtime never runs as root (docs/DECISIONS.md ADR-032), so the
+        OS itself will reject changing the owning user in the overwhelming
+        majority of deployments — `group` succeeds for any group the
+        runtime's OS user belongs to. A rejection surfaces as `502`.
+      tags: [Files]
+      operationId: chownFile
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                owner:
+                  type: string
+                group:
+                  type: string
+                recursive:
+                  type: boolean
+      responses:
+        "204":
+          description: Owner/group changed
+        "400":
+          description: Invalid or missing path, or neither owner nor group given
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime could not change the entry's owner/group (e.g. unknown name, or the OS rejected it)
+        "504":
+          description: The runtime did not respond within the timeout
   /api/v1/projects/{projectID}/git/status:
     get:
       summary: List changed paths
@@ -2928,6 +3026,16 @@ components:
           items:
             type: string
           description: Login shells parsed from /etc/shells on the runtime host. Empty if unreadable — no fallback list is offered.
+        users:
+          type: array
+          items:
+            type: string
+          description: Account names parsed from /etc/passwd on the runtime host, unfiltered (system accounts included). Backs the file properties owner dropdown.
+        groups:
+          type: array
+          items:
+            type: string
+          description: Group names parsed from /etc/group on the runtime host, unfiltered. Backs the file properties group dropdown.
     Runtime:
       type: object
       required: [id, name, hostname, os, arch, runtime_version, capabilities, status, online, enrolled_at, last_seen_at, revoked_at, created_at]
@@ -3307,7 +3415,7 @@ components:
     FileInfo:
       type: object
       description: One filesystem entry inside the Project's working directory. Not a stored resource — see docs/API.md "Files".
-      required: [name, type, size, mode, mtime]
+      required: [name, type, size, mode, mtime, owner_id, group_id]
       properties:
         name:
           type: string
@@ -3323,6 +3431,18 @@ components:
         mtime:
           type: string
           format: date-time
+        owner:
+          type: string
+          description: Resolved username for owner_id. Omitted if the uid has no matching /etc/passwd entry.
+        owner_id:
+          type: integer
+          description: Numeric uid.
+        group:
+          type: string
+          description: Resolved group name for group_id. Omitted if the gid has no matching /etc/group entry.
+        group_id:
+          type: integer
+          description: Numeric gid.
     GitFileStatus:
       type: object
       description: One changed path from a git status call. Not a stored resource — see docs/API.md "Git".

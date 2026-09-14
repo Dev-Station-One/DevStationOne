@@ -3,7 +3,9 @@ package filesystem
 import (
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -153,6 +155,110 @@ func TestRenameMoveDelete(t *testing.T) {
 	}
 	if err := f.Delete("."); err == nil {
 		t.Error("Delete of the project root should fail")
+	}
+}
+
+func TestChmod(t *testing.T) {
+	f := openTestFS(t)
+	if err := f.Write("a.txt", []byte("x")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Chmod("a.txt", 0o640); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	info, err := f.Stat("a.txt")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.Mode != "-rw-r-----" {
+		t.Errorf("Mode = %q, want -rw-r-----", info.Mode)
+	}
+	// setuid/setgid/sticky bits must not pass through.
+	if err := f.Chmod("a.txt", os.ModeSetuid|0o777); err != nil {
+		t.Fatalf("Chmod with setuid bit: %v", err)
+	}
+	info, _ = f.Stat("a.txt")
+	if info.Mode != "-rwxrwxrwx" {
+		t.Errorf("Mode after setuid-bit chmod = %q, want -rwxrwxrwx (bit dropped)", info.Mode)
+	}
+}
+
+func TestChmodRecursive(t *testing.T) {
+	f := openTestFS(t)
+	f.Mkdir("d")
+	f.Write("d/a.txt", []byte("x"))
+	f.Mkdir("d/sub")
+	f.Write("d/sub/b.txt", []byte("y"))
+
+	if err := f.ChmodRecursive("d", 0o750); err != nil {
+		t.Fatalf("ChmodRecursive: %v", err)
+	}
+	for _, p := range []string{"d", "d/a.txt", "d/sub", "d/sub/b.txt"} {
+		info, err := f.Stat(p)
+		if err != nil {
+			t.Fatalf("Stat(%q): %v", p, err)
+		}
+		if info.Mode[1:4] != "rwx" || info.Mode[4:7] != "r-x" || info.Mode[7:10] != "---" {
+			t.Errorf("Stat(%q).Mode = %q, want rwxr-x--- perm bits", p, info.Mode)
+		}
+	}
+}
+
+func TestChownToSelf(t *testing.T) {
+	// A non-root chown can only ever succeed by targeting the entry's own
+	// current owner — this is the one case a test can exercise without root.
+	u, err := user.Current()
+	if err != nil {
+		t.Skip("no current user available")
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		t.Skip("non-numeric uid")
+	}
+	gid, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		t.Skip("non-numeric gid")
+	}
+
+	f := openTestFS(t)
+	f.Write("a.txt", []byte("x"))
+	if err := f.Chown("a.txt", uid, gid); err != nil {
+		t.Fatalf("Chown to self: %v", err)
+	}
+	info, err := f.Stat("a.txt")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.OwnerID != uid || info.GroupID != gid {
+		t.Errorf("OwnerID/GroupID = %d/%d, want %d/%d", info.OwnerID, info.GroupID, uid, gid)
+	}
+	if info.Owner != u.Username {
+		t.Errorf("Owner = %q, want %q", info.Owner, u.Username)
+	}
+}
+
+func TestChownRecursiveToSelf(t *testing.T) {
+	u, err := user.Current()
+	if err != nil {
+		t.Skip("no current user available")
+	}
+	uid, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		t.Skip("non-numeric uid")
+	}
+
+	f := openTestFS(t)
+	f.Mkdir("d")
+	f.Write("d/a.txt", []byte("x"))
+	if err := f.ChownRecursive("d", uid, -1); err != nil {
+		t.Fatalf("ChownRecursive: %v", err)
+	}
+	info, err := f.Stat("d/a.txt")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if info.OwnerID != uid {
+		t.Errorf("OwnerID = %d, want %d", info.OwnerID, uid)
 	}
 }
 

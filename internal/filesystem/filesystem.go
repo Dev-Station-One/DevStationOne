@@ -1,7 +1,7 @@
 // Package filesystem implements the Development Runtime's filesystem
 // capability: list, stat, read, write, create, mkdir, rename, copy, move,
-// delete, and search, all strictly contained in one authorized root
-// directory (the Project's working directory).
+// delete, search, chmod, and chown, all strictly contained in one authorized
+// root directory (the Project's working directory).
 //
 // Containment rests on os.Root (docs/SECURITY.md): every operation resolves
 // its path against the open Root, which refuses ".." traversal and refuses
@@ -15,8 +15,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/user"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
+	"syscall"
 
 	"devstationone/internal/protocol"
 )
@@ -207,6 +211,74 @@ func (f *FS) Delete(p string) error {
 	return f.root.RemoveAll(c)
 }
 
+// Chmod changes p's permission bits. Only the low 9 bits (owner/group/other
+// rwx) are honored — setuid/setgid/sticky are intentionally not settable
+// through this path.
+func (f *FS) Chmod(p string, mode os.FileMode) error {
+	c, err := Clean(p)
+	if err != nil {
+		return err
+	}
+	return f.root.Chmod(c, mode&0o777)
+}
+
+// ChmodRecursive applies Chmod to p and, if p is a directory, every entry
+// beneath it.
+func (f *FS) ChmodRecursive(p string, mode os.FileMode) error {
+	c, err := Clean(p)
+	if err != nil {
+		return err
+	}
+	return f.walkTree(c, func(rel string) error { return f.root.Chmod(rel, mode&0o777) })
+}
+
+// Chown changes p's owning uid/gid. Either may be -1 to leave that half
+// unchanged (POSIX chown semantics). A non-root runtime can only succeed at
+// changing the group to one it belongs to, and cannot change the owning
+// user at all — the OS enforces that, not this method (ADR-032).
+func (f *FS) Chown(p string, uid, gid int) error {
+	c, err := Clean(p)
+	if err != nil {
+		return err
+	}
+	return f.root.Chown(c, uid, gid)
+}
+
+// ChownRecursive applies Chown to p and, if p is a directory, every entry
+// beneath it.
+func (f *FS) ChownRecursive(p string, uid, gid int) error {
+	c, err := Clean(p)
+	if err != nil {
+		return err
+	}
+	return f.walkTree(c, func(rel string) error { return f.root.Chown(rel, uid, gid) })
+}
+
+// walkTree applies fn to c and, if c is a directory, every entry beneath it
+// (depth-first, parent before children — matching chmod/chown -R order).
+func (f *FS) walkTree(c string, fn func(rel string) error) error {
+	if err := fn(c); err != nil {
+		return err
+	}
+	inf, err := f.root.Stat(c)
+	if err != nil {
+		return err
+	}
+	if !inf.IsDir() {
+		return nil
+	}
+	ents, err := f.readDir(c)
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		if err := f.walkTree(path.Join(c, e.Name()), fn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Search returns root-relative paths of entries whose name contains query
 // (case-insensitive), walking the subtree rooted at p. Bounded by the
 // searchCaps constants. When dirsOnly is set, only directory matches are
@@ -305,13 +377,65 @@ func toInfo(name string, inf os.FileInfo) protocol.FileInfo {
 	case !mode.IsRegular():
 		t = "other"
 	}
-	return protocol.FileInfo{
+	out := protocol.FileInfo{
 		Name:    name,
 		Type:    t,
 		Size:    inf.Size(),
 		Mode:    mode.String(),
 		ModTime: inf.ModTime().UTC(),
 	}
+	if st, ok := inf.Sys().(*syscall.Stat_t); ok {
+		out.OwnerID = int(st.Uid)
+		out.GroupID = int(st.Gid)
+		out.Owner = lookupUsername(st.Uid)
+		out.Group = lookupGroupname(st.Gid)
+	}
+	return out
+}
+
+// ownerCacheMu/ownerCache and groupCacheMu/groupCache cache uid->username
+// and gid->groupname for the runtime process's lifetime — List() calls
+// toInfo per entry, so an uncached lookup would re-parse /etc/passwd or
+// /etc/group on every directory listing. Account/group names are treated as
+// effectively static for a running process; an id added after the runtime
+// started resolves once it's first seen and stays cached from then on.
+var (
+	ownerCacheMu sync.RWMutex
+	ownerCache   = map[uint32]string{}
+	groupCacheMu sync.RWMutex
+	groupCache   = map[uint32]string{}
+)
+
+func lookupUsername(uid uint32) string {
+	ownerCacheMu.RLock()
+	name, ok := ownerCache[uid]
+	ownerCacheMu.RUnlock()
+	if ok {
+		return name
+	}
+	if u, err := user.LookupId(strconv.FormatUint(uint64(uid), 10)); err == nil {
+		name = u.Username
+	}
+	ownerCacheMu.Lock()
+	ownerCache[uid] = name
+	ownerCacheMu.Unlock()
+	return name
+}
+
+func lookupGroupname(gid uint32) string {
+	groupCacheMu.RLock()
+	name, ok := groupCache[gid]
+	groupCacheMu.RUnlock()
+	if ok {
+		return name
+	}
+	if g, err := user.LookupGroupId(strconv.FormatUint(uint64(gid), 10)); err == nil {
+		name = g.Name
+	}
+	groupCacheMu.Lock()
+	groupCache[gid] = name
+	groupCacheMu.Unlock()
+	return name
 }
 
 func cleanPaths(p, to string) (string, string, error) {

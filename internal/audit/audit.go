@@ -58,6 +58,8 @@ const (
 	// carried in Detail["action"] for the same reason as EventServiceAction.
 	EventFileTransferred = "file.transferred"
 	EventFileDeleted     = "file.deleted"
+	EventFileChmod       = "file.chmod"
+	EventFileChown       = "file.chown"
 
 	// EventGitStaged/EventGitUnstaged cover a stage/unstage RPC; the path is
 	// carried in Detail["path"].

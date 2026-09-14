@@ -93,6 +93,8 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/rename", requireSession(db, fileTransferHandler(db, registry, "rename")))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/copy", requireSession(db, fileTransferHandler(db, registry, "copy")))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/move", requireSession(db, fileTransferHandler(db, registry, "move")))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/files/mode", requireSession(db, chmodFileHandler(db, registry)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/files/owner", requireSession(db, chownFileHandler(db, registry)))
 	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/files", requireSession(db, deleteFileHandler(db, registry)))
 
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/git/status", requireSession(db, gitStatusHandler(db, registry)))

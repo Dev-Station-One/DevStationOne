@@ -509,13 +509,51 @@
                     <button id="file-properties-close-btn" type="button" class="icon-btn" aria-label="Close properties" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                   </div>
                   <div class="modal-body">
-                    <dl class="row mb-0">
+                    <dl class="row mb-3">
                       <dt class="col-4 col-md-3">Path</dt><dd class="col-8 col-md-9 text-break" id="fp-path">—</dd>
                       <dt class="col-4 col-md-3">Type</dt><dd class="col-8 col-md-9" id="fp-type">—</dd>
                       <dt class="col-4 col-md-3">Size</dt><dd class="col-8 col-md-9" id="fp-size">—</dd>
                       <dt class="col-4 col-md-3">Modified</dt><dd class="col-8 col-md-9" id="fp-mtime">—</dd>
-                      <dt class="col-4 col-md-3">Mode</dt><dd class="col-8 col-md-9" id="fp-mode">—</dd>
                     </dl>
+
+                    <h4>Permissions</h4>
+                    <div class="row g-3 align-items-start">
+                      <div class="col-12 col-md-auto">
+                        <table class="table table-sm table-bordered text-center mb-0" style="width:auto;">
+                          <thead><tr><th></th><th class="px-3">Read</th><th class="px-3">Write</th><th class="px-3">Execute</th></tr></thead>
+                          <tbody>
+                            <tr><th class="text-start">Owner</th><td><input type="checkbox" id="perm-u-r" aria-label="Owner read"></td><td><input type="checkbox" id="perm-u-w" aria-label="Owner write"></td><td><input type="checkbox" id="perm-u-x" aria-label="Owner execute"></td></tr>
+                            <tr><th class="text-start">Group</th><td><input type="checkbox" id="perm-g-r" aria-label="Group read"></td><td><input type="checkbox" id="perm-g-w" aria-label="Group write"></td><td><input type="checkbox" id="perm-g-x" aria-label="Group execute"></td></tr>
+                            <tr><th class="text-start">Other</th><td><input type="checkbox" id="perm-o-r" aria-label="Other read"></td><td><input type="checkbox" id="perm-o-w" aria-label="Other write"></td><td><input type="checkbox" id="perm-o-x" aria-label="Other execute"></td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div class="col-12 col-md">
+                        <div class="row g-2">
+                          <div class="col-6 col-md-3">
+                            <label class="form-label">Octal</label>
+                            <input id="perm-octal" type="text" class="form-control" maxlength="4" style="width:6rem;">
+                          </div>
+                          <div class="col-6 col-md-4">
+                            <label class="form-label">Owner</label>
+                            <select id="perm-owner" class="form-select"></select>
+                          </div>
+                          <div class="col-6 col-md-4">
+                            <label class="form-label">Group</label>
+                            <select id="perm-group" class="form-select"></select>
+                          </div>
+                        </div>
+                        <div class="form-check mt-2" id="perm-recursive-wrap" hidden>
+                          <input class="form-check-input" type="checkbox" id="perm-recursive">
+                          <label class="form-check-label" for="perm-recursive">Apply to everything inside this directory</label>
+                        </div>
+                      </div>
+                    </div>
+                    <div id="perm-error" class="alert alert-danger mt-3" hidden></div>
+                  </div>
+                  <div class="modal-footer">
+                    <span id="perm-status" class="text-secondary small me-auto"></span>
+                    <button id="perm-save-btn" class="btn btn-primary">Save</button>
                   </div>
                 </div>
               </div>
@@ -2206,18 +2244,168 @@
       return $actions;
     }
 
+    // --- Permissions/ownership editor (file properties modal) ---
+    // A POSIX mode string is "-rwxr-xr--": a type char followed by 9
+    // owner/group/other rwx chars (the 3rd/6th/9th may also be s/S/t/T for
+    // setuid/setgid/sticky, which this editor never sets — see ADR-032).
+
+    function modeStringToBits(modeStr) {
+      var p = (modeStr || '').slice(-9);
+      return {
+        ur: p[0] === 'r', uw: p[1] === 'w', ux: p[2] === 'x' || p[2] === 's',
+        gr: p[3] === 'r', gw: p[4] === 'w', gx: p[5] === 'x' || p[5] === 's',
+        or: p[6] === 'r', ow: p[7] === 'w', ox: p[8] === 'x' || p[8] === 't'
+      };
+    }
+
+    function bitsFromCheckboxes() {
+      return {
+        ur: $('#perm-u-r').is(':checked'), uw: $('#perm-u-w').is(':checked'), ux: $('#perm-u-x').is(':checked'),
+        gr: $('#perm-g-r').is(':checked'), gw: $('#perm-g-w').is(':checked'), gx: $('#perm-g-x').is(':checked'),
+        or: $('#perm-o-r').is(':checked'), ow: $('#perm-o-w').is(':checked'), ox: $('#perm-o-x').is(':checked')
+      };
+    }
+
+    function bitsToOctal(b) {
+      function digit(r, w, x) { return (r ? 4 : 0) + (w ? 2 : 0) + (x ? 1 : 0); }
+      return '' + digit(b.ur, b.uw, b.ux) + digit(b.gr, b.gw, b.gx) + digit(b.or, b.ow, b.ox);
+    }
+
+    function octalToBits(oct) {
+      var d = (oct || '').slice(-3).split('').map(function (c) { return parseInt(c, 8) || 0; });
+      while (d.length < 3) d.unshift(0);
+      function bits(v) { return { r: !!(v & 4), w: !!(v & 2), x: !!(v & 1) }; }
+      var u = bits(d[0]), g = bits(d[1]), o = bits(d[2]);
+      return { ur: u.r, uw: u.w, ux: u.x, gr: g.r, gw: g.w, gx: g.x, or: o.r, ow: o.w, ox: o.x };
+    }
+
+    function setCheckboxesFromBits(b) {
+      $('#perm-u-r').prop('checked', b.ur); $('#perm-u-w').prop('checked', b.uw); $('#perm-u-x').prop('checked', b.ux);
+      $('#perm-g-r').prop('checked', b.gr); $('#perm-g-w').prop('checked', b.gw); $('#perm-g-x').prop('checked', b.gx);
+      $('#perm-o-r').prop('checked', b.or); $('#perm-o-w').prop('checked', b.ow); $('#perm-o-x').prop('checked', b.ox);
+    }
+
+    // Guards the checkbox<->octal-field sync below from re-triggering itself.
+    var permSyncing = false;
+
+    $('#perm-u-r, #perm-u-w, #perm-u-x, #perm-g-r, #perm-g-w, #perm-g-x, #perm-o-r, #perm-o-w, #perm-o-x').on('change', function () {
+      if (permSyncing) return;
+      permSyncing = true;
+      $('#perm-octal').val(bitsToOctal(bitsFromCheckboxes()));
+      permSyncing = false;
+    });
+
+    $('#perm-octal').on('input', function () {
+      if (permSyncing) return;
+      var v = $(this).val().replace(/[^0-7]/g, '').slice(-3);
+      if (v.length < 3) return; // wait for a full 3-digit value before syncing checkboxes
+      permSyncing = true;
+      setCheckboxesFromBits(octalToBits(v));
+      permSyncing = false;
+    });
+
+    // Populates an owner/group <select> from the runtime's reported
+    // users/groups (Capabilities.Users/.Groups), always including the
+    // entry's current value even if the runtime didn't report it (a
+    // "(not reported)" fallback option, same pattern as populateEditShell).
+    function populatePermSelect($select, options, current) {
+      $select.empty();
+      var seen = {};
+      (options || []).forEach(function (name) {
+        seen[name] = true;
+        $select.append($('<option>').val(name).text(name));
+      });
+      if (current && !seen[current]) {
+        $select.append($('<option>').val(current).text(current + ' (not reported)'));
+      }
+      $select.val(current || '');
+    }
+
+    var fpPath = null, fpEntry = null;
+
     function showFileProperties(p, entry) {
+      fpPath = p;
+      fpEntry = entry;
       $('#file-properties-title').text(baseName(p));
       $('#fp-path').text(p);
       $('#fp-type').text(entry.type);
       $('#fp-size').text(entry.type === 'dir' ? '—' : fmtSize(entry.size));
       $('#fp-mtime').text(fmtTime(entry.mtime));
-      $('#fp-mode').text(entry.mode);
+
+      permSyncing = true;
+      var bits = modeStringToBits(entry.mode);
+      setCheckboxesFromBits(bits);
+      $('#perm-octal').val(bitsToOctal(bits));
+      permSyncing = false;
+
+      var caps = (runtimesById[project.runtime_id] && runtimesById[project.runtime_id].capabilities) || {};
+      populatePermSelect($('#perm-owner'), caps.users, entry.owner);
+      populatePermSelect($('#perm-group'), caps.groups, entry.group);
+
+      $('#perm-recursive-wrap').prop('hidden', entry.type !== 'dir');
+      $('#perm-recursive').prop('checked', false);
+      $('#perm-error').prop('hidden', true);
+      $('#perm-status').text('');
+      $('#perm-save-btn').prop('disabled', false);
       modalInstance('file-properties-modal').show();
     }
 
     $('#file-properties-close-btn').on('click', function () {
       modalInstance('file-properties-modal').hide();
+    });
+
+    $('#perm-save-btn').on('click', function () {
+      if (!fpPath || !fpEntry) return;
+      $('#perm-error').prop('hidden', true);
+
+      var recursive = $('#perm-recursive').is(':checked');
+      var newOctal = $('#perm-octal').val().replace(/[^0-7]/g, '').slice(-3);
+      var origOctal = bitsToOctal(modeStringToBits(fpEntry.mode));
+      var newOwner = $('#perm-owner').val() || '';
+      var newGroup = $('#perm-group').val() || '';
+      var modeChanged = newOctal.length === 3 && newOctal !== origOctal;
+      var ownerChanged = newOwner !== (fpEntry.owner || '');
+      var groupChanged = newGroup !== (fpEntry.group || '');
+
+      var steps = [];
+      if (modeChanged) {
+        steps.push(function () {
+          return $.ajax({
+            url: '/api/v1/projects/' + projectID + '/files/mode', method: 'PATCH', contentType: 'application/json',
+            data: JSON.stringify({ path: fpPath, mode: newOctal, recursive: recursive })
+          });
+        });
+      }
+      if (ownerChanged || groupChanged) {
+        steps.push(function () {
+          return $.ajax({
+            url: '/api/v1/projects/' + projectID + '/files/owner', method: 'PATCH', contentType: 'application/json',
+            data: JSON.stringify({
+              path: fpPath, owner: ownerChanged ? newOwner : '', group: groupChanged ? newGroup : '', recursive: recursive
+            })
+          });
+        });
+      }
+      if (!steps.length) {
+        modalInstance('file-properties-modal').hide();
+        return;
+      }
+
+      var $btn = $(this).prop('disabled', true);
+      function runNext() {
+        if (!steps.length) {
+          $btn.prop('disabled', false);
+          modalInstance('file-properties-modal').hide();
+          loadFiles();
+          return;
+        }
+        steps.shift()().done(runNext).fail(function (xhr) {
+          $btn.prop('disabled', false);
+          var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to update permissions.';
+          $('#perm-error').text(msg).prop('hidden', false);
+        });
+      }
+      runNext();
     });
 
     function batchTransfer(action, paths, toDir, done) {

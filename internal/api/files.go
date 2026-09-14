@@ -326,6 +326,86 @@ func deleteFileHandler(db *database.DB, registry *runtimes.Registry) http.Handle
 	}
 }
 
+// chmodRequest is the shared decoded body of the chmod/chown handlers.
+type chmodRequest struct {
+	Path      string `json:"path"`
+	Mode      string `json:"mode"`
+	Owner     string `json:"owner"`
+	Group     string `json:"group"`
+	Recursive bool   `json:"recursive"`
+}
+
+// decodeChmodBody decodes and path-validates a chmod/chown request body,
+// writing a 400 response and returning ok=false on failure.
+func decodeChmodBody(w http.ResponseWriter, r *http.Request) (chmodRequest, bool) {
+	var req chmodRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		return chmodRequest{}, false
+	}
+	p, err := filesystem.Clean(req.Path)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return chmodRequest{}, false
+	}
+	req.Path = p
+	return req, true
+}
+
+// chmodFileHandler PATCH .../files/mode {"path","mode","recursive"} — change
+// an entry's permission bits.
+func chmodFileHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		req, ok := decodeChmodBody(w, r)
+		if !ok {
+			return
+		}
+		if req.Mode == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "mode is required"})
+			return
+		}
+		if _, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{
+			Action: "chmod", Root: root, Path: req.Path, Mode: req.Mode, Recursive: req.Recursive,
+		}); !ok {
+			return
+		}
+		recordFileAudit(r, db, audit.EventFileChmod, req.Path, map[string]any{"mode": req.Mode, "recursive": req.Recursive})
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// chownFileHandler PATCH .../files/owner {"path","owner","group","recursive"}
+// — change an entry's owning user and/or group. Owner is almost always
+// rejected by the OS on a non-root runtime (ADR-032); Group succeeds for any
+// group the runtime's OS user belongs to.
+func chownFileHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		req, ok := decodeChmodBody(w, r)
+		if !ok {
+			return
+		}
+		if req.Owner == "" && req.Group == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "owner or group is required"})
+			return
+		}
+		if _, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{
+			Action: "chown", Root: root, Path: req.Path, Owner: req.Owner, Group: req.Group, Recursive: req.Recursive,
+		}); !ok {
+			return
+		}
+		recordFileAudit(r, db, audit.EventFileChown, req.Path, map[string]any{"owner": req.Owner, "group": req.Group, "recursive": req.Recursive})
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // searchFilesHandler GET .../files/search?q=&path= — name-substring search.
 func searchFilesHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

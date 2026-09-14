@@ -252,10 +252,17 @@ oversized transfer (> 24 MB) → `413` on upload, `502` on read.
 | move | `POST /api/v1/projects/{projectID}/files/move` `{"from","to"}` — same-filesystem rename |
 | delete | `DELETE /api/v1/projects/{projectID}/files?path=` — recursive for directories |
 | search | `GET /api/v1/projects/{projectID}/files/search?q=&path=` — case-insensitive name substring, depth/match capped |
+| chmod | `PATCH /api/v1/projects/{projectID}/files/mode` `{"path","mode","recursive"}` — `mode` is an octal string, e.g. `"755"`; only owner/group/other rwx bits are settable |
+| chown | `PATCH /api/v1/projects/{projectID}/files/owner` `{"path","owner","group","recursive"}` — `owner`/`group` are account/group names from `RuntimeCapabilities.users`/`.groups`, either omittable |
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag `Files`).
 HTML/SVG content is always served with an attachment disposition so it can
 never render as a document on the DevStationOne origin.
+
+`chown`'s `owner` almost always fails with `502` on a real deployment: the
+runtime never runs as root (ADR-014), and POSIX only lets root (or
+`CAP_CHOWN`) reassign a file's owning user. `group` succeeds for any group
+the runtime's OS user belongs to. See ADR-032.
 
 ## Git
 

@@ -1015,3 +1015,37 @@ ready to run. No migration path for existing `DEVSTATIONONE_DATABASE_URL`
 exports: this is a pre-1.0 project, and the old var simply stops being read
 by tests (a stale export now makes tests skip with "not set" rather than
 truncate the wrong database, which is the safer failure mode).
+
+## ADR-032 — File permissions/ownership: chmod and chgrp only, owner is best-effort
+
+Date: 2026-09-14
+
+**Decision.** The file properties modal (`web/static/project.html`) and its
+backing `file.command` actions `chmod`/`chown` (`internal/filesystem`,
+`internal/agent/file_manager.go`) support changing permission bits, group,
+and owner, with an optional recursive apply for directories. `chmod` masks
+its input to the low 9 bits — setuid/setgid/sticky are never settable
+through this path. Owner/group are entered by name (not uid/gid), resolved
+locally against `os/user` on the runtime; the runtime reports every account
+and group it can see (`Capabilities.Users`/`.Groups`, parsed unfiltered from
+`/etc/passwd`/`/etc/group`, same "report reality" rule as `Shells`) to back
+the modal's dropdowns.
+
+**Why.** A runtime never runs as root — it runs as one fixed, normal OS user
+(ADR-014) and that is a hard requirement, not a default. POSIX `chown(2)`
+only allows the *superuser* (or a process with `CAP_CHOWN`) to reassign a
+file's owning user; an unprivileged owner can only change the file's group,
+and only to a group they already belong to. So on every real deployment of
+this product, a `chown` request that changes `owner` will fail with `502`
+("operation not permitted") — this is expected, not a bug, and not worth
+designing around by, say, hiding the owner field: a self-hosted operator who
+does run their runtime as root (uncommon but not forbidden) gets a field
+that actually works, and everyone else gets an honest OS-level error instead
+of a client-side lie about what's possible.
+
+**Consequence.** No new privilege escalation path is introduced — every
+`chmod`/`chown` still goes through the same `os.Root`-contained `FS` the
+rest of the Files feature uses (docs/SECURITY.md), and the OS enforces the
+owner-change restriction independently of anything this application does.
+`docs/API.md`/`docs/PROTOCOL.md` call out the almost-always-fails owner case
+explicitly so it isn't mistaken for a broken feature.
