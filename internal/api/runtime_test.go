@@ -133,4 +133,63 @@ func TestRuntimeHTTP_CreateListRevoke(t *testing.T) {
 	if list[0].Status != "revoked" {
 		t.Fatalf("Status = %q, want revoked", list[0].Status)
 	}
+
+	// Reactivating an unknown runtime is a 404.
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/00000000-0000-0000-0000-000000000000/reactivate", nil)
+	req.AddCookie(adminCookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("reactivate unknown: status = %d, want 404", rec.Code)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+created.ID+"/reactivate", nil)
+	req.AddCookie(adminCookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("reactivate: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/runtimes", nil)
+	req.AddCookie(adminCookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	json.NewDecoder(rec.Body).Decode(&list)
+	if list[0].Status != "pending" {
+		t.Fatalf("Status after reactivate = %q, want pending", list[0].Status)
+	}
+}
+
+func TestRuntimeHTTP_ReactivateRequiresAdmin(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	if _, err := auth.CreateUser(ctx, db.Pool, "admin@example.com", "password123", true); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	if _, err := auth.CreateUser(ctx, db.Pool, "user@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	adminCookie := loginAs(t, router, "admin@example.com", "password123")
+	userCookie := loginAs(t, router, "user@example.com", "password123")
+
+	body, _ := json.Marshal(map[string]string{"name": "dev01"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/runtimes", bytes.NewReader(body))
+	req.AddCookie(adminCookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	var created runtimeWithTokenResponse
+	json.NewDecoder(rec.Body).Decode(&created)
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+created.ID+"/reactivate", nil)
+	req.AddCookie(userCookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-admin reactivate: status = %d, want 403", rec.Code)
+	}
 }

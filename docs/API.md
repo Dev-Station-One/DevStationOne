@@ -33,6 +33,7 @@ docs/openapi.yaml
 POST   /api/v1/runtimes
 GET    /api/v1/runtimes
 POST   /api/v1/runtimes/{runtimeID}/revoke
+POST   /api/v1/runtimes/{runtimeID}/reactivate
 
 GET    /api/v1/runtimes/{runtimeID}/browse
 GET    /api/v1/runtimes/{runtimeID}/browse/search
@@ -41,12 +42,19 @@ POST   /api/v1/runtimes/{runtimeID}/browse/mkdir
 WSS    /api/v1/runtimes/connect
 ```
 
-`POST /api/v1/runtimes` (register) and the `revoke` action require an
+`POST /api/v1/runtimes` (register), `revoke`, and `reactivate` all require an
 authenticated administrator session. `GET /api/v1/runtimes` (list) only
 requires an authenticated session, since a non-admin user needs it to select
 a runtime when creating a Project (see Projects below). `POST
 /api/v1/runtimes` returns the created runtime plus its raw enrollment token;
 the token is shown exactly once and only its SHA-256 hash is stored.
+
+`POST .../reactivate` returns a revoked runtime to `pending` status and
+clears `revoked_at` — it does not issue a new token, so the runtime machine
+needs no reconfiguration and can reconnect as soon as it retries (or is
+restarted). `404` if `runtimeID` doesn't exist. Calling it on a runtime that
+isn't currently revoked still succeeds (idempotent), forcing its status to
+`pending` regardless.
 
 `GET /api/v1/runtimes/connect` is where a Development Runtime opens its
 outbound WebSocket connection, authenticating with `Authorization: Bearer

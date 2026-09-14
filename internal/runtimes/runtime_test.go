@@ -160,4 +160,36 @@ func TestRuntimeLifecycle(t *testing.T) {
 	if found, err := Revoke(ctx, pool, "00000000-0000-0000-0000-000000000000"); err != nil || found {
 		t.Fatalf("revoke unknown id: found=%v err=%v", found, err)
 	}
+
+	// Reactivating clears the revocation and reuses the original token: the
+	// runtime can look itself up by the same token hash it always had.
+	reactivated, err := Reactivate(ctx, pool, rt.ID)
+	if err != nil || !reactivated {
+		t.Fatalf("reactivate: reactivated=%v err=%v", reactivated, err)
+	}
+	afterReactivate, err := GetByTokenHash(ctx, pool, auth.HashToken(token))
+	if err != nil {
+		t.Fatalf("lookup after reactivate: %v", err)
+	}
+	if afterReactivate.Status != StatusPending || afterReactivate.RevokedAt != nil {
+		t.Fatalf("expected pending status with RevokedAt cleared, got %+v", afterReactivate)
+	}
+
+	// The reactivated runtime can reconnect (MarkOnline) using its
+	// original, never-reissued token.
+	if err := MarkOnline(ctx, pool, rt.ID, hello); err != nil {
+		t.Fatalf("mark online after reactivate: %v", err)
+	}
+	onlineAgain, err := GetByTokenHash(ctx, pool, auth.HashToken(token))
+	if err != nil {
+		t.Fatalf("lookup after post-reactivate online: %v", err)
+	}
+	if onlineAgain.Status != StatusOnline {
+		t.Fatalf("Status = %q, want %q", onlineAgain.Status, StatusOnline)
+	}
+
+	// Reactivating an unknown ID reports not-found.
+	if found, err := Reactivate(ctx, pool, "00000000-0000-0000-0000-000000000000"); err != nil || found {
+		t.Fatalf("reactivate unknown id: found=%v err=%v", found, err)
+	}
 }

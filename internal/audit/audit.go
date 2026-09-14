@@ -23,8 +23,9 @@ const (
 	EventLoginFailed    = "auth.login_failed"
 	EventLogout         = "auth.logout"
 
-	EventRuntimeRegistered = "runtime.registered"
-	EventRuntimeRevoked    = "runtime.revoked"
+	EventRuntimeRegistered  = "runtime.registered"
+	EventRuntimeRevoked     = "runtime.revoked"
+	EventRuntimeReactivated = "runtime.reactivated"
 
 	EventProjectCreated = "project.created"
 	EventProjectUpdated = "project.updated"

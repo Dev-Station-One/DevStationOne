@@ -114,3 +114,27 @@ func revokeRuntimeHandler(db *database.DB, registry *runtimes.Registry) http.Han
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+
+// reactivateRuntimeHandler re-enables a revoked runtime so it can reconnect
+// with its existing enrollment token (no new token is issued — a fresh one
+// would require reconfiguring the runtime machine, which re-enabling is
+// meant to avoid).
+func reactivateRuntimeHandler(db *database.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		runtimeID := r.PathValue("runtimeID")
+		user, _ := userFromContext(r.Context())
+
+		ok, err := runtimes.Reactivate(r.Context(), db.Pool, runtimeID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to reactivate runtime"})
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "runtime not found"})
+			return
+		}
+
+		audit.Record(r.Context(), db.Pool, audit.EventRuntimeReactivated, audit.Actor{UserID: user.ID, Email: user.Email}, "runtime", runtimeID, nil, clientIP(r))
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

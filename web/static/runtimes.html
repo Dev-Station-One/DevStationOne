@@ -110,8 +110,8 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
         var $body = $('#runtimes-body').empty();
         $('#runtimes-empty').prop('hidden', runtimes.length > 0);
         runtimes.forEach(function (rt) {
-          var revokeBtn = rt.status === 'revoked'
-            ? ''
+          var actionBtn = rt.status === 'revoked'
+            ? '<button class="icon-btn reactivate-btn" data-id="' + rt.id + '" aria-label="Re-enable runtime" title="Re-enable runtime"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>'
             : '<button class="icon-btn text-danger revoke-btn" data-id="' + rt.id + '" aria-label="Revoke runtime" title="Revoke runtime"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>';
           $body.append(
             '<tr><td>' + escapeHtml(rt.name) + '</td>' +
@@ -119,7 +119,7 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
             '<td>' + escapeHtml(rt.hostname || '—') + '</td>' +
             '<td>' + escapeHtml([rt.os, rt.arch].filter(Boolean).join(' / ') || '—') + '</td>' +
             '<td>' + (rt.last_seen_at ? new Date(rt.last_seen_at).toLocaleString() : '—') + '</td>' +
-            '<td>' + revokeBtn + '</td></tr>'
+            '<td>' + actionBtn + '</td></tr>'
           );
         });
       }).fail(function (xhr) {
@@ -159,6 +159,13 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
       var id = $(this).data('id');
       if (!(await DS.confirm('Revoke this runtime? It will lose access immediately.'))) return;
       $.ajax({ url: '/api/v1/runtimes/' + id + '/revoke', method: 'POST' }).always(loadRuntimes);
+    });
+
+    // Re-enabling reuses the runtime's existing enrollment token — nothing
+    // to reconfigure on the runtime machine, it just needs to reconnect.
+    $('#runtimes-body').on('click', '.reactivate-btn', function () {
+      var id = $(this).data('id');
+      $.ajax({ url: '/api/v1/runtimes/' + id + '/reactivate', method: 'POST' }).always(loadRuntimes);
     });
 
     $('#logout-btn').on('click', function () {

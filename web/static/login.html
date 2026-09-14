@@ -60,7 +60,7 @@
           password: $('#password').val()
         })
       }).done(function () {
-        window.location.href = '/account.html';
+        window.location.href = '/';
       }).fail(function (xhr) {
         var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Sign in failed';
         $('#login-error').text(msg).prop('hidden', false);

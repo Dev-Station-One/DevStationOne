@@ -121,11 +121,21 @@
       return '<span class="badge bg-yellow-lt">offline</span>';
     }
 
+    // The dashboard is a live glance, not the management view: only
+    // currently-connected runtimes are listed here. Pending/offline/revoked
+    // runtimes stay visible on the full Runtimes page (runtimes.html).
     function loadRuntimes() {
       $.get('/api/v1/runtimes').done(function (runtimes) {
+        var online = runtimes.filter(function (rt) { return rt.online; });
         var $body = $('#dash-runtimes-body').empty();
-        $('#dash-runtimes-empty').prop('hidden', runtimes.length > 0);
-        runtimes.forEach(function (rt) {
+        $('#dash-runtimes-empty').prop('hidden', online.length > 0);
+        if (online.length === 0) {
+          $('#dash-runtimes-empty .empty-title').text(runtimes.length > 0 ? 'No runtimes online' : 'No runtimes registered');
+          $('#dash-runtimes-empty .empty-subtitle').html(runtimes.length > 0
+            ? 'Start a runtime to see it here — check status on <a href="/runtimes.html">Runtimes</a>.'
+            : '<a href="/runtimes.html">Register a Development Runtime</a> to get started.');
+        }
+        online.forEach(function (rt) {
           $body.append(
             '<tr><td>' + escapeHtml(rt.name) + '</td>' +
             '<td>' + runtimeStatusBadge(rt) + '</td>' +

@@ -250,6 +250,28 @@ paths:
           description: Administrator access required
         "404":
           description: Runtime not found
+  /api/v1/runtimes/{runtimeID}/reactivate:
+    post:
+      summary: Re-enable a revoked runtime so it can reconnect with its existing enrollment token
+      tags: [Runtimes]
+      operationId: reactivateRuntime
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: runtimeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Runtime reactivated (returned to pending status; no new token is issued)
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: Runtime not found
   /api/v1/runtimes/{runtimeID}/browse:
     get:
       summary: List a directory under a runtime's home directory

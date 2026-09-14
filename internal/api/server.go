@@ -49,6 +49,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
 	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/reactivate", requireAdmin(db, reactivateRuntimeHandler(db)))
 	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, hub, bus, logger))
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse", requireSession(db, browseRuntimeHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse/search", requireSession(db, browseSearchHandler(db, registry)))

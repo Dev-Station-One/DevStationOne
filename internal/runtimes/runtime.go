@@ -189,6 +189,20 @@ func Revoke(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
 	return tag.RowsAffected() > 0, nil
 }
 
+// Reactivate clears a runtime's revocation, returning it to pending status
+// so it can reconnect using its existing enrollment token — re-enabling
+// does not reissue a token. It reports whether a matching runtime was
+// found.
+func Reactivate(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
+	tag, err := pool.Exec(ctx, `
+		UPDATE runtimes SET status = $2, revoked_at = NULL WHERE id = $1
+	`, id, StatusPending)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // capabilitiesScanner adapts a *protocol.Capabilities field for pgx's Scan,
 // unmarshaling the jsonb column into it.
 func capabilitiesScanner(dst *protocol.Capabilities) any {

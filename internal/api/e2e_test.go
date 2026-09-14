@@ -72,11 +72,12 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 	ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelTimeout()
 
-	// #logout-btn exists on account.html but starts hidden inside a
-	// Bootstrap dropdown-menu (no .show class until the account-menu
-	// toggle is clicked) — wait on #account-email instead, which is always
-	// visible on page load and is the concrete proof the account page
-	// actually rendered (not just that some navigation happened).
+	// Login lands on the dashboard (index.html), not account.html. Wait on
+	// #dash-runtimes-empty instead of a generic element: it only becomes
+	// visible once the dashboard's own JS has actually fetched
+	// /api/v1/runtimes and found none (this test registers no runtime),
+	// concrete proof the dashboard rendered and ran, not just that some
+	// navigation happened.
 	var pageTitle string
 	err := chromedp.Run(ctx,
 		chromedp.Navigate(server.URL+"/login.html"),
@@ -84,14 +85,14 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 		chromedp.SendKeys(`#email`, "e2e-admin@example.com", chromedp.ByID),
 		chromedp.SendKeys(`#password`, "password123", chromedp.ByID),
 		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#account-email`, chromedp.ByID),
+		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
 		chromedp.Title(&pageTitle),
 	)
 	if err != nil {
 		t.Fatalf("login flow: %v", err)
 	}
-	if pageTitle != "Account · DevStationOne" {
-		t.Fatalf("post-login page title = %q, want Account page (login must have failed)", pageTitle)
+	if pageTitle != "DevStationOne" {
+		t.Fatalf("post-login page title = %q, want Dashboard page (login must have failed)", pageTitle)
 	}
 
 	var eventTypeText string

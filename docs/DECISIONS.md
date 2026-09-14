@@ -946,3 +946,38 @@ closed the tab" case the whole feature exists for. `Forward` runs
 regardless of whether a browser is currently attached (scrollback keeps
 buffering either way), so the idle clock is armed the moment a session
 produces any output, attached or not.
+
+## ADR-030 — Runtime reactivation reuses the original enrollment token; dashboard shows online runtimes only
+
+Date: 2026-09-14
+
+**Decision.** `POST /api/v1/runtimes/{runtimeID}/reactivate` (admin-only,
+mirrors `revoke`) clears a revoked runtime's `revoked_at` and returns its
+status to `pending` — `internal/runtimes.Reactivate` — without touching
+`token_hash`. The runtime machine needs no reconfiguration: the same
+process, still holding the same `DEVSTATIONONE_RUNTIME_TOKEN` it was given
+at enrollment, reconnects (or is simply restarted) and `MarkOnline` takes it
+the rest of the way. This was an explicit choice over reissuing a new
+token, made knowing revoke's original purpose (killing a credential):
+reusing the token is right for the common "I fat-fingered revoke" or
+"planned maintenance window" case this button targets, but does **not**
+undo a revoke made because a token was suspected compromised — that case
+still requires deleting the runtime and creating a new one (a fresh token),
+which remains possible today and needed no new endpoint.
+
+**Dashboard shows online runtimes only.** The dashboard's Runtimes card
+(`web/static/index.html` `loadRuntimes`) now filters to `online: true`
+client-side, matching its own framing as a live glance rather than a
+management view (docs/ARCHITECTURE.md "Dashboard events" — payloads are
+thin, browsers refetch). Pending/offline/revoked runtimes remain fully
+visible on `runtimes.html`, which is unchanged and is where
+revoke/reactivate live. This means a newly registered runtime that hasn't
+connected yet is invisible on the dashboard until it does — accepted,
+since the dashboard's job is "what's alive right now," not "what's
+registered."
+
+**Login lands on the dashboard.** `login.html`'s post-login redirect
+changed from `/account.html` to `/` — the dashboard, not the account
+settings page, is the natural landing surface after signing in. No route
+changed; `account.html` is unaffected and still reachable from the user
+menu.
