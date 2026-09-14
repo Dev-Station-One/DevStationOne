@@ -213,16 +213,74 @@ never render as a document on the DevStationOne origin.
 
 ## Databases
 
-The final OpenAPI contract must define:
-- connection CRUD
-- test
-- catalog discovery
-- schema discovery
-- table metadata
-- data browsing
-- query execution
-- users/roles
-- permissions
+```text
+POST   /api/v1/projects/{projectID}/databases
+GET    /api/v1/projects/{projectID}/databases
+GET    /api/v1/projects/{projectID}/databases/{connectionID}
+PATCH  /api/v1/projects/{projectID}/databases/{connectionID}
+DELETE /api/v1/projects/{projectID}/databases/{connectionID}
+POST   /api/v1/projects/{projectID}/databases/{connectionID}/test
+```
+
+Slice 7 scope: connection CRUD, protected credentials, and connection test
+against all four supported engines (PostgreSQL, MySQL/MariaDB, Microsoft SQL
+Server, SQLite). Catalog/schema/table discovery, data browsing, query
+execution, and users/roles/permissions are a later slice.
+
+A connection is a stored `database_connections` row scoped to a Project
+(`project_id`), authorized the same way as everything else under
+`/projects/{projectID}/...` (`authorizedProject`, ADR-013): `404` on a
+project the caller doesn't own or that doesn't exist.
+
+Request/response body (`database_connections`' non-credential fields):
+```json
+{
+  "name": "primary",
+  "engine": "postgresql",
+  "host": "localhost",
+  "port": 5432,
+  "username": "dev",
+  "database": "app",
+  "ssl_mode": "disable",
+  "instance_name": "",
+  "search_path": "",
+  "has_secret": true
+}
+```
+`engine` is one of `postgresql`, `mysql`, `mssql`, `sqlite`. For `sqlite`,
+`database` is a runtime-local file path and `host`/`port`/`username`/
+`ssl_mode` are ignored. `instance_name` (optional) is an MSSQL named
+instance; `search_path` (optional) is a Postgres default schema.
+
+Credentials are never returned. `POST`/create accepts `password` and
+`extra_params` (a free-form `key=value&key2=value2` string passed through to
+the engine's connection string — an escape hatch for anything the named
+fields don't cover) alongside the fields above; `has_secret` in the response
+reports whether a secret is stored, nothing more. `PATCH` only touches the
+stored secret when the request includes a `"secret": {"password",
+"extra_params"}` object — omitting it (the normal case: editing the name,
+host, etc.) leaves the existing encrypted credential untouched. This is how
+the edit form's "leave password blank to keep the existing one" behavior
+works: the UI only sends `secret` when the user actually typed a new
+password.
+
+Credentials are encrypted at rest with AES-256-GCM under
+`DEVSTATIONONE_DB_ENCRYPTION_KEY` (see `docs/SECURITY.md` and ADR-021) —
+`internal/dbconnections` is the only package that ever decrypts one, and only
+to build the `db.command` RPC payload dispatched to a runtime; the plaintext
+never appears in an API response or a log line.
+
+`POST .../test` is a live RPC (`db.command` action `test`,
+`docs/PROTOCOL.md` "Implementation (Slice 7): database commands") to the
+Project's runtime, which opens and pings the connection using
+`internal/dbconnectors` and closes it immediately — nothing is kept open.
+Response is always `200` with `{"ok": true}` or `{"ok": false, "error":
+"..."}`; a failed connection (bad credentials, unreachable host) is an
+expected outcome, not a server error. `409` if the runtime isn't currently
+connected; `504` if it doesn't reply within 30s.
+
+The canonical request/response shapes are `docs/openapi.yaml` (tag
+`Databases`).
 
 ## Services
 

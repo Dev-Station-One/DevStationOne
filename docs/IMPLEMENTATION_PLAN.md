@@ -169,6 +169,19 @@ Deliver:
 Acceptance:
 - connect to each supported engine using real test databases
 
+**Status: Complete.** Connection CRUD, AES-256-GCM-encrypted credentials
+(`internal/dbconnections`), the `Connector` interface plus all four engine
+connectors (`internal/dbconnectors`), the `db.command`/`db.result`/
+`db.error` protocol messages, and the Databases tab UI (add/edit/test/delete
+connections) — see ADR-021. Verified against real Postgres/MySQL/MSSQL/
+SQLite test databases (`make dbtest-up`) and a real browser smoke test.
+
+Slices 8 and 9 below were combined into one design during a later
+brainstorm/design pass (split-pane connection tree, unified schema+data+
+SQL-editor UI) — see ADR-021's SQL Editor note — but have not been
+implemented yet; this plan still tracks them as separate slices until that
+pass lands.
+
 ## Slice 8 — Database browser/schema
 
 Deliver:

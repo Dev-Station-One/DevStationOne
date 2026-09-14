@@ -165,6 +165,27 @@ This supports:
 
 The Control Server brokers requests and results.
 
+```text
+Control Server  -- REST (internal/api/databases.go) does CRUD against the
+      |             database_connections table (internal/dbconnections),
+      | db.command   decrypting credentials only to build the RPC payload;
+      | (RPC)         dispatches one db.command per test request
+      v              (runtimes.Conn.SendCommand, Envelope.ID-correlated,
+Development Runtime  same mechanism as service.command).
+      |            -- internal/dbconnectors opens+pings a database/sql
+      v              connection for the requested engine, closes it.
+PostgreSQL / MySQL / MSSQL / SQLite
+```
+
+Slice 7 delivers connection storage, encrypted credentials, and connection
+test across all four engines (ADR-021); the runtime never keeps a database
+connection open between RPCs in this slice — schema/data browsing and the
+SQL editor (Slices 8/9) are a later pass. Credentials are AES-256-GCM
+sealed at rest under `DEVSTATIONONE_DB_ENCRYPTION_KEY` and only ever
+decrypted server-side, immediately before dispatch — never logged, never
+returned from an API response (see `docs/API.md` "Databases" and
+`docs/SECURITY.md`).
+
 ## Services
 
 Use systemd user APIs/commands where supported.
@@ -197,6 +218,8 @@ PostgreSQL stores:
 - projects
 - terminal sessions (`terminal_sessions`; the browser-auth `sessions` table
   is a distinct, pre-existing concept — see ADR-015)
+- database connections (`database_connections`, credentials encrypted —
+  see ADR-021)
 - database connection metadata
 - audit events
 - settings

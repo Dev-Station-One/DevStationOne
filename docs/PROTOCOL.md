@@ -246,6 +246,35 @@ If the 24 MB cap proves too small for real projects, the
 upgrade path is chunked streaming messages, not raising the envelope
 further.
 
+## Implementation (Slice 7): database commands
+
+Database connection test reuses the Slice 5 correlated request/response
+machinery unchanged — one message type in each direction, `Envelope.ID`
+correlated:
+
+```text
+db.command   server -> runtime   {action, connection}
+db.result    runtime -> server   {ok}
+db.error     runtime -> server   {error}
+```
+
+`action` is `"test"` (Slice 7 — more actions land with schema/data browsing
+and the SQL editor in a later slice). `connection` is a
+`DBConnectionParams`: engine, host, port, username, password, database,
+ssl_mode, instance_name, search_path, extra_params — built server-side from
+a decrypted `database_connections` row (`internal/dbconnections`), never
+taken from a client request.
+
+Runtime-side, `internal/dbconnectors` opens a `database/sql` connection for
+the requested engine (PostgreSQL via `pgx`/`stdlib`, MySQL/MariaDB via
+`go-sql-driver/mysql`, MSSQL via `microsoft/go-mssqldb`, SQLite via
+`modernc.org/sqlite` — all four pure Go, no cgo) and verifies it with a
+ping, then closes it immediately; nothing is kept open between RPCs in this
+slice. `hello.Capabilities.Databases` always advertises all four engine
+names (`dbconnectors.SupportedEngines`), since the drivers are compiled in
+rather than depending on anything else installed on the runtime host — unlike
+`Services`, there's no live-availability check to make here.
+
 ## Security
 
 Every runtime connection is authenticated.

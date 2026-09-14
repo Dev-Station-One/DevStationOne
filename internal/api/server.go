@@ -11,7 +11,9 @@ import (
 )
 
 // NewRouter builds the top-level HTTP handler for the Control Server.
-func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Handler {
+// dbEncryptionKey decrypts stored database connection credentials
+// (docs/SECURITY.md) — see internal/dbconnections.
+func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) http.Handler {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
@@ -72,6 +74,13 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string) http.Hand
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/copy", requireSession(db, fileTransferHandler(db, registry, "copy")))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/move", requireSession(db, fileTransferHandler(db, registry, "move")))
 	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/files", requireSession(db, deleteFileHandler(db, registry)))
+
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireSession(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireSession(db, listDatabaseConnectionsHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, getDatabaseConnectionHandler(db)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, patchDatabaseConnectionHandler(db, dbEncryptionKey)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, deleteDatabaseConnectionHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/test", requireSession(db, testDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
 
 	// StripPrefix: FileServer maps the full URL path under the root dir, so
 	// /assets/x must lose the /assets/ prefix before hitting http.Dir.

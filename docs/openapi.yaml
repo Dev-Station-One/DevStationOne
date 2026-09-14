@@ -1499,6 +1499,221 @@ paths:
           description: The runtime could not move the entry
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases:
+    post:
+      summary: Create a database connection
+      tags: [Databases]
+      operationId: createDatabaseConnection
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DatabaseConnectionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseConnection"
+        "400":
+          description: Missing/invalid fields
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+    get:
+      summary: List a project's database connections
+      tags: [Databases]
+      operationId: listDatabaseConnections
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Every connection on the project
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DatabaseConnection"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or not owned by the current user
+  /api/v1/projects/{projectID}/databases/{connectionID}:
+    get:
+      summary: Get one database connection
+      tags: [Databases]
+      operationId: getDatabaseConnection
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseConnection"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+    patch:
+      summary: Update a database connection
+      description: Only replaces the stored secret when the request body includes a "secret" object; omitting it leaves the existing password/extra_params untouched.
+      tags: [Databases]
+      operationId: patchDatabaseConnection
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                engine:
+                  type: string
+                  enum: [postgresql, mysql, mssql, sqlite]
+                host:
+                  type: string
+                port:
+                  type: integer
+                username:
+                  type: string
+                database:
+                  type: string
+                ssl_mode:
+                  type: string
+                instance_name:
+                  type: string
+                search_path:
+                  type: string
+                secret:
+                  type: object
+                  description: Present only when replacing the stored password/extra_params.
+                  properties:
+                    password:
+                      type: string
+                    extra_params:
+                      type: string
+      responses:
+        "200":
+          description: The updated connection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatabaseConnection"
+        "400":
+          description: Missing/invalid fields
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+    delete:
+      summary: Delete a database connection
+      tags: [Databases]
+      operationId: deleteDatabaseConnection
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+  /api/v1/projects/{projectID}/databases/{connectionID}/test:
+    post:
+      summary: Test a database connection
+      description: A live RPC to the project's runtime, which opens and pings the connection, then closes it. A failed connection is a normal 200 {"ok":false} result, not a server error.
+      tags: [Databases]
+      operationId: testDatabaseConnection
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Test result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
 components:
   securitySchemes:
     cookieAuth:
@@ -1747,6 +1962,80 @@ components:
         enabled:
           type: string
           enum: [enabled, disabled, static, unknown]
+    DatabaseConnection:
+      type: object
+      description: A stored database connection, scoped to a Project. Credentials are never included — see has_secret and docs/API.md "Databases".
+      required: [id, project_id, name, engine, host, port, username, database, ssl_mode, instance_name, search_path, has_secret, created_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        name:
+          type: string
+        engine:
+          type: string
+          enum: [postgresql, mysql, mssql, sqlite]
+        host:
+          type: string
+          description: Ignored for sqlite.
+        port:
+          type: integer
+        username:
+          type: string
+          description: Ignored for sqlite.
+        database:
+          type: string
+          description: Database/catalog name, or a runtime-local file path for sqlite.
+        ssl_mode:
+          type: string
+          description: Ignored for sqlite.
+        instance_name:
+          type: string
+          description: Optional MSSQL named instance.
+        search_path:
+          type: string
+          description: Optional Postgres default schema.
+        has_secret:
+          type: boolean
+          description: Whether a password/extra-params secret is stored. Never the secret itself.
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    DatabaseConnectionRequest:
+      type: object
+      required: [name, engine]
+      properties:
+        name:
+          type: string
+        engine:
+          type: string
+          enum: [postgresql, mysql, mssql, sqlite]
+        host:
+          type: string
+        port:
+          type: integer
+        username:
+          type: string
+        password:
+          type: string
+          description: Create only. Write-only — never echoed back.
+        database:
+          type: string
+        ssl_mode:
+          type: string
+        instance_name:
+          type: string
+        search_path:
+          type: string
+        extra_params:
+          type: string
+          description: Free-form "key=value&key2=value2", passed through to the engine's connection string.
     FileInfo:
       type: object
       description: One filesystem entry inside the Project's working directory. Not a stored resource — see docs/API.md "Files".

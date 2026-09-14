@@ -2,16 +2,18 @@
 package config
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 )
 
 // Server holds configuration for the devstationone-server binary.
 type Server struct {
-	Addr        string
-	DatabaseURL string
-	LogLevel    string
-	Environment string
+	Addr            string
+	DatabaseURL     string
+	LogLevel        string
+	Environment     string
+	DBEncryptionKey []byte
 }
 
 // Runtime holds configuration for the devstationone-runtime binary.
@@ -30,6 +32,18 @@ func LoadServer() (Server, error) {
 		LogLevel:    getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
 		Environment: getenv("DEVSTATIONONE_ENV", "development"),
 	}
+	keyB64 := os.Getenv("DEVSTATIONONE_DB_ENCRYPTION_KEY")
+	if keyB64 == "" {
+		return Server{}, fmt.Errorf("DEVSTATIONONE_DB_ENCRYPTION_KEY is required (generate with: openssl rand -base64 32)")
+	}
+	key, err := base64.StdEncoding.DecodeString(keyB64)
+	if err != nil {
+		return Server{}, fmt.Errorf("DEVSTATIONONE_DB_ENCRYPTION_KEY must be base64: %w", err)
+	}
+	if len(key) != 32 {
+		return Server{}, fmt.Errorf("DEVSTATIONONE_DB_ENCRYPTION_KEY must decode to 32 bytes, got %d", len(key))
+	}
+	cfg.DBEncryptionKey = key
 	return cfg, nil
 }
 

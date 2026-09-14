@@ -5,6 +5,11 @@ import (
 	"testing"
 )
 
+// testEncryptionKey is 32 raw bytes, base64-encoded — a valid
+// DEVSTATIONONE_DB_ENCRYPTION_KEY shape for tests that don't exercise the key
+// itself.
+const testEncryptionKey = "AXnPprXAcRUTnm6lHFbayv5MBmW+M0kUhbxUY5XoTzI="
+
 func TestLoadServer_DefaultsDatabaseURL(t *testing.T) {
 	orig, had := os.LookupEnv("DEVSTATIONONE_DATABASE_URL")
 	os.Unsetenv("DEVSTATIONONE_DATABASE_URL")
@@ -13,6 +18,7 @@ func TestLoadServer_DefaultsDatabaseURL(t *testing.T) {
 			os.Setenv("DEVSTATIONONE_DATABASE_URL", orig)
 		}
 	})
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", testEncryptionKey)
 
 	cfg, err := LoadServer()
 	if err != nil {
@@ -26,6 +32,7 @@ func TestLoadServer_DefaultsDatabaseURL(t *testing.T) {
 
 func TestLoadServer_Defaults(t *testing.T) {
 	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", testEncryptionKey)
 	cfg, err := LoadServer()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -35,6 +42,25 @@ func TestLoadServer_Defaults(t *testing.T) {
 	}
 	if cfg.LogLevel != "info" {
 		t.Errorf("LogLevel = %q, want info", cfg.LogLevel)
+	}
+	if len(cfg.DBEncryptionKey) != 32 {
+		t.Errorf("DBEncryptionKey length = %d, want 32", len(cfg.DBEncryptionKey))
+	}
+}
+
+func TestLoadServer_RequiresEncryptionKey(t *testing.T) {
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", "")
+	if _, err := LoadServer(); err == nil {
+		t.Fatal("expected error when DEVSTATIONONE_DB_ENCRYPTION_KEY is unset")
+	}
+}
+
+func TestLoadServer_RejectsBadEncryptionKeyLength(t *testing.T) {
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", "dG9vc2hvcnQ=") // "tooshort", not 32 bytes
+	if _, err := LoadServer(); err == nil {
+		t.Fatal("expected error for a non-32-byte encryption key")
 	}
 }
 

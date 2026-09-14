@@ -41,7 +41,7 @@ func TestRuntimeHTTP_RequiresAdmin(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router := NewRouter(db, logger, t.TempDir())
+	router := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 
 	userCookie := loginAs(t, router, "user@example.com", "password123")
 
@@ -74,7 +74,7 @@ func TestRuntimeHTTP_CreateListRevoke(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router := NewRouter(db, logger, t.TempDir())
+	router := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
 
 	body, _ := json.Marshal(map[string]string{"name": "dev01"})

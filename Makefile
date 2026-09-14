@@ -1,4 +1,4 @@
-.PHONY: build test vet fmt lint openapi-lint db-up db-down run-server run-runtime
+.PHONY: build test vet fmt lint openapi-lint db-up dbtest-up db-down run-server run-runtime
 
 build:
 	go build ./...
@@ -20,6 +20,13 @@ openapi-lint:
 
 db-up:
 	docker compose up -d postgres
+
+# Real MySQL/MSSQL test databases for internal/dbconnectors (Slice 7
+# acceptance: connect to each supported engine using a real test database).
+# Separate from db-up: most work doesn't need them, and MSSQL is slow to
+# start.
+dbtest-up:
+	docker compose up -d dbtest-mysql dbtest-mssql
 
 db-down:
 	docker compose down

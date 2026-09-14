@@ -73,6 +73,18 @@ const (
 	// carrying the same Envelope.ID as the request. Its payload shape is
 	// identical to ServiceErrorPayload, which is reused for it.
 	MessageFileError MessageType = "file.error"
+
+	// MessageDBCommand is sent server->runtime to perform a database
+	// operation (Slice 7: connection test only so far). Like
+	// service.command, it uses Envelope.ID for request/response correlation.
+	MessageDBCommand MessageType = "db.command"
+	// MessageDBResult is sent runtime->server with a successful db.command
+	// result, carrying the same Envelope.ID as the request.
+	MessageDBResult MessageType = "db.result"
+	// MessageDBError is sent runtime->server when a db.command fails,
+	// carrying the same Envelope.ID as the request. Its payload shape is
+	// identical to ServiceErrorPayload, which is reused for it.
+	MessageDBError MessageType = "db.error"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
@@ -283,6 +295,45 @@ func EncodeFrame(sessionID string, payload []byte) []byte {
 	copy(frame, sessionID)
 	copy(frame[sessionIDFrameLen:], payload)
 	return frame
+}
+
+// DBConnectionParams identifies and authenticates a database connection.
+// Built server-side from a stored, decrypted database_connections row —
+// never taken from a client request (docs/SECURITY.md: database credentials
+// are sensitive, and must never be trusted from the browser).
+type DBConnectionParams struct {
+	// Engine is one of: postgresql, mysql, mssql, sqlite.
+	Engine       string `json:"engine"`
+	Host         string `json:"host,omitempty"`
+	Port         int    `json:"port,omitempty"`
+	Username     string `json:"username,omitempty"`
+	Password     string `json:"password,omitempty"`
+	Database     string `json:"database,omitempty"`
+	SSLMode      string `json:"ssl_mode,omitempty"`
+	InstanceName string `json:"instance_name,omitempty"`
+	SearchPath   string `json:"search_path,omitempty"`
+	ExtraParams  string `json:"extra_params,omitempty"`
+}
+
+// DBCommandPayload is the payload of a MessageDBCommand envelope.
+type DBCommandPayload struct {
+	// Action is "test" (Slice 7). More actions (schema browsing, data
+	// browsing, SQL editor) are added as the slices that implement them
+	// land — see docs/PROTOCOL.md.
+	Action     string             `json:"action"`
+	Connection DBConnectionParams `json:"connection"`
+}
+
+// DBResultPayload is the payload of a MessageDBResult envelope.
+type DBResultPayload struct {
+	Ok bool `json:"ok"`
+}
+
+// DBErrorPayload is the payload of a MessageDBError envelope. Same shape as
+// ServiceErrorPayload/FileErrorPayload, kept as its own type for symmetry
+// with the other db.* messages.
+type DBErrorPayload struct {
+	Error string `json:"error"`
 }
 
 // DecodeFrame splits a binary terminal frame produced by EncodeFrame back

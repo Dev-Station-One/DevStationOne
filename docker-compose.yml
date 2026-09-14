@@ -15,5 +15,43 @@ services:
       timeout: 3s
       retries: 10
 
+  # Real test database for internal/dbconnectors' MySQL connector
+  # (docs/IMPLEMENTATION_PLAN.md Slice 7 acceptance: connect to each
+  # supported engine using a real test database).
+  dbtest-mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_ROOT_PASSWORD: devstation
+      MYSQL_DATABASE: devstation
+      MYSQL_USER: devstation
+      MYSQL_PASSWORD: devstation
+    ports:
+      - "53306:3306"
+    volumes:
+      - devstation-dbtest-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "devstation", "-pdevstation"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Real test database for internal/dbconnectors' MSSQL connector.
+  dbtest-mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "Devstation1!"
+    ports:
+      - "51433:1433"
+    volumes:
+      - devstation-dbtest-mssql:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
 volumes:
   devstation-postgres:
+  devstation-dbtest-mysql:
+  devstation-dbtest-mssql:

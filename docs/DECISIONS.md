@@ -345,3 +345,67 @@ silently ignored on decode. Any signed-in session may browse any runtime's
 home directory (matching `GET /api/v1/runtimes`' existing visibility) —
 runtimes are shared infrastructure, not owned per-user, so this is not a new
 privilege boundary.
+
+## ADR-021 — Database connections: per-request pool cache instead of a session table, credentials encrypted at rest, SQL Editor as an intentional arbitrary-execution surface
+
+Date: 2026-09-13
+
+**Decision.** A saved database connection (`database_connections`, scoped to
+a Project like `terminal_sessions`) stores no live connection state — only
+engine, non-secret fields, and an AES-256-GCM-sealed `encrypted_secret`
+(password + free-form extra params, one blob). `internal/dbconnections`
+(Control Server) is the only package that ever decrypts one, and only to
+build a `db.command` RPC payload dispatched to a runtime; the plaintext
+never appears in an API response or a log line. The encryption key comes
+from a new required env var, `DEVSTATIONONE_DB_ENCRYPTION_KEY` (32 raw
+bytes, base64), validated at `config.LoadServer` startup the same way
+`DEVSTATIONONE_RUNTIME_TOKEN` is validated for the runtime binary.
+
+Runtime-side, `internal/dbconnectors` defines one `Connector` interface
+(`Open(ctx, Params) (*sql.DB, error)`) with four engine implementations —
+PostgreSQL (`pgx`/`stdlib`), MySQL/MariaDB (`go-sql-driver/mysql`), MSSQL
+(`microsoft/go-mssqldb`), SQLite (`modernc.org/sqlite`) — all four pure Go,
+no cgo. `Open` builds the engine's native DSN and opens+pings via
+`database/sql`, which already pools connections internally; Slice 7 doesn't
+add a second, custom pooling/session layer on top; `SQLite` intentionally
+skips SQLCipher-style encrypted-file support given the pure-Go constraint —
+noted as a ceiling in `sqlite.go`, not an oversight.
+
+**Why not a session table.** Terminal sessions need a table because a PTY's
+process must survive a browser refresh and support reattach across
+requests. A database connection test/query is one-shot: the runtime opens,
+uses, and (in this slice) closes it within a single RPC. Inventing
+`db.session.open`/`db.session.close` messages and a session-ownership model
+before there's a real multi-request-per-connection use case (the schema
+tree, data grid, and SQL editor land in a later slice) would be exactly the
+kind of unrequested abstraction the project's simplicity rules forbid. When
+that need arrives, the natural extension is a `map[connectionID]*sql.DB`
+cache in the runtime's `db_manager.go`, keyed by connection ID rather than
+by browser session — `database/sql`'s own pool already gives concurrent
+callers independent-feeling access to one cached `*sql.DB`, so per-tab
+isolation doesn't require per-tab pools either.
+
+**Why AES-256-GCM over a KMS/vault integration.** DevStationOne is
+self-hosted, single-tenant per install (PRD "the customer owns and operates
+the Control Server"); a symmetric key in an env var matches every other
+secret in this project's threat model (`DEVSTATIONONE_RUNTIME_TOKEN` et al.)
+and needs no new infrastructure dependency. GCM's authenticated encryption
+means a tampered ciphertext fails to decrypt rather than silently producing
+garbage credentials.
+
+**SQL Editor is a deliberate parallel to the terminal, not an oversight.**
+The brainstorm/design pass for the combined schema+data-browsing slices
+settled on full SQL power (arbitrary DDL/DML, no confirm-before-write gate)
+for the same reason `docs/SECURITY.md` already accepts the terminal as
+"arbitrary code execution by design" — the user is operating their own
+database. This ADR records the decision now so a future reviewer doesn't
+mistake the lack of a write-confirmation dialog for a missed control.
+
+**Consequence.** `DEVSTATIONONE_DB_ENCRYPTION_KEY` is a new required env var
+for the Control Server — a clean checkout that omits it fails to start, same
+posture as ADR-019/ADR-020 (pre-1.0, no installed base to migrate). Every
+`NewRouter` call site (production and test) now takes the key. Real test
+databases for MySQL and MSSQL were added to `docker-compose.yml`
+(`dbtest-mysql`, `dbtest-mssql`, started via `make dbtest-up`) alongside the
+existing Postgres service, so `internal/dbconnectors`' engine connectors are
+covered by integration tests against real engines, not mocks.

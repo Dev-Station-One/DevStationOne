@@ -46,7 +46,7 @@ func run() error {
 	}
 	defer db.Close()
 
-	handler := api.NewRouter(db, logger, "web/static")
+	handler := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      handler,

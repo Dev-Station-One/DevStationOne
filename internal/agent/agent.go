@@ -12,6 +12,7 @@ import (
 
 	"devstationone/internal/config"
 	"devstationone/internal/connection"
+	"devstationone/internal/dbconnectors"
 	"devstationone/internal/protocol"
 	"devstationone/internal/services"
 )
@@ -42,13 +43,13 @@ func Run(ctx context.Context, cfg config.Runtime, logger *slog.Logger) error {
 		RuntimeVersion: Version,
 		// Services reflects real, current availability rather than "this
 		// build supports it" — a runtime with no reachable systemd --user
-		// instance must not advertise it. Filesystem is always available in
-		// a build that contains it. Database capability flips to true once
-		// the slices implementing it land.
+		// instance must not advertise it. Filesystem and the database
+		// drivers are always available in a build that contains them.
 		Capabilities: protocol.Capabilities{
 			Terminal:   true,
 			Filesystem: true,
 			Services:   services.Available(ctx),
+			Databases:  dbconnectors.SupportedEngines(),
 			OSUsername: osUsername,
 			HomeDir:    homeDir,
 			Shells:     readShells("/etc/shells"),

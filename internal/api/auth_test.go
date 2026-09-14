@@ -41,7 +41,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router := NewRouter(db, logger, t.TempDir())
+	router := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 
 	// Wrong password: unauthorized, no cookie.
 	body, _ := json.Marshal(map[string]string{"email": "flow@example.com", "password": "wrong"})
@@ -117,7 +117,7 @@ func TestSessionCookieSecureFlagFollowsRequestScheme(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router := NewRouter(db, logger, t.TempDir())
+	router := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	body, _ := json.Marshal(map[string]string{"email": "cookie-scheme@example.com", "password": "password123"})
 
 	cookieFrom := func(mutate func(*http.Request)) *http.Cookie {
@@ -163,7 +163,7 @@ func TestTerminalFontPreference(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router := NewRouter(db, logger, t.TempDir())
+	router := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	cookie := loginAs(t, router, "fontpref@example.com", "password123")
 
 	get := func() userResponse {

@@ -185,7 +185,7 @@
               <li class="nav-item"><a class="nav-link active" href="#" data-app-tab="overview"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="terminal"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="files"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
-              <li class="nav-item"><a class="nav-link disabled" aria-disabled="true" title="Available in a later update"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
+              <li class="nav-item"><a class="nav-link" href="#" data-app-tab="databases"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
               <li class="nav-item"><a class="nav-link" href="#" data-app-tab="services"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
             </ul>
 
@@ -229,6 +229,83 @@
                 <div class="card-body text-secondary"><i class="fa-solid fa-gears me-1" aria-hidden="true"></i>No systemd --user services found on this runtime.</div>
               </div>
               <div id="services-list" class="row row-cards"></div>
+            </div>
+
+            <div id="databases-panel" hidden>
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <div id="databases-summary" class="text-secondary">—</div>
+                <div class="d-flex gap-2">
+                  <button id="databases-refresh-btn" class="icon-btn" aria-label="Refresh database connections" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                  <button id="databases-add-btn" class="icon-btn" aria-label="Add database connection" title="Add connection"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
+                </div>
+              </div>
+              <div id="databases-loading" class="text-secondary">Loading database connections…</div>
+              <div id="databases-error" class="alert alert-danger" hidden></div>
+              <div id="databases-empty" class="card" hidden>
+                <div class="card-body text-secondary"><i class="fa-solid fa-database me-1" aria-hidden="true"></i>No database connections yet. Click the + button to add one.</div>
+              </div>
+
+              <div id="database-form" class="card mb-3" hidden>
+                <div class="card-body">
+                  <h3 id="database-form-title" class="card-title">Add connection</h3>
+                  <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Name</label>
+                      <input id="db-name" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-6">
+                      <label class="form-label">Engine</label>
+                      <select id="db-engine" class="form-select">
+                        <option value="postgresql">PostgreSQL</option>
+                        <option value="mysql">MySQL / MariaDB</option>
+                        <option value="mssql">Microsoft SQL Server</option>
+                        <option value="sqlite">SQLite</option>
+                      </select>
+                    </div>
+                    <div class="col-12 col-md-8" id="db-host-group">
+                      <label class="form-label">Host</label>
+                      <input id="db-host" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-4" id="db-port-group">
+                      <label class="form-label">Port</label>
+                      <input id="db-port" type="number" class="form-control" placeholder="default">
+                    </div>
+                    <div class="col-12 col-md-6" id="db-username-group">
+                      <label class="form-label">Username</label>
+                      <input id="db-username" type="text" class="form-control" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6" id="db-password-group">
+                      <label class="form-label">Password</label>
+                      <input id="db-password" type="password" class="form-control" autocomplete="new-password" placeholder="Leave blank to keep existing">
+                    </div>
+                    <div class="col-12 col-md-8" id="db-database-group">
+                      <label class="form-label">Database</label>
+                      <input id="db-database" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-4" id="db-sslmode-group">
+                      <label class="form-label">SSL mode</label>
+                      <input id="db-sslmode" type="text" class="form-control" placeholder="e.g. disable, require">
+                    </div>
+                    <div class="col-12 col-md-6" id="db-instance-group" hidden>
+                      <label class="form-label">Instance name <span class="text-secondary">(optional)</span></label>
+                      <input id="db-instance" type="text" class="form-control">
+                    </div>
+                    <div class="col-12 col-md-6" id="db-searchpath-group" hidden>
+                      <label class="form-label">Search path <span class="text-secondary">(optional)</span></label>
+                      <input id="db-searchpath" type="text" class="form-control">
+                    </div>
+                    <div class="col-12">
+                      <label class="form-label">Extra params <span class="text-secondary">(optional, key=value&amp;key2=value2)</span></label>
+                      <input id="db-extra" type="text" class="form-control">
+                    </div>
+                  </div>
+                  <div id="database-form-error" class="alert alert-danger mt-3" hidden></div>
+                  <button id="database-form-save-btn" class="btn btn-primary mt-3">Save</button>
+                  <button id="database-form-cancel-btn" class="btn btn-link mt-3">Cancel</button>
+                </div>
+              </div>
+
+              <div id="databases-list" class="row row-cards"></div>
             </div>
 
             <div id="files-panel" hidden>
@@ -898,6 +975,171 @@
 
     $('#services-refresh-btn').on('click', loadServices);
 
+    // --- Databases (docs/PRD.md §6 Database Manager — Slice 7: connections,
+    // --- protected credentials, connection test. Schema/data browsing and
+    // --- the SQL editor land in a later slice.) ---
+
+    var databasesLoaded = false;
+    var databaseConnections = [];
+    var editingConnectionID = null; // null while adding
+
+    var ENGINE_LABELS = { postgresql: 'PostgreSQL', mysql: 'MySQL / MariaDB', mssql: 'Microsoft SQL Server', sqlite: 'SQLite' };
+
+    function applyDatabaseFormEngineVisibility() {
+      var engine = $('#db-engine').val();
+      var sqlite = engine === 'sqlite';
+      $('#db-host-group, #db-port-group, #db-username-group, #db-password-group, #db-sslmode-group').prop('hidden', sqlite);
+      $('#db-database-group label').text(sqlite ? 'File path' : 'Database');
+      $('#db-instance-group').prop('hidden', engine !== 'mssql');
+      $('#db-searchpath-group').prop('hidden', engine !== 'postgresql');
+    }
+
+    $('#db-engine').on('change', applyDatabaseFormEngineVisibility);
+
+    function resetDatabaseForm() {
+      editingConnectionID = null;
+      $('#database-form-title').text('Add connection');
+      $('#db-name, #db-host, #db-port, #db-username, #db-password, #db-database, #db-sslmode, #db-instance, #db-searchpath, #db-extra').val('');
+      $('#db-engine').val('postgresql');
+      applyDatabaseFormEngineVisibility();
+      $('#database-form-error').prop('hidden', true);
+    }
+
+    function openDatabaseForm(conn) {
+      resetDatabaseForm();
+      if (conn) {
+        editingConnectionID = conn.id;
+        $('#database-form-title').text('Edit ' + conn.name);
+        $('#db-name').val(conn.name);
+        $('#db-engine').val(conn.engine);
+        $('#db-host').val(conn.host);
+        $('#db-port').val(conn.port || '');
+        $('#db-username').val(conn.username);
+        $('#db-database').val(conn.database);
+        $('#db-sslmode').val(conn.ssl_mode);
+        $('#db-instance').val(conn.instance_name);
+        $('#db-searchpath').val(conn.search_path);
+        applyDatabaseFormEngineVisibility();
+      }
+      $('#database-form').prop('hidden', false);
+      document.getElementById('database-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    $('#databases-add-btn').on('click', function () { openDatabaseForm(null); });
+    $('#database-form-cancel-btn').on('click', function () { $('#database-form').prop('hidden', true); });
+
+    $('#database-form-save-btn').on('click', function () {
+      $('#database-form-error').prop('hidden', true);
+      var engine = $('#db-engine').val();
+      var body = {
+        name: $('#db-name').val().trim(),
+        engine: engine,
+        host: engine === 'sqlite' ? '' : $('#db-host').val().trim(),
+        port: engine === 'sqlite' ? 0 : (parseInt($('#db-port').val(), 10) || 0),
+        username: engine === 'sqlite' ? '' : $('#db-username').val().trim(),
+        database: $('#db-database').val().trim(),
+        ssl_mode: engine === 'sqlite' ? '' : $('#db-sslmode').val().trim(),
+        instance_name: $('#db-instance').val().trim(),
+        search_path: $('#db-searchpath').val().trim(),
+        extra_params: $('#db-extra').val().trim()
+      };
+      var password = $('#db-password').val();
+
+      var request;
+      if (editingConnectionID) {
+        var patchBody = {
+          name: body.name, engine: body.engine, host: body.host, port: body.port, username: body.username,
+          database: body.database, ssl_mode: body.ssl_mode, instance_name: body.instance_name, search_path: body.search_path
+        };
+        // Blank password on edit means "keep existing" — only send a
+        // secret update when the user actually typed one.
+        if (password) patchBody.secret = { password: password, extra_params: body.extra_params };
+        request = $.ajax({
+          url: '/api/v1/projects/' + projectID + '/databases/' + editingConnectionID,
+          method: 'PATCH', contentType: 'application/json', data: JSON.stringify(patchBody)
+        });
+      } else {
+        body.password = password;
+        request = $.ajax({
+          url: '/api/v1/projects/' + projectID + '/databases',
+          method: 'POST', contentType: 'application/json', data: JSON.stringify(body)
+        });
+      }
+      request.done(function () {
+        $('#database-form').prop('hidden', true);
+        loadDatabaseConnections();
+      }).fail(function (xhr) {
+        var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to save database connection.';
+        $('#database-form-error').text(msg).prop('hidden', false);
+      });
+    });
+
+    function databaseConnectionCard(conn) {
+      var $col = $('<div class="col-12 col-md-6 col-xl-4 mb-3">');
+      var $card = $('<div class="card h-100">').appendTo($col);
+      var $body = $('<div class="card-body">').appendTo($card);
+
+      $('<div class="d-flex justify-content-between align-items-start mb-1">').appendTo($body).append(
+        $('<div class="fw-bold text-truncate" style="max-width: 70%;">').text(conn.name).attr('title', conn.name),
+        $('<span class="badge bg-azure-lt">').text(ENGINE_LABELS[conn.engine] || conn.engine)
+      );
+      var summary = conn.engine === 'sqlite' ? conn.database : (conn.host + (conn.port ? ':' + conn.port : '') + '/' + conn.database);
+      $('<div class="text-secondary small mb-2 text-truncate">').text(summary).appendTo($body);
+
+      var $status = $('<div class="small mb-2">').text('Not tested yet').appendTo($body);
+
+      var $actions = $('<div class="btn-list mt-2">').appendTo($body);
+      function iconBtn(icon, label, extraCls) {
+        return $('<button type="button" class="icon-btn' + (extraCls ? ' ' + extraCls : '') + '" aria-label="' + label + '" title="' + label + '">')
+          .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>').appendTo($actions);
+      }
+      iconBtn('plug', 'Test connection').on('click', function () {
+        $status.text('Testing…').removeClass('text-success text-danger');
+        $.ajax({ url: '/api/v1/projects/' + projectID + '/databases/' + conn.id + '/test', method: 'POST' })
+          .done(function (r) {
+            if (r.ok) $status.text('Connected').addClass('text-success');
+            else $status.text('Failed: ' + (r.error || 'unknown error')).addClass('text-danger');
+          })
+          .fail(function (xhr) {
+            $status.text('Failed: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText)).addClass('text-danger');
+          });
+      });
+      iconBtn('pen', 'Edit').on('click', function () { openDatabaseForm(conn); });
+      iconBtn('trash', 'Delete', 'text-danger').on('click', async function () {
+        if (!(await DS.confirm('Delete the "' + conn.name + '" database connection?'))) return;
+        $.ajax({ url: '/api/v1/projects/' + projectID + '/databases/' + conn.id, method: 'DELETE' })
+          .done(loadDatabaseConnections)
+          .fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to delete connection.'); });
+      });
+
+      return $col;
+    }
+
+    function loadDatabaseConnections() {
+      $('#databases-error').prop('hidden', true);
+      $('#databases-loading').prop('hidden', false);
+      $('#databases-empty').prop('hidden', true);
+      $.get('/api/v1/projects/' + projectID + '/databases')
+        .done(function (list) {
+          databaseConnections = list;
+          $('#databases-loading').prop('hidden', true);
+          $('#databases-summary').text(list.length + ' connection' + (list.length === 1 ? '' : 's'));
+          var $list = $('#databases-list').empty();
+          if (!list.length) {
+            $('#databases-empty').prop('hidden', false);
+            return;
+          }
+          list.forEach(function (conn) { $list.append(databaseConnectionCard(conn)); });
+        })
+        .fail(function (xhr) {
+          $('#databases-loading').prop('hidden', true);
+          var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load database connections.';
+          $('#databases-error').text(msg).prop('hidden', false);
+        });
+    }
+
+    $('#databases-refresh-btn').on('click', loadDatabaseConnections);
+
     // --- Files (docs/PRD.md §5, docs/WEB_UI_DESIGN.md Files,
     // --- docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md File Manager) ---
 
@@ -1564,6 +1806,7 @@
       $('#terminal-panel').prop('hidden', tab !== 'terminal');
       $('#services-panel').prop('hidden', tab !== 'services');
       $('#files-panel').prop('hidden', tab !== 'files');
+      $('#databases-panel').prop('hidden', tab !== 'databases');
       if (tab === 'terminal') {
         if (!sessionsLoaded) {
           sessionsLoaded = true;
@@ -1578,6 +1821,10 @@
       if (tab === 'files' && !filesLoaded) {
         filesLoaded = true;
         loadFiles('.');
+      }
+      if (tab === 'databases' && !databasesLoaded) {
+        databasesLoaded = true;
+        loadDatabaseConnections();
       }
     });
 
