@@ -181,16 +181,10 @@ body {
   max-width: 100%;
 }
 
-/* Folded sidebar (lg+): Tabler sets html[data-bs-sidebar^="folded"]; swap the
-   stacked lockup for the square icon mark instead of squeezing it. */
-.ds-logo-mark {
-  display: none;
-  height: 32px;
-  width: auto;
-}
+/* Folded sidebar (lg+): Tabler sets html[data-bs-sidebar^="folded"]; scale the
+   same stacked lockup down to fit the rail instead of swapping images. */
 @media (min-width: 992px) {
-  html[data-bs-sidebar^="folded"] .ds-logo-full { display: none; }
-  html[data-bs-sidebar^="folded"] .ds-logo-mark { display: inline-block; }
+  html[data-bs-sidebar^="folded"] .ds-logo-full { height: 32px; }
   html[data-bs-sidebar^="folded"] .ds-nav-title { display: none; }
 }
 
