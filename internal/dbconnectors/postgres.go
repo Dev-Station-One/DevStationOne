@@ -154,3 +154,96 @@ func (postgresConnector) Commit(ctx context.Context, db *sql.DB, schema, table s
 func (postgresConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
 	return genericQuery(ctx, db, sqlText, limit)
 }
+
+func (postgresConnector) SupportsUserManagement() bool { return true }
+
+func (postgresConnector) Principals(ctx context.Context, db *sql.DB) ([]Principal, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT rolname, rolcanlogin, rolsuper FROM pg_roles
+		WHERE rolname NOT LIKE 'pg\_%' ESCAPE '\'
+		ORDER BY rolname`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Principal
+	for rows.Next() {
+		var p Principal
+		if err := rows.Scan(&p.Name, &p.CanLogin, &p.Superuser); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// Grants reports principal's table-level privileges only — database-level
+// grants (e.g. CONNECT) are out of scope, matching this app's per-table
+// granularity everywhere else (data browser, GrantPrivilege below).
+func (postgresConnector) Grants(ctx context.Context, db *sql.DB, principal string) ([]Grant, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT table_schema, table_name, privilege_type
+		FROM information_schema.role_table_grants
+		WHERE grantee = $1
+		ORDER BY table_schema, table_name, privilege_type`, principal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Grant
+	for rows.Next() {
+		var g Grant
+		if err := rows.Scan(&g.Schema, &g.Table, &g.Privilege); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+func (postgresConnector) CreatePrincipal(ctx context.Context, db *sql.DB, name, password string, canLogin, superuser bool) error {
+	q := "CREATE ROLE " + pgQuoteIdent(name) + " WITH "
+	if canLogin {
+		q += "LOGIN "
+	} else {
+		q += "NOLOGIN "
+	}
+	if superuser {
+		q += "SUPERUSER "
+	} else {
+		q += "NOSUPERUSER "
+	}
+	q += "PASSWORD " + sqlLiteral(password)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}
+
+func (postgresConnector) DropPrincipal(ctx context.Context, db *sql.DB, name string) error {
+	_, err := db.ExecContext(ctx, "DROP ROLE "+pgQuoteIdent(name))
+	return err
+}
+
+func (postgresConnector) SetPrincipalPassword(ctx context.Context, db *sql.DB, name, password string) error {
+	_, err := db.ExecContext(ctx, "ALTER ROLE "+pgQuoteIdent(name)+" WITH PASSWORD "+sqlLiteral(password))
+	return err
+}
+
+func (postgresConnector) GrantPrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	priv, ok := normalizePrivilege(privilege)
+	if !ok {
+		return fmt.Errorf("unsupported privilege %q", privilege)
+	}
+	q := "GRANT " + priv + " ON " + pgQuoteIdent(schema) + "." + pgQuoteIdent(table) + " TO " + pgQuoteIdent(principal)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}
+
+func (postgresConnector) RevokePrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	priv, ok := normalizePrivilege(privilege)
+	if !ok {
+		return fmt.Errorf("unsupported privilege %q", privilege)
+	}
+	q := "REVOKE " + priv + " ON " + pgQuoteIdent(schema) + "." + pgQuoteIdent(table) + " FROM " + pgQuoteIdent(principal)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}

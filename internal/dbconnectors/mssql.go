@@ -191,3 +191,121 @@ func (mssqlConnector) Commit(ctx context.Context, db *sql.DB, schema, table stri
 func (mssqlConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
 	return genericQuery(ctx, db, sqlText, limit)
 }
+
+func (mssqlConnector) SupportsUserManagement() bool { return true }
+
+// Principals lists database users mapped to a server login, and database
+// roles — excluding dbo/guest and every built-in fixed role (db_datareader
+// etc., docs/IMPLEMENTATION_PLAN.md ADR-020 style: only what a caller could
+// meaningfully manage). CanLogin is best-effort: NULL (no matching server
+// login — e.g. a contained-database user) reads as false, mirroring how
+// Triggers' event/timing are best-effort elsewhere in this package.
+func (mssqlConnector) Principals(ctx context.Context, db *sql.DB) ([]Principal, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT dp.name,
+		       CASE WHEN sp.is_disabled = 0 THEN 1 ELSE 0 END,
+		       CASE WHEN IS_SRVROLEMEMBER('sysadmin', dp.name) = 1 THEN 1 ELSE 0 END
+		FROM sys.database_principals dp
+		LEFT JOIN sys.server_principals sp ON sp.name = dp.name
+		WHERE dp.type IN ('S', 'U')
+		  AND dp.is_fixed_role = 0
+		  AND dp.name NOT IN ('dbo', 'guest', 'INFORMATION_SCHEMA', 'sys')
+		ORDER BY dp.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Principal
+	for rows.Next() {
+		var p Principal
+		if err := rows.Scan(&p.Name, &p.CanLogin, &p.Superuser); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+func (mssqlConnector) Grants(ctx context.Context, db *sql.DB, principal string) ([]Grant, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT p.permission_name, ISNULL(s.name, ''), ISNULL(o.name, '')
+		FROM sys.database_permissions p
+		LEFT JOIN sys.objects o ON o.object_id = p.major_id
+		LEFT JOIN sys.schemas s ON s.schema_id = o.schema_id
+		WHERE p.grantee_principal_id = DATABASE_PRINCIPAL_ID(@p1) AND p.state = 'G'
+		ORDER BY p.permission_name, s.name, o.name`, principal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Grant
+	for rows.Next() {
+		var g Grant
+		if err := rows.Scan(&g.Privilege, &g.Schema, &g.Table); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// CreatePrincipal creates a paired server login + database user — MSSQL has
+// no single statement for "a user who can log in", and CloudBeaver-style
+// database user management conventionally manages the pair together rather
+// than exposing bare server logins.
+func (mssqlConnector) CreatePrincipal(ctx context.Context, db *sql.DB, name, password string, canLogin, superuser bool) error {
+	if _, err := db.ExecContext(ctx, "CREATE LOGIN "+mssqlQuoteIdent(name)+" WITH PASSWORD = "+sqlLiteral(password)); err != nil {
+		return fmt.Errorf("create login: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, "CREATE USER "+mssqlQuoteIdent(name)+" FOR LOGIN "+mssqlQuoteIdent(name)); err != nil {
+		return fmt.Errorf("create user: %w", err)
+	}
+	if !canLogin {
+		if _, err := db.ExecContext(ctx, "ALTER LOGIN "+mssqlQuoteIdent(name)+" DISABLE"); err != nil {
+			return fmt.Errorf("disable login: %w", err)
+		}
+	}
+	if superuser {
+		if _, err := db.ExecContext(ctx, "ALTER SERVER ROLE sysadmin ADD MEMBER "+mssqlQuoteIdent(name)); err != nil {
+			return fmt.Errorf("grant sysadmin: %w", err)
+		}
+	}
+	return nil
+}
+
+func (mssqlConnector) DropPrincipal(ctx context.Context, db *sql.DB, name string) error {
+	// The database user must go first — MSSQL refuses to drop a login that
+	// still owns a mapped user in the current database.
+	if _, err := db.ExecContext(ctx, "DROP USER "+mssqlQuoteIdent(name)); err != nil {
+		return fmt.Errorf("drop user: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, "DROP LOGIN "+mssqlQuoteIdent(name)); err != nil {
+		return fmt.Errorf("drop login: %w", err)
+	}
+	return nil
+}
+
+func (mssqlConnector) SetPrincipalPassword(ctx context.Context, db *sql.DB, name, password string) error {
+	_, err := db.ExecContext(ctx, "ALTER LOGIN "+mssqlQuoteIdent(name)+" WITH PASSWORD = "+sqlLiteral(password))
+	return err
+}
+
+func (mssqlConnector) GrantPrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	priv, ok := normalizePrivilege(privilege)
+	if !ok {
+		return fmt.Errorf("unsupported privilege %q", privilege)
+	}
+	q := "GRANT " + priv + " ON " + mssqlQuoteIdent(schema) + "." + mssqlQuoteIdent(table) + " TO " + mssqlQuoteIdent(principal)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}
+
+func (mssqlConnector) RevokePrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	priv, ok := normalizePrivilege(privilege)
+	if !ok {
+		return fmt.Errorf("unsupported privilege %q", privilege)
+	}
+	q := "REVOKE " + priv + " ON " + mssqlQuoteIdent(schema) + "." + mssqlQuoteIdent(table) + " FROM " + mssqlQuoteIdent(principal)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}

@@ -573,6 +573,211 @@ func rowsResponse(r *protocol.DBRowsResult) map[string]any {
 	}
 }
 
+// dbUserManagementSupported rejects a principal/grant request against a
+// sqlite connection before it ever reaches the runtime — sqlite has no
+// server-side concept of users/roles (PRD §6, docs/DECISIONS.md ADR-024).
+func dbUserManagementSupported(w http.ResponseWriter, c dbconnections.Connection) bool {
+	if c.Engine == "sqlite" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sqlite has no server-side users or roles"})
+		return false
+	}
+	return true
+}
+
+func listPrincipalsHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{Action: "principals", ConnectionID: c.ID, Connection: params})
+		if !ok {
+			return
+		}
+		if result.Principals == nil {
+			result.Principals = []protocol.DBPrincipalInfo{}
+		}
+		writeJSON(w, http.StatusOK, result.Principals)
+	}
+}
+
+type createPrincipalRequest struct {
+	Name      string `json:"name"`
+	Password  string `json:"password"`
+	CanLogin  bool   `json:"can_login"`
+	Superuser bool   `json:"superuser"`
+}
+
+func createPrincipalHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		var req createPrincipalRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if strings.TrimSpace(req.Name) == "" || req.Password == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and password are required"})
+			return
+		}
+		_, ok = dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "create_principal", ConnectionID: c.ID, Connection: params,
+			Principal: req.Name, Password: req.Password, CanLogin: req.CanLogin, Superuser: req.Superuser,
+		})
+		if !ok {
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+	}
+}
+
+func deletePrincipalHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		_, ok = dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "drop_principal", ConnectionID: c.ID, Connection: params, Principal: r.PathValue("principal"),
+		})
+		if !ok {
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+type setPrincipalPasswordRequest struct {
+	Password string `json:"password"`
+}
+
+func setPrincipalPasswordHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		var req setPrincipalPasswordRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if req.Password == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "password is required"})
+			return
+		}
+		_, ok = dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "set_principal_password", ConnectionID: c.ID, Connection: params,
+			Principal: r.PathValue("principal"), Password: req.Password,
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+func listGrantsHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "grants", ConnectionID: c.ID, Connection: params, Principal: r.PathValue("principal"),
+		})
+		if !ok {
+			return
+		}
+		if result.Grants == nil {
+			result.Grants = []protocol.DBGrantInfo{}
+		}
+		writeJSON(w, http.StatusOK, result.Grants)
+	}
+}
+
+type grantRequest struct {
+	Privilege string `json:"privilege"`
+	Schema    string `json:"schema"`
+	Table     string `json:"table"`
+}
+
+func grantPrivilegeHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		var req grantRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if strings.TrimSpace(req.Privilege) == "" || strings.TrimSpace(req.Table) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "privilege and table are required"})
+			return
+		}
+		_, ok = dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "grant_privilege", ConnectionID: c.ID, Connection: params,
+			Principal: r.PathValue("principal"), Privilege: req.Privilege, Schema: req.Schema, Table: req.Table,
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+func revokePrivilegeHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		if !dbUserManagementSupported(w, c) {
+			return
+		}
+		var req grantRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if strings.TrimSpace(req.Privilege) == "" || strings.TrimSpace(req.Table) == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "privilege and table are required"})
+			return
+		}
+		_, ok = dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "revoke_privilege", ConnectionID: c.ID, Connection: params,
+			Principal: r.PathValue("principal"), Privilege: req.Privilege, Schema: req.Schema, Table: req.Table,
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
 func toDBConnectionParams(p dbconnections.Params) protocol.DBConnectionParams {
 	return protocol.DBConnectionParams{
 		Engine: p.Engine, Host: p.Host, Port: p.Port, Username: p.Username, Password: p.Password,

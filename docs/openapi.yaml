@@ -2150,6 +2150,344 @@ paths:
           description: The project's runtime is not currently connected
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/principals:
+    get:
+      summary: List a connection's database-level users/logins/roles
+      description: Live RPC. 400 for a sqlite connection (docs/DECISIONS.md ADR-024) — sqlite has no server-side users/roles.
+      tags: [Databases]
+      operationId: listDatabasePrincipals
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Principals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBPrincipalInfo"
+        "400":
+          description: The connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+    post:
+      summary: Create a database-level user/login/role
+      description: Live RPC. can_login/superuser map to each engine's closest native concept — see docs/API.md "User/role/permission management".
+      tags: [Databases]
+      operationId: createDatabasePrincipal
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, password]
+              properties:
+                name:
+                  type: string
+                password:
+                  type: string
+                can_login:
+                  type: boolean
+                superuser:
+                  type: boolean
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: name/password missing, or the connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}:
+    delete:
+      summary: Drop a database-level user/login/role
+      description: Live RPC.
+      tags: [Databases]
+      operationId: deleteDatabasePrincipal
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: principal
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: The connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+    patch:
+      summary: Set a database-level user/login/role's password
+      description: Live RPC.
+      tags: [Databases]
+      operationId: setDatabasePrincipalPassword
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: principal
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Password set
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: password missing, or the connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants:
+    get:
+      summary: List a principal's granted privileges
+      description: Live RPC. Table-level grants only. raw is set instead of the structured fields for an engine (MySQL) that only exposes its own native grant statement text — see docs/DECISIONS.md ADR-024.
+      tags: [Databases]
+      operationId: listDatabaseGrants
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: principal
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Grants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBGrantInfo"
+        "400":
+          description: The connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+    post:
+      summary: Grant a privilege on one table to a principal
+      description: Live RPC. privilege is validated against a fixed whitelist (SELECT, INSERT, UPDATE, DELETE, ALL) by both the Control Server and the runtime — it can't be a bound parameter in GRANT syntax (docs/DECISIONS.md ADR-024).
+      tags: [Databases]
+      operationId: grantDatabasePrivilege
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: principal
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [privilege, table]
+              properties:
+                privilege:
+                  type: string
+                  enum: [SELECT, INSERT, UPDATE, DELETE, ALL]
+                schema:
+                  type: string
+                table:
+                  type: string
+      responses:
+        "200":
+          description: Granted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: privilege/table missing or invalid, or the connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants/revoke:
+    post:
+      summary: Revoke a privilege on one table from a principal
+      description: Live RPC. Same request shape and privilege whitelist as POST .../grants, reversed.
+      tags: [Databases]
+      operationId: revokeDatabasePrivilege
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: principal
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [privilege, table]
+              properties:
+                privilege:
+                  type: string
+                  enum: [SELECT, INSERT, UPDATE, DELETE, ALL]
+                schema:
+                  type: string
+                table:
+                  type: string
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        "400":
+          description: privilege/table missing or invalid, or the connection's engine has no server-side users/roles (sqlite)
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
 components:
   securitySchemes:
     cookieAuth:
@@ -2578,6 +2916,30 @@ components:
           type: object
           description: New column values for insert/update. Unused for delete.
           additionalProperties: {}
+    DBPrincipalInfo:
+      type: object
+      description: One database-level user, login, or role. Not a stored resource — live RPC result, see docs/API.md "User/role/permission management".
+      required: [name, can_login, superuser]
+      properties:
+        name:
+          type: string
+          description: "For MySQL/MariaDB: \"user@host\"."
+        can_login:
+          type: boolean
+        superuser:
+          type: boolean
+    DBGrantInfo:
+      type: object
+      description: One granted privilege. Not a stored resource. raw is set instead of the structured fields for an engine (MySQL) that only exposes its own native grant statement text.
+      properties:
+        privilege:
+          type: string
+        schema:
+          type: string
+        table:
+          type: string
+        raw:
+          type: string
     FileInfo:
       type: object
       description: One filesystem entry inside the Project's working directory. Not a stored resource — see docs/API.md "Files".

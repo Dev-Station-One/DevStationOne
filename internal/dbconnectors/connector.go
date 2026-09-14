@@ -8,6 +8,7 @@ package dbconnectors
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -74,6 +75,30 @@ type Trigger struct {
 	Name   string
 	Event  string
 	Timing string
+}
+
+// ErrUnsupported is returned by every Principals/Grants/CreatePrincipal/
+// DropPrincipal/SetPrincipalPassword/GrantPrivilege/RevokePrivilege method
+// for an engine with no server-side concept of users/roles — SQLite only
+// (PRD §6: "SQLite does not have server-side users/roles; represent that
+// honestly").
+var ErrUnsupported = errors.New("user/role management is not supported for this database engine")
+
+// Principal describes one database-level user, login, or role.
+type Principal struct {
+	Name      string
+	CanLogin  bool
+	Superuser bool
+}
+
+// Grant describes one granted privilege. Raw is set instead of the
+// structured fields for an engine that only exposes its own native grant
+// statement text rather than one row per privilege (MySQL's SHOW GRANTS).
+type Grant struct {
+	Privilege string
+	Schema    string
+	Table     string
+	Raw       string
 }
 
 // RowEdit is one staged insert/update/delete for Commit.
@@ -148,6 +173,52 @@ type Connector interface {
 	// INSERT/UPDATE/DELETE/DDL statement is run via Exec instead and
 	// reports RowsAffected.
 	Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error)
+
+	// SupportsUserManagement reports whether this engine has any
+	// server-side concept of users/roles/permissions at all — false only
+	// for SQLite. The API layer checks this before dispatching any of the
+	// methods below, but every implementation also returns ErrUnsupported
+	// on its own (defense in depth, docs/SECURITY.md).
+	SupportsUserManagement() bool
+
+	// Principals lists the engine's database-level users, logins, or roles.
+	Principals(ctx context.Context, db *sql.DB) ([]Principal, error)
+	// Grants lists principal's currently granted privileges.
+	Grants(ctx context.Context, db *sql.DB, principal string) ([]Grant, error)
+	// CreatePrincipal creates a new user/login/role named name. canLogin/
+	// superuser map to the closest native concept for the engine (see each
+	// implementation). password is a plaintext value the caller must
+	// already trust — never logged (docs/SECURITY.md).
+	CreatePrincipal(ctx context.Context, db *sql.DB, name, password string, canLogin, superuser bool) error
+	DropPrincipal(ctx context.Context, db *sql.DB, name string) error
+	SetPrincipalPassword(ctx context.Context, db *sql.DB, name, password string) error
+	// GrantPrivilege/RevokePrivilege target one table. privilege is
+	// validated against validPrivileges — unlike a row value it can't be a
+	// bound parameter in GRANT/REVOKE syntax, so it's checked against a
+	// fixed whitelist instead, the same trust boundary as an identifier.
+	GrantPrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error
+	RevokePrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error
+}
+
+// validPrivileges whitelists the GRANT/REVOKE privilege keywords accepted
+// across engines.
+var validPrivileges = map[string]bool{
+	"SELECT": true, "INSERT": true, "UPDATE": true, "DELETE": true, "ALL": true,
+}
+
+// normalizePrivilege upper-cases privilege and reports whether it's in
+// validPrivileges.
+func normalizePrivilege(privilege string) (string, bool) {
+	p := strings.ToUpper(strings.TrimSpace(privilege))
+	return p, validPrivileges[p]
+}
+
+// sqlLiteral escapes s as a single-quoted SQL string literal (standard
+// doubling of embedded quotes) for the handful of DDL statements — CREATE
+// ROLE/USER/LOGIN ... PASSWORD, ALTER ... PASSWORD — that don't accept a
+// bound parameter.
+func sqlLiteral(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // SupportedEngines lists every engine name this build can connect to,

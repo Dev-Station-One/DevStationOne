@@ -225,8 +225,9 @@ POST   /api/v1/projects/{projectID}/databases/{connectionID}/test
 Slice 7 scope: connection CRUD, protected credentials, and connection test
 against all four supported engines (PostgreSQL, MySQL/MariaDB, Microsoft SQL
 Server, SQLite). Slice 8 adds schema discovery (schemas/tables/columns/
-indexes/constraints/triggers), documented separately below. Data browsing,
-query execution, and users/roles/permissions are a later slice.
+indexes/constraints/triggers), Slice 9 adds data browsing and the SQL
+editor, and Slice 10 adds user/role/permission management — all documented
+separately below.
 
 A connection is a stored `database_connections` row scoped to a Project
 (`project_id`), authorized the same way as everything else under
@@ -371,6 +372,74 @@ rows_affected`) or Query (reporting `columns`/`rows`, capped at `limit`
 the same way as `GET .../rows`). A misclassified statement just produces
 an error from the wrong call — not a security issue, since both paths run
 the identical trusted-arbitrary-SQL text either way.
+
+The canonical request/response shapes are `docs/openapi.yaml` (tag
+`Databases`).
+
+### User/role/permission management (Slice 10)
+
+```text
+GET    /api/v1/projects/{projectID}/databases/{connectionID}/principals
+POST   /api/v1/projects/{projectID}/databases/{connectionID}/principals
+DELETE /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}
+PATCH  /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}
+GET    /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants
+POST   /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants
+POST   /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants/revoke
+```
+
+All seven are live RPCs, same authorization and offline/timeout status
+codes as the rest of this section, with one addition: every endpoint here
+returns `400` for a `sqlite` connection before ever reaching the runtime —
+SQLite has no server-side concept of users, roles, or grants (PRD §6: "SQLite
+does not have server-side users/roles; represent that honestly"), so the UI
+hides the Users tab for a SQLite connection and there is nothing for the
+runtime to be asked about.
+
+A `principal` is a database-level user, login, or role — `{"name",
+"can_login", "superuser"}`. For MySQL/MariaDB, `name` is `"user@host"`
+(MySQL keys an account by the pair; a bare name on create defaults `host` to
+`"%"`, any host). `can_login`/`superuser` map to each engine's closest native
+concept: Postgres `LOGIN`/`NOLOGIN` and `SUPERUSER`/`NOSUPERUSER` roles
+directly; MySQL has no `NOLOGIN` equivalent so `can_login` is always
+reported `true`, and `superuser` means `GRANT ALL PRIVILEGES ON *.* ...
+WITH GRANT OPTION`; MSSQL creates a paired server login + database user
+(`CREATE LOGIN` + `CREATE USER ... FOR LOGIN`), `can_login: false` disables
+the login (`ALTER LOGIN ... DISABLE`), and `superuser` adds the login to the
+`sysadmin` server role.
+
+`GET .../principals` → `[{"name", "can_login", "superuser"}, ...]`.
+
+`POST .../principals` creates one: `{"name", "password", "can_login",
+"superuser"}`. `201` on success.
+
+`DELETE .../principals/{principal}` drops it. `204` on success.
+
+`PATCH .../principals/{principal}` sets a new password: `{"password"}`.
+Response `{"ok": true}`.
+
+`GET .../principals/{principal}/grants` → `[{"privilege", "schema",
+"table"}, ...]` for an engine with a structured per-privilege view
+(PostgreSQL, MSSQL), or `[{"raw": "GRANT ... "}, ...]` for MySQL, whose only
+catalog-agnostic way to list an account's grants is its own `SHOW GRANTS`
+statement text — the UI renders `raw` as-is and doesn't offer a `Revoke`
+button next to it (there's no single structured privilege to revoke). Only
+table-level grants are covered — database/server-level grants (Postgres
+`CONNECT`, MSSQL server roles, etc.) are out of scope, matching this app's
+per-table granularity everywhere else (the data browser, `POST .../grants`
+below).
+
+`POST .../principals/{principal}/grants` grants one privilege on one table:
+`{"privilege", "schema", "table"}`. `privilege` is validated against a fixed
+whitelist (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `ALL`) independently by
+both the Control Server request-shape check and the runtime connector
+(`docs/DECISIONS.md` ADR-024) — unlike a row value, a privilege keyword
+can't be a bound parameter in `GRANT`/`REVOKE` syntax, so it's checked
+against a fixed set instead, the same trust boundary as a quoted
+identifier. Response `{"ok": true}`.
+
+`POST .../principals/{principal}/grants/revoke` takes the same body and
+reverses it.
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag
 `Databases`).

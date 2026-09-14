@@ -139,6 +139,122 @@ func (mysqlConnector) Query(ctx context.Context, db *sql.DB, sqlText string, lim
 	return genericQuery(ctx, db, sqlText, limit)
 }
 
+func (mysqlConnector) SupportsUserManagement() bool { return true }
+
+// mysqlPrincipal/mysqlSplitPrincipal round-trip a MySQL user's compound
+// identity — MySQL keys an account by (user, host), unlike Postgres/MSSQL's
+// single name — through Principal.Name as "user@host". A bare name (no "@")
+// splits to host "%" (any host), matching CreatePrincipal's own default.
+func mysqlPrincipal(user, host string) string { return user + "@" + host }
+
+func mysqlSplitPrincipal(name string) (user, host string) {
+	if i := strings.LastIndex(name, "@"); i >= 0 {
+		return name[:i], name[i+1:]
+	}
+	return name, "%"
+}
+
+// mysqlUserHostLiteral renders 'user'@'host' — the account-reference syntax
+// CREATE/ALTER/DROP USER and GRANT/REVOKE all take in place of a plain
+// identifier.
+func mysqlUserHostLiteral(user, host string) string {
+	return sqlLiteral(user) + "@" + sqlLiteral(host)
+}
+
+// Principals lists MySQL accounts, excluding MySQL's own built-in system
+// accounts. CanLogin is always true — MySQL has no NOLOGIN concept the way
+// Postgres roles do (ACCOUNT LOCK exists on newer versions but isn't
+// universal across the MySQL/MariaDB versions this app targets).
+func (mysqlConnector) Principals(ctx context.Context, db *sql.DB) ([]Principal, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT User, Host, Super_priv = 'Y' FROM mysql.user
+		WHERE User NOT IN ('', 'root', 'mysql.sys', 'mysql.session', 'mysql.infoschema')
+		ORDER BY User, Host`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Principal
+	for rows.Next() {
+		var user, host string
+		var super bool
+		if err := rows.Scan(&user, &host, &super); err != nil {
+			return nil, err
+		}
+		out = append(out, Principal{Name: mysqlPrincipal(user, host), CanLogin: true, Superuser: super})
+	}
+	return out, rows.Err()
+}
+
+// Grants returns principal's own SHOW GRANTS output verbatim, one statement
+// per row (Raw) — MySQL has no single information_schema view listing every
+// grant type (table/database/global) the way Postgres does, and SHOW GRANTS
+// is the standard way every MySQL client surfaces this.
+func (mysqlConnector) Grants(ctx context.Context, db *sql.DB, principal string) ([]Grant, error) {
+	user, host := mysqlSplitPrincipal(principal)
+	rows, err := db.QueryContext(ctx, "SHOW GRANTS FOR "+mysqlUserHostLiteral(user, host))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Grant
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		out = append(out, Grant{Raw: raw})
+	}
+	return out, rows.Err()
+}
+
+func (mysqlConnector) CreatePrincipal(ctx context.Context, db *sql.DB, name, password string, canLogin, superuser bool) error {
+	user, host := mysqlSplitPrincipal(name)
+	if _, err := db.ExecContext(ctx, "CREATE USER "+mysqlUserHostLiteral(user, host)+" IDENTIFIED BY "+sqlLiteral(password)); err != nil {
+		return err
+	}
+	if superuser {
+		if _, err := db.ExecContext(ctx, "GRANT ALL PRIVILEGES ON *.* TO "+mysqlUserHostLiteral(user, host)+" WITH GRANT OPTION"); err != nil {
+			return fmt.Errorf("grant superuser privileges: %w", err)
+		}
+	}
+	return nil
+}
+
+func (mysqlConnector) DropPrincipal(ctx context.Context, db *sql.DB, name string) error {
+	user, host := mysqlSplitPrincipal(name)
+	_, err := db.ExecContext(ctx, "DROP USER "+mysqlUserHostLiteral(user, host))
+	return err
+}
+
+func (mysqlConnector) SetPrincipalPassword(ctx context.Context, db *sql.DB, name, password string) error {
+	user, host := mysqlSplitPrincipal(name)
+	_, err := db.ExecContext(ctx, "ALTER USER "+mysqlUserHostLiteral(user, host)+" IDENTIFIED BY "+sqlLiteral(password))
+	return err
+}
+
+func (mysqlConnector) GrantPrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	priv, ok := normalizePrivilege(privilege)
+	if !ok {
+		return fmt.Errorf("unsupported privilege %q", privilege)
+	}
+	user, host := mysqlSplitPrincipal(principal)
+	q := "GRANT " + priv + " ON " + mysqlQuoteIdent(schema) + "." + mysqlQuoteIdent(table) + " TO " + mysqlUserHostLiteral(user, host)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}
+
+func (mysqlConnector) RevokePrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	priv, ok := normalizePrivilege(privilege)
+	if !ok {
+		return fmt.Errorf("unsupported privilege %q", privilege)
+	}
+	user, host := mysqlSplitPrincipal(principal)
+	q := "REVOKE " + priv + " ON " + mysqlQuoteIdent(schema) + "." + mysqlQuoteIdent(table) + " FROM " + mysqlUserHostLiteral(user, host)
+	_, err := db.ExecContext(ctx, q)
+	return err
+}
+
 // mysqlExtraParams parses a "key=value&key2=value2" free-form string into
 // single-valued params, matching mysql.Config.Params' shape.
 func mysqlExtraParams(extra string) (map[string]string, error) {

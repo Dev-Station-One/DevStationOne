@@ -319,9 +319,11 @@ type DBConnectionParams struct {
 type DBCommandPayload struct {
 	// Action is one of: test, invalidate, schemas, tables, columns,
 	// indexes, constraints, triggers (Slice 7/8), rows, commit, query
-	// (Slice 9). "invalidate" is a fire-and-forget notice (sent via
-	// SendEnvelope, no reply) telling the runtime to drop its cached
-	// connection pool for ConnectionID — see ADR-021/022.
+	// (Slice 9), principals, grants, create_principal, drop_principal,
+	// set_principal_password, grant_privilege, revoke_privilege (Slice 10).
+	// "invalidate" is a fire-and-forget notice (sent via SendEnvelope, no
+	// reply) telling the runtime to drop its cached connection pool for
+	// ConnectionID — see ADR-021/022.
 	Action string `json:"action"`
 	// ConnectionID keys the runtime's connection pool cache — a stored
 	// connection is opened at most once per runtime process and reused
@@ -329,8 +331,10 @@ type DBCommandPayload struct {
 	ConnectionID string             `json:"connection_id"`
 	Connection   DBConnectionParams `json:"connection"`
 	// Schema/Table scope a schemas/tables/columns/indexes/constraints/
-	// triggers/rows/commit request. Schema is "" for an engine with no
-	// schema concept (SQLite) or a single implicit one (MySQL/MariaDB).
+	// triggers/rows/commit request, and also a grant_privilege/
+	// revoke_privilege request's target table. Schema is "" for an engine
+	// with no schema concept (SQLite) or a single implicit one
+	// (MySQL/MariaDB).
 	Schema string `json:"schema,omitempty"`
 	Table  string `json:"table,omitempty"`
 	// Limit/Offset/Sort/SortDesc/Filter scope a "rows" request. Filter is a
@@ -345,6 +349,19 @@ type DBCommandPayload struct {
 	Edits []DBRowEdit `json:"edits,omitempty"`
 	// SQL carries a "query" request's arbitrary SQL Editor text.
 	SQL string `json:"sql,omitempty"`
+	// Principal names the target user/login/role for a grants/
+	// create_principal/drop_principal/set_principal_password/
+	// grant_privilege/revoke_privilege request (Slice 10).
+	Principal string `json:"principal,omitempty"`
+	// Password carries a create_principal/set_principal_password request's
+	// new plaintext password — never logged (docs/SECURITY.md).
+	Password string `json:"password,omitempty"`
+	// CanLogin/Superuser scope a create_principal request.
+	CanLogin  bool `json:"can_login,omitempty"`
+	Superuser bool `json:"superuser,omitempty"`
+	// Privilege scopes a grant_privilege/revoke_privilege request (Schema/
+	// Table above name the target).
+	Privilege string `json:"privilege,omitempty"`
 }
 
 // DBRowEdit is one staged insert/update/delete for a "commit" request.
@@ -418,6 +435,23 @@ type DBRowsResult struct {
 	RowsAffected int64 `json:"rows_affected,omitempty"`
 }
 
+// DBPrincipalInfo describes one database-level user, login, or role.
+type DBPrincipalInfo struct {
+	Name      string `json:"name"`
+	CanLogin  bool   `json:"can_login"`
+	Superuser bool   `json:"superuser"`
+}
+
+// DBGrantInfo describes one granted privilege. Raw is set instead of the
+// structured fields for an engine that only exposes its own native grant
+// statement text rather than one row per privilege (MySQL's SHOW GRANTS).
+type DBGrantInfo struct {
+	Privilege string `json:"privilege,omitempty"`
+	Schema    string `json:"schema,omitempty"`
+	Table     string `json:"table,omitempty"`
+	Raw       string `json:"raw,omitempty"`
+}
+
 // DBResultPayload is the payload of a MessageDBResult envelope. Exactly one
 // of the non-Ok fields is populated, matching the request's Action.
 type DBResultPayload struct {
@@ -429,6 +463,8 @@ type DBResultPayload struct {
 	Constraints []DBConstraintInfo `json:"constraints,omitempty"`
 	Triggers    []DBTriggerInfo    `json:"triggers,omitempty"`
 	Rows        *DBRowsResult      `json:"rows,omitempty"`
+	Principals  []DBPrincipalInfo  `json:"principals,omitempty"`
+	Grants      []DBGrantInfo      `json:"grants,omitempty"`
 }
 
 // DBErrorPayload is the payload of a MessageDBError envelope. Same shape as

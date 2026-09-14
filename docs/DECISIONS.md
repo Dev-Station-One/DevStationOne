@@ -551,3 +551,67 @@ Caught by a real browser smoke test inserting a new row with a numeric
 column, not by the Go-level `rows_test.go` suite, since that suite only
 exercises `internal/dbconnectors` directly and the coercion bug lived
 entirely in `project.html`'s JavaScript.
+
+## ADR-024 — Slice 10: a unified Principal/Grant model over three incompatible native ones, privilege whitelisting, and SQLite left out on purpose
+
+Date: 2026-09-14
+
+**Decision.** `internal/dbconnectors.Connector` gains
+`SupportsUserManagement`, `Principals`, `Grants`, `CreatePrincipal`,
+`DropPrincipal`, `SetPrincipalPassword`, `GrantPrivilege`,
+`RevokePrivilege`, backed by two new shared types: `Principal{Name,
+CanLogin, Superuser}` and `Grant{Privilege, Schema, Table, Raw}`. Every
+engine maps its own account model onto this shape rather than the API
+exposing three different shapes:
+
+- **PostgreSQL** — native `ROLE`s. `CanLogin`/`Superuser` are literally
+  `LOGIN`/`NOLOGIN` and `SUPERUSER`/`NOSUPERUSER`. `Grants` reads
+  `information_schema.role_table_grants`, giving structured
+  `{Privilege, Schema, Table}` rows.
+- **MySQL/MariaDB** — accounts are keyed by `(user, host)`, not a single
+  name. `Principal.Name` round-trips this as `"user@host"`
+  (`mysqlPrincipal`/`mysqlSplitPrincipal`), defaulting `host` to `"%"` on
+  create. There's no `NOLOGIN` equivalent, so `CanLogin` is always `true`.
+  `Grants` has no single-privilege-per-row catalog view covering every
+  grant type the way Postgres does, so it returns `SHOW GRANTS`' own
+  statement text verbatim in `Grant.Raw` instead of trying to parse it —
+  the UI renders `Raw` as-is and skips offering a `Revoke` button next to
+  it, since there's no single structured privilege to revoke.
+- **MSSQL** — no single statement creates "a user who can log in"; a
+  server login and a database user are two separate objects.
+  `CreatePrincipal` creates both as a pair (`CREATE LOGIN` +
+  `CREATE USER ... FOR LOGIN`), `CanLogin: false` disables the login
+  afterward (`ALTER LOGIN ... DISABLE`) rather than being expressible
+  inline, and `Superuser` adds the login to the `sysadmin` server role.
+  `DropPrincipal` drops the user before the login — MSSQL refuses to drop a
+  login that still owns a mapped user in the current database.
+- **SQLite** — every method returns the new `dbconnectors.ErrUnsupported`
+  sentinel and `SupportsUserManagement()` is `false`. A SQLite "database" is
+  a file; access control is OS file permissions the runtime's filesystem
+  containment already enforces, not a server-side concept this app can
+  honestly represent (PRD §6 says as much explicitly). The API layer
+  (`dbUserManagementSupported`) rejects a sqlite connection's principal/
+  grant request with `400` before it ever reaches the runtime, and the UI
+  hides the Users tab for a sqlite connection — `ErrUnsupported` is the
+  defense-in-depth backstop, not the primary path.
+
+**Why privilege is whitelisted instead of bound as a parameter.**
+`GRANT`/`REVOKE ... TO/FROM` syntax takes a privilege keyword, not an
+expression — there is no placeholder position for it the way `Commit`
+(Slice 9) binds row values. `normalizePrivilege` upper-cases and checks
+against a fixed set (`SELECT`, `INSERT`, `UPDATE`, `DELETE`, `ALL`),
+independently in both the API layer's request validation and each
+connector's `GrantPrivilege`/`RevokePrivilege` (defense in depth,
+`docs/SECURITY.md`) — the same trust boundary this package already applies
+to identifiers (`quoteIdent`), not the raw-SQL trust model `filter`/`query`
+get (ADR-021/023). A user typing "grant SELECT" is not the same act as a
+user typing SQL into the editor, so it doesn't inherit that posture.
+
+**Why `CREATE ROLE ... PASSWORD` / `ALTER USER ... IDENTIFIED BY` /
+`CREATE LOGIN ... WITH PASSWORD` take an escaped literal, not a bound
+parameter.** None of the three engines' account-DDL statements accept a
+placeholder in the password position — same fundamental limitation as the
+privilege keyword above, just for a different reason (DDL, not a keyword
+enum). `sqlLiteral` escapes by doubling embedded `'`, the standard SQL
+string-literal rule, shared by all three engines' implementations rather
+than three near-identical copies.

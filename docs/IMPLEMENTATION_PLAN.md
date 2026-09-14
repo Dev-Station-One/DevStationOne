@@ -255,6 +255,34 @@ Deliver database-specific management for:
 
 SQLite must clearly report that server-style users/roles are not supported.
 
+**Status: Complete.** `Connector.Principals`/`Grants`/`CreatePrincipal`/
+`DropPrincipal`/`SetPrincipalPassword`/`GrantPrivilege`/`RevokePrivilege`
+across PostgreSQL (native roles), MySQL/MariaDB (`'user'@'host'` accounts),
+and MSSQL (paired server login + database user); SQLite returns
+`dbconnectors.ErrUnsupported` and reports `SupportsUserManagement() ==
+false` (`internal/dbconnectors`, ADR-024). Seven new API endpoints under
+`.../databases/{connectionID}/principals`, all rejecting a sqlite
+connection with `400` before dispatch. A Users panel in the connection
+browser (create/delete/set-password, expandable per-user grants with
+grant/revoke) — hidden entirely for a sqlite connection. A privilege
+(`SELECT`/`INSERT`/`UPDATE`/`DELETE`/`ALL`) is validated against a fixed
+whitelist independently by the Control Server and the runtime, since unlike
+a row value it can't be a bound parameter in `GRANT`/`REVOKE` syntax; a
+password in the handful of DDL statements that don't accept one either is
+escaped as a SQL string literal instead.
+
+Verified against all three real engines
+(`internal/dbconnectors/principals_test.go`: create → list → set password →
+grant → list grants → reject an invalid privilege → revoke → drop → list
+again) — MySQL's own `devstation` test user only has privileges scoped to
+its own database, so that suite connects as `root` (the official mysql
+image's `MYSQL_ROOT_PASSWORD` account) specifically for principal
+management, unlike every other `dbconnectors` test. SQLite's
+`ErrUnsupported`/`SupportsUserManagement()` are covered directly. A real
+browser smoke test (create a user, expand it, grant `SELECT` on a real
+table, confirm it renders, revoke it, delete the user with the confirm
+dialog) against the dev Postgres connection — passed.
+
 ## Slice 11 — Activity/audit
 
 Deliver:

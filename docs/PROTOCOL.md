@@ -246,29 +246,38 @@ If the 24 MB cap proves too small for real projects, the
 upgrade path is chunked streaming messages, not raising the envelope
 further.
 
-## Implementation (Slice 7/8/9): database commands
+## Implementation (Slice 7/8/9/10): database commands
 
-Database connection test, schema discovery, data browsing, and the SQL
-editor all reuse the Slice 5 correlated request/response machinery
-unchanged — one message type in each direction, `Envelope.ID` correlated:
+Database connection test, schema discovery, data browsing, the SQL editor,
+and user/role/permission management all reuse the Slice 5 correlated
+request/response machinery unchanged — one message type in each direction,
+`Envelope.ID` correlated:
 
 ```text
-db.command   server -> runtime   {action, connection_id, connection, schema, table, limit, offset, sort, sort_desc, filter, edits, sql}
-db.result    runtime -> server   {ok} | {schemas} | {tables} | {columns} | {indexes} | {constraints} | {triggers} | {rows}
+db.command   server -> runtime   {action, connection_id, connection, schema, table, limit, offset, sort, sort_desc, filter, edits, sql, principal, password, can_login, superuser, privilege}
+db.result    runtime -> server   {ok} | {schemas} | {tables} | {columns} | {indexes} | {constraints} | {triggers} | {rows} | {principals} | {grants}
 db.error     runtime -> server   {error}
 ```
 
 `action` is one of `test`, `invalidate`, `schemas`, `tables`, `columns`,
-`indexes`, `constraints`, `triggers`, `rows`, `commit`, `query`.
+`indexes`, `constraints`, `triggers`, `rows`, `commit`, `query`,
+`principals`, `grants`, `create_principal`, `drop_principal`,
+`set_principal_password`, `grant_privilege`, `revoke_privilege`.
 `connection` is a `DBConnectionParams`: engine, host, port, username,
 password, database, ssl_mode, instance_name, search_path, extra_params —
 built server-side from a decrypted `database_connections` row
 (`internal/dbconnections`), never taken from a client request.
 `connection_id` identifies the stored connection for the runtime's pool
 cache (below) — it is not itself a credential. `schema`/`table` scope every
-per-table action. `limit`/`offset`/`sort`/`sort_desc`/`filter` scope
-`rows`; `edits` (a `[]DBRowEdit{op, original, values}`) scopes `commit`;
-`sql` scopes `query`.
+per-table action, and also `grant_privilege`/`revoke_privilege`'s target
+table. `limit`/`offset`/`sort`/`sort_desc`/`filter` scope `rows`; `edits`
+(a `[]DBRowEdit{op, original, values}`) scopes `commit`; `sql` scopes
+`query`. `principal` names the target user/login/role for `grants`/
+`create_principal`/`drop_principal`/`set_principal_password`/
+`grant_privilege`/`revoke_privilege`; `password` carries a new plaintext
+password for `create_principal`/`set_principal_password` (never logged,
+`docs/SECURITY.md`); `can_login`/`superuser` scope `create_principal`;
+`privilege` scopes `grant_privilege`/`revoke_privilege`.
 
 `invalidate` is the one exception to the request/response pattern: it's
 sent fire-and-forget via `SendEnvelope` (no `Envelope.ID`, no reply) rather
@@ -311,6 +320,18 @@ it to `Exec` or `Query`. All three share one generic row-scanning helper
 driver returns most column types as `[]byte` even when scanned into
 `any`); genuinely binary data stays `[]byte`, which `encoding/json`
 base64-encodes.
+
+For `principals`/`grants`/`create_principal`/`drop_principal`/
+`set_principal_password`/`grant_privilege`/`revoke_privilege`,
+`internal/dbconnectors` dispatches to each engine's own
+`Principals`/`Grants`/`CreatePrincipal`/`DropPrincipal`/
+`SetPrincipalPassword`/`GrantPrivilege`/`RevokePrivilege` — PostgreSQL native
+`ROLE`s, MySQL/MariaDB `'user'@'host'` accounts, MSSQL paired server
+login + database user, and SQLite returning `dbconnectors.ErrUnsupported`
+for all seven (`SupportsUserManagement() == false`) — see `docs/API.md`
+"User/role/permission management" and `docs/DECISIONS.md` ADR-024 for the
+per-engine mapping and why a `GRANT`/`REVOKE` privilege keyword is validated
+against a fixed whitelist rather than bound as a parameter.
 
 **Connection pool cache.** `internal/agent/db_manager.go` keeps at most one
 `*sql.DB` per `connection_id` (`dbManager.pools`), opened lazily on first

@@ -278,3 +278,41 @@ func (sqliteConnector) Commit(ctx context.Context, db *sql.DB, schema, table str
 func (sqliteConnector) Query(ctx context.Context, db *sql.DB, sqlText string, limit int) (RowsResult, error) {
 	return genericQuery(ctx, db, sqlText, limit)
 }
+
+// SQLite has no server-side concept of users, roles, or grants — a SQLite
+// "database" is just a file, and access control is whatever OS file
+// permissions the runtime's filesystem containment already enforces (PRD
+// §6: "SQLite does not have server-side users/roles; represent that
+// honestly"). Every method here returns ErrUnsupported so the API layer's
+// existing error-mapping path — same one a genuinely offline runtime or bad
+// credential goes through — surfaces that honestly instead of pretending an
+// empty list means "no users".
+func (sqliteConnector) SupportsUserManagement() bool { return false }
+
+func (sqliteConnector) Principals(ctx context.Context, db *sql.DB) ([]Principal, error) {
+	return nil, ErrUnsupported
+}
+
+func (sqliteConnector) Grants(ctx context.Context, db *sql.DB, principal string) ([]Grant, error) {
+	return nil, ErrUnsupported
+}
+
+func (sqliteConnector) CreatePrincipal(ctx context.Context, db *sql.DB, name, password string, canLogin, superuser bool) error {
+	return ErrUnsupported
+}
+
+func (sqliteConnector) DropPrincipal(ctx context.Context, db *sql.DB, name string) error {
+	return ErrUnsupported
+}
+
+func (sqliteConnector) SetPrincipalPassword(ctx context.Context, db *sql.DB, name, password string) error {
+	return ErrUnsupported
+}
+
+func (sqliteConnector) GrantPrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	return ErrUnsupported
+}
+
+func (sqliteConnector) RevokePrivilege(ctx context.Context, db *sql.DB, principal, privilege, schema, table string) error {
+	return ErrUnsupported
+}

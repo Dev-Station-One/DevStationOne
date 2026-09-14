@@ -231,6 +231,50 @@ func (m *dbManager) execute(ctx context.Context, cmd protocol.DBCommandPayload) 
 		}
 		return protocol.DBResultPayload{Rows: toProtocolRowsResult(res)}, nil
 
+	case "principals":
+		list, err := connector.Principals(ctx, db)
+		if err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Principals: toProtocolPrincipals(list)}, nil
+
+	case "grants":
+		list, err := connector.Grants(ctx, db, cmd.Principal)
+		if err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Grants: toProtocolGrants(list)}, nil
+
+	case "create_principal":
+		if err := connector.CreatePrincipal(ctx, db, cmd.Principal, cmd.Password, cmd.CanLogin, cmd.Superuser); err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Ok: true}, nil
+
+	case "drop_principal":
+		if err := connector.DropPrincipal(ctx, db, cmd.Principal); err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Ok: true}, nil
+
+	case "set_principal_password":
+		if err := connector.SetPrincipalPassword(ctx, db, cmd.Principal, cmd.Password); err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Ok: true}, nil
+
+	case "grant_privilege":
+		if err := connector.GrantPrivilege(ctx, db, cmd.Principal, cmd.Privilege, cmd.Schema, cmd.Table); err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Ok: true}, nil
+
+	case "revoke_privilege":
+		if err := connector.RevokePrivilege(ctx, db, cmd.Principal, cmd.Privilege, cmd.Schema, cmd.Table); err != nil {
+			return protocol.DBResultPayload{}, err
+		}
+		return protocol.DBResultPayload{Ok: true}, nil
+
 	default:
 		return protocol.DBResultPayload{}, fmt.Errorf("unknown db action %q", cmd.Action)
 	}
@@ -321,6 +365,22 @@ func toProtocolTriggers(in []dbconnectors.Trigger) []protocol.DBTriggerInfo {
 	out := make([]protocol.DBTriggerInfo, 0, len(in))
 	for _, t := range in {
 		out = append(out, protocol.DBTriggerInfo{Name: t.Name, Event: t.Event, Timing: t.Timing})
+	}
+	return out
+}
+
+func toProtocolPrincipals(in []dbconnectors.Principal) []protocol.DBPrincipalInfo {
+	out := make([]protocol.DBPrincipalInfo, 0, len(in))
+	for _, p := range in {
+		out = append(out, protocol.DBPrincipalInfo{Name: p.Name, CanLogin: p.CanLogin, Superuser: p.Superuser})
+	}
+	return out
+}
+
+func toProtocolGrants(in []dbconnectors.Grant) []protocol.DBGrantInfo {
+	out := make([]protocol.DBGrantInfo, 0, len(in))
+	for _, g := range in {
+		out = append(out, protocol.DBGrantInfo{Privilege: g.Privilege, Schema: g.Schema, Table: g.Table, Raw: g.Raw})
 	}
 	return out
 }

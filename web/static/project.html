@@ -325,6 +325,7 @@
                 <div class="card-header d-flex justify-content-between align-items-center">
                   <strong id="databases-browser-title">—</strong>
                   <div class="d-flex gap-2">
+                    <button id="db-users-toggle-btn" class="btn btn-sm btn-outline-secondary" type="button">Users</button>
                     <button id="db-sql-editor-toggle-btn" class="btn btn-sm btn-outline-secondary" type="button">SQL Editor</button>
                     <button id="databases-browser-close-btn" class="icon-btn" type="button" aria-label="Close browser" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                   </div>
@@ -339,6 +340,7 @@
                     </div>
                     <div id="db-sql-results" class="mt-3"></div>
                   </div>
+                  <div id="db-users" hidden></div>
                 </div>
               </div>
             </div>
@@ -1221,8 +1223,10 @@
       document.getElementById('databases-browser').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       dbSqlEditorConn = conn;
       $('#db-sql-editor').prop('hidden', true);
+      $('#db-users').prop('hidden', true).empty();
       $('#db-tree').prop('hidden', false);
       $('#db-sql-editor-toggle-btn').text('SQL Editor');
+      $('#db-users-toggle-btn').text('Users').prop('hidden', conn.engine === 'sqlite');
       var $tree = $('#db-tree').empty().append($('<div class="text-secondary small">').text('Loading…'));
       if (conn.engine === 'sqlite') {
         // SQLite has no schema concept — tables sit directly under the
@@ -1576,11 +1580,23 @@
     }
 
     $('#db-sql-editor-toggle-btn').on('click', function () {
-      var toEditor = $('#db-tree').is(':visible');
+      var toEditor = $('#db-tree').is(':visible') || $('#db-users').is(':visible');
       $('#db-tree').prop('hidden', toEditor);
+      $('#db-users').prop('hidden', true);
       $('#db-sql-editor').prop('hidden', !toEditor);
+      $('#db-users-toggle-btn').text('Users');
       $(this).text(toEditor ? 'Back to tree' : 'SQL Editor');
       if (toEditor) { dbSqlEditorInit(); setTimeout(function () { dbSqlEditorCM.refresh(); dbSqlEditorCM.focus(); }, 0); }
+    });
+
+    $('#db-users-toggle-btn').on('click', function () {
+      var toUsers = !$('#db-users').is(':visible');
+      $('#db-tree').prop('hidden', toUsers);
+      $('#db-sql-editor').prop('hidden', true);
+      $('#db-sql-editor-toggle-btn').text('SQL Editor');
+      $('#db-users').prop('hidden', !toUsers);
+      $(this).text(toUsers ? 'Back to tree' : 'Users');
+      if (toUsers) { dbUsersLoad(dbSqlEditorConn); }
     });
 
     $('#db-sql-run-btn').on('click', function () {
@@ -1617,6 +1633,147 @@
         $('#db-sql-status').text('Error: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText));
       });
     });
+
+    // --- Database users/roles/permissions (Slice 10: docs/PRD.md §6
+    // --- "user/role management where supported" / "permissions where
+    // --- supported"; not shown for sqlite, see openDatabaseBrowser) ---
+
+    var DB_PRIVILEGES = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'ALL'];
+
+    function dbUsersLoad(conn) {
+      var $wrap = $('#db-users').empty();
+
+      var $form = $('<div class="d-flex flex-wrap gap-2 align-items-end mb-3">').appendTo($wrap);
+      function field(label, $input) {
+        return $('<div>').append($('<label class="form-label small mb-1">').text(label), $input);
+      }
+      var $name = $('<input type="text" class="form-control form-control-sm" style="width:160px;">');
+      var $password = $('<input type="password" class="form-control form-control-sm" autocomplete="new-password" style="width:160px;">');
+      var $canLogin = $('<input type="checkbox" class="form-check-input" checked>');
+      var $superuser = $('<input type="checkbox" class="form-check-input">');
+      $form.append(
+        field('Name', $name), field('Password', $password),
+        $('<div class="form-check mb-1">').append($canLogin, $('<label class="form-check-label small">').text('Can log in')),
+        $('<div class="form-check mb-1">').append($superuser, $('<label class="form-check-label small">').text('Superuser')),
+        $('<button type="button" class="btn btn-sm btn-primary">Create</button>').on('click', function () {
+          var name = $name.val().trim(), password = $password.val();
+          if (!name || !password) { DS.error('Name and password are required.'); return; }
+          $.ajax({
+            url: dbAPI(conn.id, '/principals'), method: 'POST', contentType: 'application/json',
+            data: JSON.stringify({ name: name, password: password, can_login: $canLogin.is(':checked'), superuser: $superuser.is(':checked') })
+          }).done(function () {
+            $name.val(''); $password.val(''); $canLogin.prop('checked', true); $superuser.prop('checked', false);
+            refresh();
+          }).fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create user.'); });
+        })
+      );
+
+      var $list = $('<div>').appendTo($wrap);
+      function refresh() {
+        $list.empty().append($('<div class="text-secondary small">').text('Loading…'));
+        $.get(dbAPI(conn.id, '/principals'))
+          .done(function (list) {
+            $list.empty();
+            if (!list.length) { $list.append($('<div class="text-secondary small">').text('No users/roles.')); return; }
+            list.forEach(function (p) { $list.append(dbPrincipalRow(conn, p, refresh)); });
+          })
+          .fail(function (xhr) { dbLoadError($list, xhr); });
+      }
+      refresh();
+    }
+
+    function dbGrantURL(conn, principal, suffix) {
+      return dbAPI(conn.id, '/principals/' + encodeURIComponent(principal) + '/grants' + (suffix || ''));
+    }
+
+    function dbGrantLabel(g) {
+      return g.raw || (g.privilege + ' ON ' + (g.schema ? g.schema + '.' : '') + g.table);
+    }
+
+    // dbLoadGrants populates $container with principal's current grants (one
+    // row each, with a Revoke button for the structured — non-raw — kind an
+    // engine can actually revoke through this API) and an inline
+    // add-privilege form.
+    function dbLoadGrants($container, conn, principal) {
+      $container.empty().append($('<div class="text-secondary small">').text('Loading…'));
+      $.get(dbGrantURL(conn, principal))
+        .done(function (grants) {
+          $container.empty();
+          if (!grants.length) { $container.append($('<div class="text-secondary small mb-2">').text('No grants.')); }
+          grants.forEach(function (g) {
+            var $row = $('<div class="d-flex align-items-center gap-2 small mb-1">').appendTo($container);
+            $row.append($('<span>').text(dbGrantLabel(g)));
+            if (!g.raw) {
+              $('<button type="button" class="icon-btn text-danger" aria-label="Revoke" title="Revoke"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>')
+                .on('click', function () {
+                  $.ajax({
+                    url: dbGrantURL(conn, principal, '/revoke'), method: 'POST', contentType: 'application/json',
+                    data: JSON.stringify({ privilege: g.privilege, schema: g.schema, table: g.table })
+                  }).done(function () { dbLoadGrants($container, conn, principal); })
+                    .fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to revoke grant.'); });
+                }).appendTo($row);
+            }
+          });
+
+          var $addForm = $('<div class="d-flex flex-wrap gap-2 align-items-end mt-2">').appendTo($container);
+          var $priv = $('<select class="form-select form-select-sm" style="width:120px;">');
+          DB_PRIVILEGES.forEach(function (p) { $priv.append($('<option>').val(p).text(p)); });
+          var $schema = $('<input type="text" class="form-control form-control-sm" placeholder="schema" style="width:110px;">');
+          var $table = $('<input type="text" class="form-control form-control-sm" placeholder="table" style="width:140px;">');
+          $addForm.append($priv, $schema, $table,
+            $('<button type="button" class="btn btn-sm btn-outline-secondary">Grant</button>').on('click', function () {
+              var table = $table.val().trim();
+              if (!table) { DS.error('Table is required.'); return; }
+              $.ajax({
+                url: dbGrantURL(conn, principal), method: 'POST', contentType: 'application/json',
+                data: JSON.stringify({ privilege: $priv.val(), schema: $schema.val().trim(), table: table })
+              }).done(function () { $table.val(''); dbLoadGrants($container, conn, principal); })
+                .fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to grant privilege.'); });
+            })
+          );
+        })
+        .fail(function (xhr) { dbLoadError($container, xhr); });
+    }
+
+    // dbPrincipalRow renders one expandable user/role row (dbTreeNode-style)
+    // with set-password/delete actions and a lazily-loaded grants section.
+    function dbPrincipalRow(conn, p, onChanged) {
+      var $node = $('<div class="mb-2">');
+      var $header = $('<div class="d-flex align-items-center gap-2" role="button" tabindex="0">').css('cursor', 'pointer').appendTo($node);
+      var $chev = dbChevron().appendTo($header);
+      $header.append('<i class="fa-solid fa-user me-1 text-secondary" aria-hidden="true"></i>');
+      $header.append($('<span>').text(p.name));
+      if (p.superuser) $header.append($('<span class="badge bg-red-lt ms-1">').text('superuser'));
+      if (!p.can_login) $header.append($('<span class="badge bg-secondary-lt ms-1">').text('no login'));
+
+      var $actions = $('<div class="ms-auto d-flex gap-2">').appendTo($header);
+      $('<button type="button" class="icon-btn" aria-label="Set password" title="Set password"><i class="fa-solid fa-key" aria-hidden="true"></i></button>')
+        .on('click', async function (e) {
+          e.stopPropagation();
+          var password = await DS.prompt({ title: 'New password for ' + p.name });
+          if (!password) return;
+          $.ajax({ url: dbAPI(conn.id, '/principals/' + encodeURIComponent(p.name)), method: 'PATCH', contentType: 'application/json', data: JSON.stringify({ password: password }) })
+            .fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to set password.'); });
+        }).appendTo($actions);
+      $('<button type="button" class="icon-btn text-danger" aria-label="Delete" title="Delete"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>')
+        .on('click', async function (e) {
+          e.stopPropagation();
+          if (!(await DS.confirm('Delete the "' + p.name + '" user/role?'))) return;
+          $.ajax({ url: dbAPI(conn.id, '/principals/' + encodeURIComponent(p.name)), method: 'DELETE' })
+            .done(onChanged)
+            .fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to delete user.'); });
+        }).appendTo($actions);
+
+      var $grants = $('<div class="ms-4 mt-1" hidden>').appendTo($node);
+      var loaded = false;
+      $header.on('click', function () {
+        var willExpand = $grants.prop('hidden');
+        $grants.prop('hidden', !willExpand);
+        $chev.toggleClass('fa-chevron-right', !willExpand).toggleClass('fa-chevron-down', willExpand);
+        if (willExpand && !loaded) { loaded = true; dbLoadGrants($grants, conn, p.name); }
+      });
+      return $node;
+    }
 
     // --- Files (docs/PRD.md §5, docs/WEB_UI_DESIGN.md Files,
     // --- docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md File Manager) ---
