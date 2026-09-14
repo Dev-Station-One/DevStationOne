@@ -409,6 +409,207 @@ PostgreSQL setup, upgrade path, configuration reference, and health checks
 were already documented (README.md, docs/DEPLOYMENT.md — Slice 12) and
 needed no new work beyond the fixes above.
 
+## Slice 14 — Dashboard rewrite and browser event push
+
+**Goal**: live dashboard (runtime status + active projects), backed by a new
+process-local browser event bus.
+
+**Design** (see `/sc:design` pass, 2026-09-14):
+- New `internal/events` package: `Bus` — process-local pub/sub, same
+  single-process scope caveat as `runtimes.Registry`/`sessions.Hub`
+  (ADR-012). `Event{Type, UserID *string, Payload}`; `UserID: nil` broadcasts
+  to every connected browser (runtime status — shared infra, matches
+  existing `runtime_browse.go` visibility rule); `UserID` set delivers only
+  to that project's owner (project/session status — projects are
+  per-user).
+- New endpoint `GET /api/v1/events/stream` — same cookie-session auth and
+  heartbeat pattern as `termSessionStreamHandler`; subscribes to `Bus` with
+  the authenticated user's ID, forwards events as JSON text frames.
+- Publish call sites: `runtime_ws.go` `handleRuntimeConnection` (online on
+  `registry.Register`, offline on `registry.Unregister`); `sessions_ws.go`
+  `termSessionStreamHandler` (`project.status` after `MarkRunning`/
+  `MarkDetached`). Session-exit publish site (wherever `MarkExited` fires
+  from a runtime-reported exit) to be located via CodeGraph at
+  implementation time.
+- New `sessions.ActiveCountsByProjectIDs(ctx, pool, ids []string)
+  (map[string]int, error)` — one grouped query, active = status not in
+  (exited, failed, closed).
+- `listProjectsHandler` adds `active_sessions int` to `projectResponse`
+  (additive, OpenAPI update, no breaking change). `GET /api/v1/runtimes`
+  unchanged (already returns `online bool`).
+- Frontend: `web/static/index.html` gets two Tabler card-list panels
+  (Runtimes, Active Projects) matching `runtimes.html`/`projects.html`
+  styling — no charts/stat-tiles (docs/WEB_UI_DESIGN.md: "not a
+  dashboard-heavy SaaS application"). Initial paint from the two existing
+  REST endpoints; live patch via `/api/v1/events/stream`, reusing the
+  reconnect/backoff logic already written for the terminal WS in
+  `project.html` rather than a new implementation.
+- No new DB tables or migrations required.
+- Notifications (bell) feature, brainstormed separately, is expected to
+  reuse this same `events.Bus` rather than get its own channel.
+
+**Success Criteria**: dashboard reflects runtime online/offline and project
+session-count changes without a page reload; existing terminal/runtime/
+project functionality unaffected.
+
+**Tests**: `events.Bus` unit tests (pub/sub, per-user filtering, broadcast);
+`sessions.ActiveCountsByProjectIDs` unit test; events WS handler
+integration test (auth required, receives own-user + broadcast events, not
+other users' project events); browser E2E for dashboard live update.
+
+**Status**: Not Started
+
+## Slice 15 — Notifications (bell)
+
+**Goal**: Claude-Code-style bell notification for task completion,
+awaiting-input, and runtime/system events. Reuses the `events.Bus` from
+Slice 14 rather than a second push channel.
+
+**Design** (see `/sc:design` pass, 2026-09-14):
+- New `notifications` table (migration), same shape as `audit_events`
+  (`internal/audit`) but per-user with a read flag: `id, user_id, type,
+  title, body, detail jsonb, read_at timestamptz null, created_at`;
+  index `(user_id, read_at)` for unread-count, `(user_id, created_at)` for
+  listing.
+- New `internal/notifications` package mirrors `internal/audit`:
+  `Record(ctx, pool, userID, ntype, title, body, detail)` inserts the row
+  and publishes `events.Event{Type: "notification.created", UserID:
+  &userID, Payload: row}` on the Slice 14 Bus; plus `ListForUser`,
+  `UnreadCount`, `MarkRead`, `MarkAllRead`.
+- Trigger call sites:
+  - Task completion: `internal/agent/manager.go` `sessionManager.pump`
+    already sends `MessageSessionExit`; the Control Server's runtime
+    envelope handler already calls `sessions.MarkExited` there — add
+    `notifications.Record(..., "task.completed", ...)` at that exact spot.
+  - Awaiting input (idle-time heuristic): add `lastActivity
+    map[sessionID]time.Time` to `sessions.Hub`, touched in `Forward`
+    (the single choke point every runtime output byte already passes
+    through). A ticker (~10s) scans for sessions idle past
+    `DEVSTATIONONE_IDLE_NOTIFY_SECONDS` (new env var, default 120s) not
+    already flagged, resolves the project owner via `sessions.Get` →
+    `projects.Get`, calls `notifications.Record`. Flag resets on new
+    activity; cleared in `Hub.Discard`.
+  - Runtime/system events: reuses the `runtime.status` broadcast from
+    Slice 14 for the live bell popup only — not persisted as a DB row,
+    since a runtime is shared infrastructure with no single owner
+    (existing rule, `runtime_browse.go`). Open question if persisted
+    per-affected-project-owner notifications are wanted instead.
+- REST additions: `GET /api/v1/notifications` (current user only,
+  cursor-paginated, mirrors `audit.List` shape), `GET
+  /api/v1/notifications/unread-count`, `POST
+  /api/v1/notifications/{id}/read`, `POST /api/v1/notifications/read-all`.
+- Frontend: bell icon already reserved in the navbar spec
+  (`docs/WEB_UI_DESIGN.md`). Dropdown + unread badge, live-patched via the
+  Slice 14 `/api/v1/events/stream` connection (new event type
+  `notification.created`), no separate WS.
+
+**Success Criteria**: a notification fires and appears in the bell dropdown
+after reload on a second device; unread count clears on read.
+
+**Tests**: `internal/notifications` unit tests (Record/List/UnreadCount/
+MarkRead); idle-detection ticker test (idle session flagged once, reset on
+activity, cleared on discard); notification REST + WS integration tests
+(ownership-scoped, no cross-user leakage).
+
+**Status**: Not Started
+
+## Slice 16 — Git client (status/diff/stage/commit)
+
+**Goal**: VSCode Source Control-style panel, scoped to status, diff,
+stage/unstage, and commit. Branch/push/pull, history graph, and
+merge/rebase/stash are separate later slices reusing the same RPC pattern
+with new `Action` values — not designed in detail here to avoid building
+surface ahead of need.
+
+**Design** (see `/sc:design` pass, 2026-09-14):
+- Execution model mirrors the file manager exactly
+  (`internal/agent/file_manager.go` / `internal/api/files.go`): runtime-side,
+  containment-checked, RPC over the existing runtime connection.
+- New protocol messages `MessageGitCommand` / `MessageGitResult` /
+  `MessageGitError` (error reuses the existing `ServiceErrorPayload` shape).
+  New `protocol.GitCommandPayload{Action string, Root string, ...}` /
+  `GitResultPayload{...}`. `Root` is always the Project's `WorkingDirectory`
+  from the DB row — never client-supplied, same containment rule as
+  `validateWorkingDirectory`.
+- Runtime-side: new `internal/agent/git_manager.go`, same shape as
+  `fileManager`. Dispatch executes the real `git` CLI via `os/exec` with
+  `cmd.Dir = Root` — not a Go git library, so it reuses whatever `git`, SSH
+  keys, and credential helper are already configured for that OS user, and
+  needs no new dependency. `commit` passes the message via `-F -` on stdin;
+  no shell is involved anywhere (argv, not shell text).
+  - `status` → `git status --porcelain=v2 -z`
+  - `diff` → `git diff` / `git diff --cached` (optional path param)
+  - `stage` / `unstage` → `git add -- <path>` / `git restore --staged --
+    <path>`
+  - `commit` → `git commit -F -`
+- Control-Server side: new `internal/api/git.go`, a `gitCommand` helper
+  identical in shape to `fileCommand`.
+- REST routes, matching the existing `/api/v1/projects/{projectID}/files/...`
+  convention:
+  ```
+  GET  /api/v1/projects/{projectID}/git/status
+  GET  /api/v1/projects/{projectID}/git/diff?path=&staged=
+  POST /api/v1/projects/{projectID}/git/stage      {path}
+  POST /api/v1/projects/{projectID}/git/unstage    {path}
+  POST /api/v1/projects/{projectID}/git/commit     {message}
+  ```
+- Frontend: new "Source Control" application tab in the Project workspace —
+  needs a `docs/WEB_UI_DESIGN.md` update (tab list currently reads
+  `Terminal | Files | Databases | Services`).
+
+**Security**: same containment model as Files — `Root` always
+server-derived, never accepted from the client.
+
+**Success Criteria**: opening a repo with uncommitted changes shows the
+changed-file list and diffs; staging and committing from the panel produces
+a real commit in the actual repository.
+
+**Tests**: `git_manager` unit tests per action (status/diff/stage/unstage/
+commit) against a real temp git repo; REST integration tests including
+containment (a path outside `Root` is rejected); OpenAPI validation for the
+new routes.
+
+**Status**: Not Started
+
+## Slice 17 — Alternate HTML terminal (forms-based rendering)
+
+**Goal**: a second, opt-in rendering mode for a terminal session —
+structured cards for prompts/diffs instead of raw ANSI — alongside the
+existing xterm.js terminal, which remains the default and is unmodified.
+
+**Design** (see `/sc:design` pass, 2026-09-14): this is a client-side
+rendering mode only, not a new execution path. The PTY byte stream is
+identical to today's terminal (same `pty.Session`, same `SendFrame`/binary
+WS frames) — zero protocol or runtime changes. Only `web/static/project.html`
+gets a second mode that line-buffers the same bytes and runs a pattern
+matcher before choosing card vs. plain-text rendering.
+
+- Detection is regex-based over plain text (trailing `? `/`(y/n)`/numbered-menu
+  lines → button card; a `diff --git` block → collapsible diff card).
+  Anything unmatched falls back to plain scrolling text — never breaks,
+  never guesses wrong into a stuck UI.
+  `ponytail: regex-based generic detection, not a real parser — add a
+  dedicated adapter (e.g. Claude Code's --output-format stream-json) when
+  one specific tool's fidelity matters enough to justify it.`
+- Card buttons (yes/no, menu choice) send the equivalent literal keystrokes
+  back over the existing binary WS frame path — no backend input change.
+- New nullable `terminal_sessions.render_mode` column (migration; default
+  `'xterm'`, opt-in `'cards'`), set at session creation, so the mode travels
+  with a session that's reattached from another device — not stored in
+  `localStorage`.
+
+**Success Criteria**: a session started in "cards" mode renders at least a
+yes/no-prompt card and a diff card as structured UI for a tool with a
+conventional prompt format; unmatched output still displays correctly as
+plain text; the existing xterm terminal type is unchanged in behavior.
+
+**Tests**: JS unit tests for the pattern matcher (matched → card, unmatched
+→ plain text, no false crash on arbitrary bytes); migration test for the new
+column and its default; browser E2E confirming input round-trips correctly
+from a card button.
+
+**Status**: Not Started
+
 ## Future, explicitly not MVP
 
 - Android client
