@@ -246,34 +246,62 @@ If the 24 MB cap proves too small for real projects, the
 upgrade path is chunked streaming messages, not raising the envelope
 further.
 
-## Implementation (Slice 7): database commands
+## Implementation (Slice 7/8): database commands
 
-Database connection test reuses the Slice 5 correlated request/response
-machinery unchanged — one message type in each direction, `Envelope.ID`
-correlated:
+Database connection test and schema discovery reuse the Slice 5 correlated
+request/response machinery unchanged — one message type in each direction,
+`Envelope.ID` correlated:
 
 ```text
-db.command   server -> runtime   {action, connection}
-db.result    runtime -> server   {ok}
+db.command   server -> runtime   {action, connection_id, connection, schema, table}
+db.result    runtime -> server   {ok} | {schemas} | {tables} | {columns} | {indexes} | {constraints} | {triggers}
 db.error     runtime -> server   {error}
 ```
 
-`action` is `"test"` (Slice 7 — more actions land with schema/data browsing
-and the SQL editor in a later slice). `connection` is a
-`DBConnectionParams`: engine, host, port, username, password, database,
-ssl_mode, instance_name, search_path, extra_params — built server-side from
-a decrypted `database_connections` row (`internal/dbconnections`), never
-taken from a client request.
+`action` is one of `test`, `invalidate`, `schemas`, `tables`, `columns`,
+`indexes`, `constraints`, `triggers` (data browsing and the SQL editor land
+in a later slice). `connection` is a `DBConnectionParams`: engine, host,
+port, username, password, database, ssl_mode, instance_name, search_path,
+extra_params — built server-side from a decrypted `database_connections`
+row (`internal/dbconnections`), never taken from a client request.
+`connection_id` identifies the stored connection for the runtime's pool
+cache (below) — it is not itself a credential. `schema`/`table` scope a
+`tables`/`columns`/`indexes`/`constraints`/`triggers` request.
+
+`invalidate` is the one exception to the request/response pattern: it's
+sent fire-and-forget via `SendEnvelope` (no `Envelope.ID`, no reply) rather
+than `SendCommand`, since there's nothing to reply with — see "Connection
+pool cache" below.
 
 Runtime-side, `internal/dbconnectors` opens a `database/sql` connection for
 the requested engine (PostgreSQL via `pgx`/`stdlib`, MySQL/MariaDB via
 `go-sql-driver/mysql`, MSSQL via `microsoft/go-mssqldb`, SQLite via
-`modernc.org/sqlite` — all four pure Go, no cgo) and verifies it with a
-ping, then closes it immediately; nothing is kept open between RPCs in this
-slice. `hello.Capabilities.Databases` always advertises all four engine
+`modernc.org/sqlite` — all four pure Go, no cgo) and, for `schemas`/
+`tables`/`columns`/`indexes`/`constraints`/`triggers`, introspects it via
+each engine's own catalog (PostgreSQL/MySQL/MSSQL: `information_schema` for
+tables/columns/constraints, engine-specific catalog views —
+`pg_index`/`pg_attribute`, `information_schema.statistics`,
+`sys.indexes`/`sys.index_columns` respectively — for indexes, since none of
+the three expose index columns through `information_schema`; SQLite:
+`sqlite_master`/`PRAGMA table_info`/`PRAGMA index_list`/`PRAGMA
+index_info`/`PRAGMA foreign_key_list`, since it has no `information_schema`
+at all). `hello.Capabilities.Databases` always advertises all four engine
 names (`dbconnectors.SupportedEngines`), since the drivers are compiled in
-rather than depending on anything else installed on the runtime host — unlike
-`Services`, there's no live-availability check to make here.
+rather than depending on anything else installed on the runtime host —
+unlike `Services`, there's no live-availability check to make here.
+
+**Connection pool cache.** `internal/agent/db_manager.go` keeps at most one
+`*sql.DB` per `connection_id` (`dbManager.pools`), opened lazily on first
+use and reused by every subsequent `db.command` against that connection —
+schema browsing fires several RPCs per tree-node expand, and reopening a
+fresh connection (TLS handshake included, for PostgreSQL/MSSQL) on each one
+would be needlessly slow. An entry idles out and closes after 5 minutes
+unused; a `db.command{action:"invalidate", connection_id}` (sent by the
+Control Server right after a PATCH/DELETE on that connection, best-effort —
+see `docs/API.md` "Databases") closes and drops it immediately, so changed
+credentials take effect on the next request rather than up to 5 minutes
+later. See ADR-021/022 for why this is a plain map keyed by connection ID
+rather than a session-open/close message pair.
 
 ## Security
 

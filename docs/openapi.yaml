@@ -1677,7 +1677,7 @@ paths:
   /api/v1/projects/{projectID}/databases/{connectionID}/test:
     post:
       summary: Test a database connection
-      description: A live RPC to the project's runtime, which opens and pings the connection, then closes it. A failed connection is a normal 200 {"ok":false} result, not a server error.
+      description: A live RPC to the project's runtime, which opens (or reuses a cached pool) and pings the connection. A failed connection is a normal 200 {"ok":false} result, not a server error.
       tags: [Databases]
       operationId: testDatabaseConnection
       security:
@@ -1706,6 +1706,263 @@ paths:
                     type: boolean
                   error:
                     type: string
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/schemas:
+    get:
+      summary: List a connection's schemas
+      description: Live RPC. Real schemas for PostgreSQL/MSSQL; a single schema named after the connection's database for MySQL/MariaDB (no separate schema concept); empty for SQLite (no schema concept at all).
+      tags: [Databases]
+      operationId: listDatabaseSchemas
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Schema names
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/tables:
+    get:
+      summary: List a schema's tables and views
+      description: Live RPC.
+      tags: [Databases]
+      operationId: listDatabaseTables
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          description: Omit for an engine with no schema concept (SQLite).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tables and views
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBTableInfo"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/columns:
+    get:
+      summary: List a table's columns
+      description: Live RPC.
+      tags: [Databases]
+      operationId: listDatabaseColumns
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Columns, ordered by position
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBColumnInfo"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/indexes:
+    get:
+      summary: List a table's indexes
+      description: Live RPC.
+      tags: [Databases]
+      operationId: listDatabaseIndexes
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Indexes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBIndexInfo"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/constraints:
+    get:
+      summary: List a table's constraints
+      description: Live RPC.
+      tags: [Databases]
+      operationId: listDatabaseConstraints
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Constraints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBConstraintInfo"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found, or not owned by the current user
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/triggers:
+    get:
+      summary: List a table's triggers
+      description: Live RPC. event/timing are best-effort — omitted where the engine doesn't expose them structurally (SQLite).
+      tags: [Databases]
+      operationId: listDatabaseTriggers
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: table
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: schema
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Triggers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DBTriggerInfo"
         "401":
           description: Not authenticated
         "404":
@@ -2036,6 +2293,75 @@ components:
         extra_params:
           type: string
           description: Free-form "key=value&key2=value2", passed through to the engine's connection string.
+    DBTableInfo:
+      type: object
+      description: One table or view. Not a stored resource — live RPC result, see docs/API.md "Databases".
+      required: [name, kind]
+      properties:
+        name:
+          type: string
+        kind:
+          type: string
+          enum: [table, view]
+    DBColumnInfo:
+      type: object
+      description: One table/view column. Not a stored resource.
+      required: [name, type, nullable, position]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          description: The engine's own native type name, not normalized across engines.
+        nullable:
+          type: boolean
+        default:
+          type: string
+        position:
+          type: integer
+    DBIndexInfo:
+      type: object
+      description: One table index. Not a stored resource.
+      required: [name, columns, unique, primary]
+      properties:
+        name:
+          type: string
+        columns:
+          type: array
+          items:
+            type: string
+        unique:
+          type: boolean
+        primary:
+          type: boolean
+    DBConstraintInfo:
+      type: object
+      description: One table constraint. Not a stored resource.
+      required: [name, type, columns]
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum: [primary_key, foreign_key, unique, check]
+        columns:
+          type: array
+          items:
+            type: string
+        references:
+          type: string
+          description: "\"schema.table(column)\" for a foreign_key constraint, omitted otherwise."
+    DBTriggerInfo:
+      type: object
+      description: One table trigger. Not a stored resource. event/timing are best-effort, omitted where the engine doesn't expose them structurally (SQLite).
+      required: [name]
+      properties:
+        name:
+          type: string
+        event:
+          type: string
+        timing:
+          type: string
     FileInfo:
       type: object
       description: One filesystem entry inside the Project's working directory. Not a stored resource — see docs/API.md "Files".

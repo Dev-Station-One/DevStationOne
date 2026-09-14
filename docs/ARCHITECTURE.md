@@ -168,23 +168,30 @@ The Control Server brokers requests and results.
 ```text
 Control Server  -- REST (internal/api/databases.go) does CRUD against the
       |             database_connections table (internal/dbconnections),
-      | db.command   decrypting credentials only to build the RPC payload;
-      | (RPC)         dispatches one db.command per test request
-      v              (runtimes.Conn.SendCommand, Envelope.ID-correlated,
-Development Runtime  same mechanism as service.command).
-      |            -- internal/dbconnectors opens+pings a database/sql
-      v              connection for the requested engine, closes it.
+      | db.command   decrypting credentials only to build each RPC payload;
+      | (RPC)         dispatches test/schemas/tables/columns/indexes/
+      v              constraints/triggers (runtimes.Conn.SendCommand,
+Development Runtime  Envelope.ID-correlated, same mechanism as
+      |              service.command), and invalidate (fire-and-forget,
+      v              SendEnvelope) after an edit/delete.
+      |            -- internal/agent/db_manager.go caches one *sql.DB per
+      |              connection_id (dbManager.pools), opened lazily via
+      |              internal/dbconnectors and reused across RPCs; an idle
+      v              entry closes after 5 minutes, invalidate closes it now.
 PostgreSQL / MySQL / MSSQL / SQLite
 ```
 
 Slice 7 delivers connection storage, encrypted credentials, and connection
-test across all four engines (ADR-021); the runtime never keeps a database
-connection open between RPCs in this slice — schema/data browsing and the
-SQL editor (Slices 8/9) are a later pass. Credentials are AES-256-GCM
-sealed at rest under `DEVSTATIONONE_DB_ENCRYPTION_KEY` and only ever
-decrypted server-side, immediately before dispatch — never logged, never
-returned from an API response (see `docs/API.md` "Databases" and
-`docs/SECURITY.md`).
+test across all four engines; Slice 8 adds schema discovery (schemas,
+tables/views, columns, indexes, constraints, triggers) via each engine's own
+catalog metadata, plus the runtime-side connection pool cache the repeated
+schema-browsing RPCs need (ADR-021/022) — a plain `map[connectionID]*sql.DB`
+kept by `db_manager.go`, not a second session-tracking layer on top of what
+Slice 4's terminal sessions already have. Data browsing and the SQL editor
+(Slice 9) are a later pass. Credentials are AES-256-GCM sealed at rest under
+`DEVSTATIONONE_DB_ENCRYPTION_KEY` and only ever decrypted server-side,
+immediately before dispatch — never logged, never returned from an API
+response (see `docs/API.md` "Databases" and `docs/SECURITY.md`).
 
 ## Services
 

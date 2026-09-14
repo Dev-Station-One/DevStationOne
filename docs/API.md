@@ -224,8 +224,9 @@ POST   /api/v1/projects/{projectID}/databases/{connectionID}/test
 
 Slice 7 scope: connection CRUD, protected credentials, and connection test
 against all four supported engines (PostgreSQL, MySQL/MariaDB, Microsoft SQL
-Server, SQLite). Catalog/schema/table discovery, data browsing, query
-execution, and users/roles/permissions are a later slice.
+Server, SQLite). Slice 8 adds schema discovery (schemas/tables/columns/
+indexes/constraints/triggers), documented separately below. Data browsing,
+query execution, and users/roles/permissions are a later slice.
 
 A connection is a stored `database_connections` row scoped to a Project
 (`project_id`), authorized the same way as everything else under
@@ -271,13 +272,60 @@ to build the `db.command` RPC payload dispatched to a runtime; the plaintext
 never appears in an API response or a log line.
 
 `POST .../test` is a live RPC (`db.command` action `test`,
-`docs/PROTOCOL.md` "Implementation (Slice 7): database commands") to the
-Project's runtime, which opens and pings the connection using
-`internal/dbconnectors` and closes it immediately — nothing is kept open.
-Response is always `200` with `{"ok": true}` or `{"ok": false, "error":
-"..."}`; a failed connection (bad credentials, unreachable host) is an
-expected outcome, not a server error. `409` if the runtime isn't currently
+`docs/PROTOCOL.md` "Implementation (Slice 7/8): database commands") to the
+Project's runtime, which opens (or reuses a cached, already-open pool — see
+below) and pings the connection using `internal/dbconnectors`. Response is
+always `200` with `{"ok": true}` or `{"ok": false, "error": "..."}`; a
+failed connection (bad credentials, unreachable host) is an expected
+outcome, not a server error. `409` if the runtime isn't currently
 connected; `504` if it doesn't reply within 30s.
+
+### Schema discovery (Slice 8)
+
+```text
+GET /api/v1/projects/{projectID}/databases/{connectionID}/schemas
+GET /api/v1/projects/{projectID}/databases/{connectionID}/tables?schema=
+GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/columns?schema=
+GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/indexes?schema=
+GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/constraints?schema=
+GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/triggers?schema=
+```
+
+Every schema-discovery endpoint is a live RPC, same authorization and
+offline/timeout status codes as `test` above. `schema` is a real schema for
+PostgreSQL/MSSQL, the connection's single database name for MySQL/MariaDB
+(no separate schema concept there), and omitted entirely for SQLite (no
+schema concept at all) — the UI skips the schema level of the tree for
+those two engines rather than showing a pointless single-item node.
+
+`GET .../schemas` → `["public", ...]`.
+
+`GET .../tables` → `[{"name": "users", "kind": "table"}, ...]` — `kind` is
+`"table"` or `"view"`.
+
+`GET .../tables/{table}/columns` → `[{"name", "type", "nullable",
+"default", "position"}, ...]`, ordered by position. `type` is the engine's
+own native type name (not normalized across engines).
+
+`GET .../tables/{table}/indexes` → `[{"name", "columns": [...], "unique",
+"primary"}, ...]`.
+
+`GET .../tables/{table}/constraints` → `[{"name", "type", "columns":
+[...], "references"}, ...]`. `type` is `primary_key`, `foreign_key`,
+`unique`, or `check`. `references` is `"schema.table(column)"` for a
+`foreign_key`, omitted otherwise.
+
+`GET .../tables/{table}/triggers` → `[{"name", "event", "timing"}, ...]`.
+`event`/`timing` are best-effort — SQLite in particular only exposes a
+trigger's name without parsing its SQL text, so both are omitted for it.
+
+**Connection pool cache.** The runtime opens at most one `*sql.DB` per
+`connectionID` and reuses it across every RPC against that connection —
+opening a fresh connection (and TLS handshake, for PostgreSQL/MSSQL) on
+every tree-node expand would be needlessly slow. An idle pool is closed
+after 5 minutes; editing or deleting a connection's stored credentials
+immediately invalidates its cached pool (see ADR-021/022) so a changed
+password takes effect on the very next request, not after the idle timeout.
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag
 `Databases`).

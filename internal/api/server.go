@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"devstationone/internal/database"
+	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
 )
@@ -78,9 +79,36 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireSession(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireSession(db, listDatabaseConnectionsHandler(db)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, getDatabaseConnectionHandler(db)))
-	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, patchDatabaseConnectionHandler(db, dbEncryptionKey)))
-	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, deleteDatabaseConnectionHandler(db)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, patchDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, deleteDatabaseConnectionHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/test", requireSession(db, testDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
+
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/schemas", requireSession(db, listSchemasHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables", requireSession(db, listTablesHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/columns", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "columns", func(r protocol.DBResultPayload) any {
+		if r.Columns == nil {
+			return []protocol.DBColumnInfo{}
+		}
+		return r.Columns
+	})))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/indexes", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "indexes", func(r protocol.DBResultPayload) any {
+		if r.Indexes == nil {
+			return []protocol.DBIndexInfo{}
+		}
+		return r.Indexes
+	})))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/constraints", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "constraints", func(r protocol.DBResultPayload) any {
+		if r.Constraints == nil {
+			return []protocol.DBConstraintInfo{}
+		}
+		return r.Constraints
+	})))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/triggers", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "triggers", func(r protocol.DBResultPayload) any {
+		if r.Triggers == nil {
+			return []protocol.DBTriggerInfo{}
+		}
+		return r.Triggers
+	})))
 
 	// StripPrefix: FileServer maps the full URL path under the root dir, so
 	// /assets/x must lose the /assets/ prefix before hitting http.Dir.

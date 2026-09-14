@@ -10,6 +10,7 @@ import (
 
 	"devstationone/internal/database"
 	"devstationone/internal/dbconnections"
+	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 )
@@ -180,7 +181,21 @@ func getDatabaseConnectionHandler(db *database.DB) http.HandlerFunc {
 	}
 }
 
-func patchDatabaseConnectionHandler(db *database.DB, key []byte) http.HandlerFunc {
+// invalidateRuntimeCache best-effort notifies conn (if the runtime is
+// online) to drop its cached connection pool for connectionID — sent after
+// a connection's credentials change or it's deleted (ADR-021/022). Fire and
+// forget: a delivery failure just means the runtime's cache expires on its
+// own idle timeout instead of immediately, not a security hole (see
+// docs/DECISIONS.md).
+func invalidateRuntimeCache(registry *runtimes.Registry, runtimeID, connectionID string) {
+	conn, online := registry.Get(runtimeID)
+	if !online {
+		return
+	}
+	_ = conn.SendEnvelope(protocol.MessageDBCommand, protocol.DBCommandPayload{Action: "invalidate", ConnectionID: connectionID})
+}
+
+func patchDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		existing, ok := authorizedConnection(w, r, db)
 		if !ok {
@@ -243,13 +258,17 @@ func patchDatabaseConnectionHandler(db *database.DB, key []byte) http.HandlerFun
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update database connection"})
 			return
 		}
+		if p, err := projects.Get(r.Context(), db.Pool, existing.ProjectID); err == nil {
+			invalidateRuntimeCache(registry, p.RuntimeID, c.ID)
+		}
 		writeJSON(w, http.StatusOK, toDatabaseConnectionResponse(c))
 	}
 }
 
-func deleteDatabaseConnectionHandler(db *database.DB) http.HandlerFunc {
+func deleteDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := authorizedConnection(w, r, db); !ok {
+		existing, ok := authorizedConnection(w, r, db)
+		if !ok {
 			return
 		}
 		ok, err := dbconnections.Delete(r.Context(), db.Pool, r.PathValue("connectionID"))
@@ -261,37 +280,72 @@ func deleteDatabaseConnectionHandler(db *database.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "database connection not found"})
 			return
 		}
+		if p, err := projects.Get(r.Context(), db.Pool, existing.ProjectID); err == nil {
+			invalidateRuntimeCache(registry, p.RuntimeID, existing.ID)
+		}
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
 
+// dbConnRuntime resolves {connectionID}'s stored connection, its project's
+// runtime connection, and its decrypted credentials, writing an appropriate
+// error response and returning ok=false on any failure (offline runtime,
+// missing connection, decrypt failure).
+func dbConnRuntime(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry, key []byte) (runtimes.Conn, dbconnections.Connection, protocol.DBConnectionParams, bool) {
+	c, ok := authorizedConnection(w, r, db)
+	if !ok {
+		return nil, dbconnections.Connection{}, protocol.DBConnectionParams{}, false
+	}
+	project, ok := authorizedProject(w, r, db, c.ProjectID)
+	if !ok {
+		return nil, dbconnections.Connection{}, protocol.DBConnectionParams{}, false
+	}
+	conn, online := registry.Get(project.RuntimeID)
+	if !online {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "runtime is offline"})
+		return nil, dbconnections.Connection{}, protocol.DBConnectionParams{}, false
+	}
+	params, err := dbconnections.ResolveParams(r.Context(), db.Pool, c.ID, key)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve connection credentials"})
+		return nil, dbconnections.Connection{}, protocol.DBConnectionParams{}, false
+	}
+	return conn, c, toDBConnectionParams(params), true
+}
+
+// dbCommand issues a db.command RPC to conn and decodes its result, writing
+// an appropriate error response on failure — mirrors serviceCommand/
+// fileCommand.
+func dbCommand(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, cmd protocol.DBCommandPayload) (protocol.DBResultPayload, bool) {
+	ctx, cancel := context.WithTimeout(r.Context(), dbRPCTimeout)
+	defer cancel()
+	raw, err := conn.SendCommand(ctx, protocol.MessageDBCommand, cmd)
+	if err != nil {
+		if ctx.Err() != nil {
+			writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "timed out waiting for runtime"})
+		} else {
+			writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		}
+		return protocol.DBResultPayload{}, false
+	}
+	var result protocol.DBResultPayload
+	if err := json.Unmarshal(raw, &result); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid response from runtime"})
+		return protocol.DBResultPayload{}, false
+	}
+	return result, true
+}
+
 func testDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		c, ok := authorizedConnection(w, r, db)
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
 		if !ok {
 			return
 		}
-		project, ok := authorizedProject(w, r, db, c.ProjectID)
-		if !ok {
-			return
-		}
-		runtimeConn, online := registry.Get(project.RuntimeID)
-		if !online {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "runtime is offline"})
-			return
-		}
-
-		params, err := dbconnections.ResolveParams(r.Context(), db.Pool, c.ID, key)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to resolve connection credentials"})
-			return
-		}
-
 		ctx, cancel := context.WithTimeout(r.Context(), dbRPCTimeout)
 		defer cancel()
-		raw, err := runtimeConn.SendCommand(ctx, protocol.MessageDBCommand, protocol.DBCommandPayload{
-			Action:     "test",
-			Connection: toDBConnectionParams(params),
+		raw, err := conn.SendCommand(ctx, protocol.MessageDBCommand, protocol.DBCommandPayload{
+			Action: "test", ConnectionID: c.ID, Connection: params,
 		})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -310,6 +364,62 @@ func testDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registry,
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": result.Ok})
+	}
+}
+
+func listSchemasHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{Action: "schemas", ConnectionID: c.ID, Connection: params})
+		if !ok {
+			return
+		}
+		if result.Schemas == nil {
+			result.Schemas = []string{}
+		}
+		writeJSON(w, http.StatusOK, result.Schemas)
+	}
+}
+
+func listTablesHandler(db *database.DB, registry *runtimes.Registry, key []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: "tables", ConnectionID: c.ID, Connection: params, Schema: r.URL.Query().Get("schema"),
+		})
+		if !ok {
+			return
+		}
+		if result.Tables == nil {
+			result.Tables = []protocol.DBTableInfo{}
+		}
+		writeJSON(w, http.StatusOK, result.Tables)
+	}
+}
+
+// tableStructureHandler builds a handler for one of the per-table structure
+// actions (columns, indexes, constraints, triggers), all sharing the same
+// {connectionID}/tables/{table}?schema= request shape.
+func tableStructureHandler(db *database.DB, registry *runtimes.Registry, key []byte, action string, extract func(protocol.DBResultPayload) any) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, c, params, ok := dbConnRuntime(w, r, db, registry, key)
+		if !ok {
+			return
+		}
+		result, ok := dbCommand(w, r, conn, protocol.DBCommandPayload{
+			Action: action, ConnectionID: c.ID, Connection: params,
+			Schema: r.URL.Query().Get("schema"), Table: r.PathValue("table"),
+		})
+		if !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, extract(result))
 	}
 }
 

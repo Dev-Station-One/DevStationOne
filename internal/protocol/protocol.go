@@ -317,16 +317,77 @@ type DBConnectionParams struct {
 
 // DBCommandPayload is the payload of a MessageDBCommand envelope.
 type DBCommandPayload struct {
-	// Action is "test" (Slice 7). More actions (schema browsing, data
-	// browsing, SQL editor) are added as the slices that implement them
-	// land — see docs/PROTOCOL.md.
-	Action     string             `json:"action"`
-	Connection DBConnectionParams `json:"connection"`
+	// Action is one of: test, invalidate, schemas, tables, columns,
+	// indexes, constraints, triggers (Slice 7/8). Data browsing and the SQL
+	// editor (Slice 9) add more. "invalidate" is a fire-and-forget
+	// notice (sent via SendEnvelope, no reply) telling the runtime to drop
+	// its cached connection pool for ConnectionID — see ADR-021/022.
+	Action string `json:"action"`
+	// ConnectionID keys the runtime's connection pool cache — a stored
+	// connection is opened at most once per runtime process and reused
+	// across schema-browsing RPCs, not reopened per request.
+	ConnectionID string             `json:"connection_id"`
+	Connection   DBConnectionParams `json:"connection"`
+	// Schema/Table scope a schemas/tables/columns/indexes/constraints/
+	// triggers request. Schema is "" for an engine with no schema concept
+	// (SQLite) or a single implicit one (MySQL/MariaDB).
+	Schema string `json:"schema,omitempty"`
+	Table  string `json:"table,omitempty"`
 }
 
-// DBResultPayload is the payload of a MessageDBResult envelope.
+// DBTableInfo describes one table or view.
+type DBTableInfo struct {
+	Name string `json:"name"`
+	// Kind is "table" or "view".
+	Kind string `json:"kind"`
+}
+
+// DBColumnInfo describes one table/view column.
+type DBColumnInfo struct {
+	Name     string `json:"name"`
+	Type     string `json:"type"`
+	Nullable bool   `json:"nullable"`
+	Default  string `json:"default"`
+	Position int    `json:"position"`
+}
+
+// DBIndexInfo describes one table index.
+type DBIndexInfo struct {
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
+	Unique  bool     `json:"unique"`
+	Primary bool     `json:"primary"`
+}
+
+// DBConstraintInfo describes one table constraint.
+type DBConstraintInfo struct {
+	Name string `json:"name"`
+	// Type is "primary_key", "foreign_key", "unique", or "check".
+	Type    string   `json:"type"`
+	Columns []string `json:"columns"`
+	// References is "schema.table(column)" for a foreign_key constraint,
+	// otherwise "".
+	References string `json:"references,omitempty"`
+}
+
+// DBTriggerInfo describes one table trigger. Event/Timing are best-effort —
+// not every engine exposes them as cleanly as a name.
+type DBTriggerInfo struct {
+	Name   string `json:"name"`
+	Event  string `json:"event,omitempty"`
+	Timing string `json:"timing,omitempty"`
+}
+
+// DBResultPayload is the payload of a MessageDBResult envelope. Exactly one
+// of the non-Ok fields is populated, matching the request's Action.
 type DBResultPayload struct {
-	Ok bool `json:"ok"`
+	Ok          bool               `json:"ok,omitempty"`
+	Schemas     []string           `json:"schemas,omitempty"`
+	Tables      []DBTableInfo      `json:"tables,omitempty"`
+	Columns     []DBColumnInfo     `json:"columns,omitempty"`
+	Indexes     []DBIndexInfo      `json:"indexes,omitempty"`
+	Constraints []DBConstraintInfo `json:"constraints,omitempty"`
+	Triggers    []DBTriggerInfo    `json:"triggers,omitempty"`
 }
 
 // DBErrorPayload is the payload of a MessageDBError envelope. Same shape as

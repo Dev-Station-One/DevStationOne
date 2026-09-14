@@ -194,6 +194,24 @@ Deliver:
 - views/triggers
 - database tree UI
 
+**Status: Complete**, with one deliberate scope note: no separate "catalog"
+level. A stored connection already pins one database/catalog (`database`
+field, Slice 7); browsing a *different* catalog on the same server would
+need a second connection, which is out of scope — see ADR-022. "Schemas"
+covers the rest: real schemas for PostgreSQL/MSSQL, the connection's single
+database as one implicit schema for MySQL/MariaDB, none for SQLite.
+
+Delivered: `Connector` interface extended with `Schemas`/`Tables`/
+`Columns`/`Indexes`/`Constraints`/`Triggers` across all four engines
+(`internal/dbconnectors`), the runtime connection pool cache
+(`internal/agent/db_manager.go`), six new API endpoints, and a "Browse
+schema" lazy-loading tree per connection card (schemas → tables → columns/
+indexes/constraints/triggers) — additive to the Slice 7 card grid, not the
+full split-pane tree-replaces-cards UI from the brainstorm/design pass
+(still open, folded into Slice 9). Verified against all four real engines
+(`internal/dbconnectors/introspect_test.go`, real PK/FK/index/trigger
+fixtures) and a real browser smoke test against the app's own live schema.
+
 ## Slice 9 — Database data browser/query
 
 Deliver:

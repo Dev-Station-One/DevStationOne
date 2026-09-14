@@ -409,3 +409,86 @@ databases for MySQL and MSSQL were added to `docker-compose.yml`
 (`dbtest-mysql`, `dbtest-mssql`, started via `make dbtest-up`) alongside the
 existing Postgres service, so `internal/dbconnectors`' engine connectors are
 covered by integration tests against real engines, not mocks.
+
+## ADR-022 — Slice 8: schema introspection queries and the runtime pool cache go live
+
+Date: 2026-09-13
+
+**Decision.** `internal/dbconnectors.Connector` gains `Schemas`, `Tables`,
+`Columns`, `Indexes`, `Constraints`, `Triggers`, implemented per engine:
+
+- **Schemas.** PostgreSQL/MSSQL query `information_schema.schemata` (MSSQL
+  additionally excludes the fixed-role schemas, which share a name with
+  `db_owner` et al. and aren't user-browsable). MySQL/MariaDB has no
+  separate schema concept — `Schemas` returns `[Params.Database]` without a
+  query. SQLite returns `nil` — the UI skips the schema level of the tree
+  for both.
+- **Tables/Columns.** `information_schema.tables`/`.columns` for all three
+  network engines (MySQL's `column_type` is used over `data_type`, since it
+  includes length/unsigned detail `data_type` drops). SQLite:
+  `sqlite_master`/`PRAGMA table_info`.
+- **Indexes.** None of the three engines expose index *columns* through
+  `information_schema`, only per-column engine-native catalogs: PostgreSQL
+  (`pg_index`/`pg_attribute`/`unnest(...) WITH ORDINALITY`), MySQL
+  (`information_schema.statistics`, which despite the name does carry
+  index/column data), MSSQL (`sys.indexes`/`sys.index_columns`/
+  `sys.columns`). SQLite: `PRAGMA index_list`/`PRAGMA index_info`.
+- **Constraints.** `information_schema.table_constraints` joined to
+  `key_column_usage` (the constrained columns) and, for a foreign key, the
+  referenced schema/table/column — `constraint_column_usage` directly for
+  PostgreSQL/MySQL, routed through `referential_constraints` for MSSQL
+  (its `constraint_column_usage` doesn't carry the FK's own name, only the
+  unique/PK constraint it points at). SQLite has no such information at
+  all: primary key comes from `PRAGMA table_info`'s `pk` column, foreign
+  keys from `PRAGMA foreign_key_list`, and unique constraints from
+  `PRAGMA index_list` entries with `origin='u'`.
+- **Triggers.** `information_schema.triggers` for PostgreSQL/MySQL,
+  `sys.triggers`/`sys.tables`/`sys.schemas` for MSSQL (no
+  `information_schema.triggers` there), `sqlite_master WHERE
+  type='trigger'` for SQLite — name only, since SQLite exposes no
+  structured event/timing metadata short of parsing the trigger's stored
+  SQL text, which is out of scope (represented honestly: left empty rather
+  than guessed).
+
+All four engines' introspection is verified by `internal/dbconnectors/
+introspect_test.go` against real PostgreSQL/MySQL/MSSQL/SQLite databases —
+each test creates a real parent/child table pair with a foreign key, an
+index, and a trigger, then asserts the connector finds them, not just that
+the queries don't error.
+
+**Why not parameterize PRAGMA statements.** SQLite's `PRAGMA` doesn't
+accept bind parameters, so a table/index name has to be interpolated
+directly into the statement text. `quoteSQLiteIdent` double-quotes the
+identifier and doubles any embedded `"` (the standard SQL identifier-quoting
+rule), which SQLite honors for `PRAGMA` targets — safe against a
+maliciously-named table without needing bind parameters.
+
+**The runtime connection pool cache activates.** ADR-021 predicted this
+exact trigger for upgrading from "open a connection per RPC" to "cache one
+per connection ID": schema browsing fires several RPCs per tree-node
+expand (a table's columns, indexes, constraints, and triggers all load at
+once), and reopening a fresh connection — a TLS handshake included, for
+PostgreSQL/MSSQL — on each one is a real, user-visible latency cost. Per
+ADR-021's stated upgrade path, this is a plain `map[connectionID]*sql.DB`
+in `internal/agent/db_manager.go` (`dbManager.pools`), not a
+`db.session.open`/`close` message pair — `database/sql`'s own pool already
+handles concurrent use of one cached `*sql.DB` from multiple browser tabs.
+A `db.command{action:"invalidate"}` — fire-and-forget via `SendEnvelope`,
+no reply — is dispatched by `internal/api/databases.go` after every
+PATCH/DELETE on a connection, so edited or removed credentials take effect
+immediately rather than waiting out the 5-minute idle-eviction window.
+`TestDatabaseConnectionHTTP_EditInvalidatesCachedPool` (internal/api)
+proves this end-to-end: without the invalidate call, a `test` after
+breaking the stored password would still report `ok: true` off the
+still-open pool from before the edit.
+
+**Consequence.** `protocol.DBCommandPayload` gains `ConnectionID` (the pool
+cache key — not itself a credential) and `Schema`/`Table` (request scope);
+`DBResultPayload` gains `Schemas`/`Tables`/`Columns`/`Indexes`/
+`Constraints`/`Triggers`. The Databases tab UI grows a "Browse schema"
+button per connection card, opening a lazy-loading tree (schemas → tables →
+columns/indexes/constraints/triggers) in a panel below the card grid —
+additive to the Slice 7 card grid, not the full split-pane
+connections-tree-replaces-cards redesign from the brainstorm/design pass;
+that larger UI consolidation, plus data browsing and the SQL editor, remain
+Slice 9 and later.

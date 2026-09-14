@@ -306,6 +306,16 @@
               </div>
 
               <div id="databases-list" class="row row-cards"></div>
+
+              <div id="databases-browser" class="card mt-3" hidden>
+                <div class="card-header d-flex justify-content-between align-items-center">
+                  <strong id="databases-browser-title">—</strong>
+                  <button id="databases-browser-close-btn" class="icon-btn" type="button" aria-label="Close browser" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                </div>
+                <div class="card-body">
+                  <div id="db-tree"></div>
+                </div>
+              </div>
             </div>
 
             <div id="files-panel" hidden>
@@ -1093,6 +1103,7 @@
         return $('<button type="button" class="icon-btn' + (extraCls ? ' ' + extraCls : '') + '" aria-label="' + label + '" title="' + label + '">')
           .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>').appendTo($actions);
       }
+      iconBtn('sitemap', 'Browse schema').on('click', function () { openDatabaseBrowser(conn); });
       iconBtn('plug', 'Test connection').on('click', function () {
         $status.text('Testing…').removeClass('text-success text-danger');
         $.ajax({ url: '/api/v1/projects/' + projectID + '/databases/' + conn.id + '/test', method: 'POST' })
@@ -1139,6 +1150,143 @@
     }
 
     $('#databases-refresh-btn').on('click', loadDatabaseConnections);
+
+    // --- Database schema browser (Slice 8: docs/PRD.md §6 catalogs/
+    // --- schemas/tables/columns/indexes/constraints/triggers) ---
+
+    function dbAPI(connID, suffix) {
+      return '/api/v1/projects/' + projectID + '/databases/' + connID + suffix;
+    }
+
+    function dbChevron() {
+      return $('<i class="fa-solid fa-chevron-right me-1 text-secondary" aria-hidden="true" style="width:.9em;display:inline-block;"></i>');
+    }
+
+    // dbTreeNode renders one collapsed/expandable tree row. loadChildren is
+    // called once, the first time the row is expanded, and must append the
+    // loaded content to $children.
+    function dbTreeNode(icon, label, loadChildren) {
+      var $node = $('<div class="mb-1">');
+      var $header = $('<div class="d-flex align-items-center" role="button" tabindex="0">').css('cursor', 'pointer').appendTo($node);
+      var $chev = dbChevron().appendTo($header);
+      $header.append('<i class="fa-solid fa-' + icon + ' me-1 text-secondary" aria-hidden="true"></i>');
+      $header.append($('<span>').text(label));
+      var $children = $('<div class="ms-4 mt-1" hidden>').appendTo($node);
+      var loaded = false;
+      $header.on('click', function () {
+        var willExpand = $children.prop('hidden');
+        $children.prop('hidden', !willExpand);
+        $chev.toggleClass('fa-chevron-right', !willExpand).toggleClass('fa-chevron-down', willExpand);
+        if (willExpand && !loaded) {
+          loaded = true;
+          loadChildren($children);
+        }
+      });
+      return $node;
+    }
+
+    function dbLoadError($container, xhr) {
+      $container.empty().append($('<div class="text-danger small">').text((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load.'));
+    }
+
+    function openDatabaseBrowser(conn) {
+      $('#databases-browser-title').text(conn.name + ' (' + (ENGINE_LABELS[conn.engine] || conn.engine) + ')');
+      $('#databases-browser').prop('hidden', false);
+      document.getElementById('databases-browser').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      var $tree = $('#db-tree').empty().append($('<div class="text-secondary small">').text('Loading…'));
+      if (conn.engine === 'sqlite') {
+        // SQLite has no schema concept — tables sit directly under the
+        // connection (docs/DECISIONS.md ADR-021/022).
+        loadDbTables($tree, conn, null);
+        return;
+      }
+      $.get(dbAPI(conn.id, '/schemas'))
+        .done(function (schemas) {
+          $tree.empty();
+          if (!schemas.length) { $tree.append($('<div class="text-secondary small">').text('No schemas found.')); return; }
+          schemas.forEach(function (schema) {
+            $tree.append(dbTreeNode('layer-group', schema, function ($children) { loadDbTables($children, conn, schema); }));
+          });
+        })
+        .fail(function (xhr) { dbLoadError($tree, xhr); });
+    }
+
+    $('#databases-browser-close-btn').on('click', function () { $('#databases-browser').prop('hidden', true); });
+
+    function loadDbTables($container, conn, schema) {
+      $container.empty().append($('<div class="text-secondary small">').text('Loading…'));
+      var url = dbAPI(conn.id, '/tables') + (schema ? '?schema=' + encodeURIComponent(schema) : '');
+      $.get(url)
+        .done(function (tables) {
+          $container.empty();
+          if (!tables.length) { $container.append($('<div class="text-secondary small">').text('No tables.')); return; }
+          tables.forEach(function (tb) {
+            $container.append(dbTreeNode(tb.kind === 'view' ? 'eye' : 'table', tb.name, function ($children) {
+              loadDbTableStructure($children, conn, schema, tb.name);
+            }));
+          });
+        })
+        .fail(function (xhr) { dbLoadError($container, xhr); });
+    }
+
+    function dbStructureURL(conn, schema, table, kind) {
+      return dbAPI(conn.id, '/tables/' + encodeURIComponent(table) + '/' + kind) + (schema ? '?schema=' + encodeURIComponent(schema) : '');
+    }
+
+    function loadDbTableStructure($container, conn, schema, table) {
+      var $cols = $('<div class="mb-3">').appendTo($container);
+      var $idx = $('<div class="mb-3">').appendTo($container);
+      var $cons = $('<div class="mb-3">').appendTo($container);
+      var $trig = $('<div class="mb-1">').appendTo($container);
+
+      $.get(dbStructureURL(conn, schema, table, 'columns'))
+        .done(function (cols) {
+          $cols.empty().append($('<div class="fw-bold small mb-1">').text('Columns'));
+          var $tbl = $('<table class="table table-sm table-vcenter mb-0"><thead><tr><th>Column</th><th>Type</th><th>Nullable</th><th>Default</th></tr></thead></table>');
+          var $tbody = $('<tbody>').appendTo($tbl);
+          cols.forEach(function (c) {
+            $('<tr>').append(
+              $('<td>').text(c.name), $('<td class="text-secondary">').text(c.type),
+              $('<td>').text(c.nullable ? 'yes' : 'no'), $('<td class="text-secondary">').text(c.default || '—')
+            ).appendTo($tbody);
+          });
+          $cols.append($('<div class="table-responsive">').append($tbl));
+        })
+        .fail(function (xhr) { dbLoadError($cols, xhr); });
+
+      $.get(dbStructureURL(conn, schema, table, 'indexes'))
+        .done(function (list) {
+          $idx.empty().append($('<div class="fw-bold small mb-1">').text('Indexes'));
+          if (!list.length) { $idx.append($('<div class="text-secondary small">').text('None.')); return; }
+          list.forEach(function (ix) {
+            var flags = [ix.primary ? 'PK' : null, ix.unique ? 'UNIQUE' : null].filter(Boolean).join(', ');
+            $idx.append($('<div class="small">').text(ix.name + ': ' + ix.columns.join(', ') + (flags ? ' (' + flags + ')' : '')));
+          });
+        })
+        .fail(function (xhr) { dbLoadError($idx, xhr); });
+
+      $.get(dbStructureURL(conn, schema, table, 'constraints'))
+        .done(function (list) {
+          $cons.empty().append($('<div class="fw-bold small mb-1">').text('Constraints'));
+          if (!list.length) { $cons.append($('<div class="text-secondary small">').text('None.')); return; }
+          list.forEach(function (c) {
+            var text = c.name + ' (' + c.type + '): ' + c.columns.join(', ') + (c.references ? ' → ' + c.references : '');
+            $cons.append($('<div class="small">').text(text));
+          });
+        })
+        .fail(function (xhr) { dbLoadError($cons, xhr); });
+
+      $.get(dbStructureURL(conn, schema, table, 'triggers'))
+        .done(function (list) {
+          $trig.empty().append($('<div class="fw-bold small mb-1">').text('Triggers'));
+          if (!list.length) { $trig.append($('<div class="text-secondary small">').text('None.')); return; }
+          list.forEach(function (tr) {
+            var when = [tr.timing, tr.event].filter(Boolean).join(' ');
+            $trig.append($('<div class="small">').text(tr.name + (when ? ' (' + when + ')' : '')));
+          });
+        })
+        .fail(function (xhr) { dbLoadError($trig, xhr); });
+    }
 
     // --- Files (docs/PRD.md §5, docs/WEB_UI_DESIGN.md Files,
     // --- docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md File Manager) ---

@@ -32,6 +32,79 @@ func (mysqlConnector) Open(ctx context.Context, p Params) (*sql.DB, error) {
 	return openAndPing(ctx, "mysql", cfg.FormatDSN())
 }
 
+// Schemas returns p.Database as the connection's single schema — MySQL has
+// no separate schema concept (a "database" already is one), and the
+// connection is already pinned to one via Open.
+func (mysqlConnector) Schemas(ctx context.Context, db *sql.DB, p Params) ([]string, error) {
+	return []string{p.Database}, nil
+}
+
+func (mysqlConnector) Tables(ctx context.Context, db *sql.DB, schema string) ([]Table, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT table_name, CASE table_type WHEN 'VIEW' THEN 'view' ELSE 'table' END
+		FROM information_schema.tables WHERE table_schema = ?
+		ORDER BY table_name`, schema)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTables(rows)
+}
+
+func (mysqlConnector) Columns(ctx context.Context, db *sql.DB, schema, table string) ([]Column, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT column_name, column_type, is_nullable = 'YES', COALESCE(column_default, ''), ordinal_position
+		FROM information_schema.columns WHERE table_schema = ? AND table_name = ?
+		ORDER BY ordinal_position`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanColumns(rows)
+}
+
+func (mysqlConnector) Indexes(ctx context.Context, db *sql.DB, schema, table string) ([]Index, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT index_name, column_name, non_unique = 0, index_name = 'PRIMARY'
+		FROM information_schema.statistics WHERE table_schema = ? AND table_name = ?
+		ORDER BY index_name, seq_in_index`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return groupIndexes(rows)
+}
+
+func (mysqlConnector) Constraints(ctx context.Context, db *sql.DB, schema, table string) ([]Constraint, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT tc.constraint_name, tc.constraint_type, kcu.column_name,
+		       kcu.referenced_table_schema, kcu.referenced_table_name, kcu.referenced_column_name
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu
+		  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+		     AND tc.table_name = kcu.table_name
+		WHERE tc.table_schema = ? AND tc.table_name = ?
+		ORDER BY tc.constraint_name, kcu.ordinal_position`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return groupConstraints(rows)
+}
+
+func (mysqlConnector) Triggers(ctx context.Context, db *sql.DB, schema, table string) ([]Trigger, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT trigger_name, event_manipulation, action_timing
+		FROM information_schema.triggers
+		WHERE event_object_schema = ? AND event_object_table = ?
+		ORDER BY trigger_name`, schema, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTriggers(rows)
+}
+
 // mysqlExtraParams parses a "key=value&key2=value2" free-form string into
 // single-valued params, matching mysql.Config.Params' shape.
 func mysqlExtraParams(extra string) (map[string]string, error) {

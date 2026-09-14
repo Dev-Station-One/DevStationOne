@@ -20,6 +20,11 @@ services:
   # supported engine using a real test database).
   dbtest-mysql:
     image: mysql:8.4
+    # Binary logging is on by default and blocks non-SUPER users from
+    # creating triggers/functions ("you might want to use
+    # log_bin_trust_function_creators"); this is a disposable test
+    # database with no replication use, so just turn logging off.
+    command: --disable-log-bin
     environment:
       MYSQL_ROOT_PASSWORD: devstation
       MYSQL_DATABASE: devstation
