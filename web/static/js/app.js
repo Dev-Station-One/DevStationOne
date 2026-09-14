@@ -79,7 +79,7 @@
     }).join('');
     host.innerHTML = '<div class="container-fluid">'
       + '<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>'
-      + '<h1 class="navbar-brand d-flex align-items-center"><a href="/">'
+      + '<h1 class="navbar-brand d-flex align-items-center justify-content-center"><a href="/">'
       + '<img src="/assets/logo/devstationone-top-logo.png" alt="DevStationOne" class="ds-logo-full img-fluid">'
       + '</a></h1>'
       + '<div class="collapse navbar-collapse" id="sidebar-menu"><ul class="navbar-nav pt-lg-3">'
