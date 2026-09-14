@@ -129,7 +129,7 @@ func executeFile(ctx context.Context, cmd protocol.FileCommandPayload) (protocol
 		return protocol.FileResultPayload{}, f.Delete(cmd.Path)
 
 	case "search":
-		matches, err := f.Search(cmd.Path, cmd.Query)
+		matches, err := f.Search(cmd.Path, cmd.Query, cmd.DirsOnly)
 		if err != nil {
 			return protocol.FileResultPayload{}, err
 		}

@@ -49,90 +49,191 @@
       return Swal.fire(base({ title: text, icon: 'error' }));
     },
 
-    // Directory picker for Project setup: browses runtimeId's home
-    // directory via GET/POST .../runtimes/{id}/browse[/mkdir] (there is no
-    // Project yet at this point, so the runtime's home dir is the browse
-    // root — see docs/PROTOCOL.md). Resolves the chosen path relative to
-    // that home dir ("." for the home dir itself, "src/app" for a
-    // subfolder), or null on cancel. The caller joins it onto the
-    // runtime's capabilities.home_dir to get an absolute path.
+    // Directory picker for Project setup: an expandable, searchable tree
+    // over runtimeId's home directory via GET/POST .../runtimes/{id}/browse*
+    // (there is no Project yet at this point, so the runtime's home dir is
+    // the browse root — see docs/PROTOCOL.md). Each folder's children are
+    // fetched lazily on first expand and cached for the life of the dialog.
+    // Resolves the selected path relative to that home dir ("." for the
+    // home dir itself, "src/app" for a subfolder), or null on cancel. The
+    // caller joins it onto the runtime's capabilities.home_dir to get an
+    // absolute path.
     browseDirectory: function (runtimeId) {
-      var path = '.';
+      var cache = {};    // path -> { loaded, expanded, dirs: [{name}, ...] }
+      var selected = '.';
+      var showHidden = false;
 
-      function list() {
-        return $.get('/api/v1/runtimes/' + runtimeId + '/browse', { path: path });
+      // ensureLoaded fetches and sorts (case-insensitive) a directory's
+      // subfolders the first time it's needed, then caches them.
+      function ensureLoaded(path) {
+        var node = cache[path];
+        if (node && node.loaded) return $.Deferred().resolve(node).promise();
+        return $.get('/api/v1/runtimes/' + runtimeId + '/browse', { path: path }).then(function (entries) {
+          node = cache[path] || (cache[path] = { loaded: false, expanded: true, dirs: [] });
+          node.loaded = true;
+          node.dirs = entries
+            .filter(function (e) { return e.type === 'dir'; })
+            .sort(function (a, b) { return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }); });
+          return node;
+        });
       }
 
-      function mkdir(name) {
-        var newPath = path === '.' ? name : path + '/' + name;
-        return $.ajax({
-          url: '/api/v1/runtimes/' + runtimeId + '/browse/mkdir',
-          method: 'POST',
-          contentType: 'application/json',
-          data: JSON.stringify({ path: newPath })
-        }).done(function () { path = newPath; });
+      // expandTo marks every ancestor of fullPath (excluding fullPath
+      // itself) as expanded, so the lazy-load chain in renderChildren walks
+      // down and reveals it — used when a search result is picked.
+      function expandTo(fullPath) {
+        if (fullPath === '.') return;
+        var parts = fullPath.split('/');
+        var acc = '';
+        for (var i = 0; i < parts.length - 1; i++) {
+          acc = acc ? acc + '/' + parts[i] : parts[i];
+          if (cache[acc]) cache[acc].expanded = true;
+          else cache[acc] = { loaded: false, expanded: true, dirs: [] };
+        }
+      }
+
+      function renderChildren($container, path, depth) {
+        var node = cache[path];
+        if (!node || !node.loaded) {
+          if (!node) node = cache[path] = { loaded: false, expanded: true, dirs: [] };
+          ensureLoaded(path).done(render);
+          $container.append(
+            $('<div class="text-secondary small">').css('padding-left', (depth * 1.25 + 1.5) + 'rem').text('Loading…')
+          );
+          return;
+        }
+        var dirs = node.dirs.filter(function (d) { return showHidden || d.name.charAt(0) !== '.'; });
+        if (depth === 0 && !dirs.length) {
+          $container.append($('<div class="text-secondary p-2">').text('No subfolders here.'));
+        }
+        dirs.forEach(function (d) {
+          var childPath = path === '.' ? d.name : path + '/' + d.name;
+          var childNode = cache[childPath];
+          var expanded = !!(childNode && childNode.expanded);
+          var $row = $('<div class="d-flex align-items-center gap-1 py-1 rounded">')
+            .css({ 'padding-left': (depth * 1.25) + 'rem', cursor: 'pointer' });
+          if (childPath === selected) $row.addClass('bg-body-secondary');
+          $('<span class="text-secondary flex-shrink-0 d-inline-flex justify-content-center" style="width:1.1rem">')
+            .html('<i class="fa-solid fa-chevron-' + (expanded ? 'down' : 'right') + '" aria-hidden="true"></i>')
+            .on('click', function (e) {
+              e.stopPropagation();
+              if (cache[childPath]) cache[childPath].expanded = !cache[childPath].expanded;
+              else cache[childPath] = { loaded: false, expanded: true, dirs: [] };
+              render();
+            })
+            .appendTo($row);
+          $('<span class="text-truncate">')
+            .append('<i class="fa-solid fa-folder me-1 text-secondary" aria-hidden="true"></i>')
+            .append(document.createTextNode(d.name))
+            .appendTo($row);
+          $row.on('click', function () { selected = childPath; render(); });
+          $container.append($row);
+          if (expanded) renderChildren($container, childPath, depth + 1);
+        });
+      }
+
+      function runSearch($input, $results) {
+        var q = $input.val().trim();
+        if (!q) { $results.hide().empty(); return; }
+        $results.show().empty().append($('<div class="text-secondary p-2">').text('Searching…'));
+        $.get('/api/v1/runtimes/' + runtimeId + '/browse/search', { q: q, path: '.' }).done(function (matches) {
+          $results.empty();
+          if (!matches.length) {
+            $results.append($('<div class="text-secondary p-2">').text('No matching directories.'));
+            return;
+          }
+          matches.forEach(function (m) {
+            $('<button type="button" class="list-group-item list-group-item-action py-1">')
+              .append('<i class="fa-solid fa-folder me-1 text-secondary" aria-hidden="true"></i>')
+              .append(document.createTextNode(m))
+              .on('click', function () {
+                expandTo(m);
+                selected = m;
+                $input.val('');
+                $results.hide().empty();
+                render();
+              })
+              .appendTo($results);
+          });
+        }).fail(function (xhr) {
+          $results.empty().append(
+            $('<div class="text-danger p-2">').text((xhr.responseJSON && xhr.responseJSON.error) || 'Search failed.')
+          );
+        });
       }
 
       function render() {
-        var $c = $(Swal.getHtmlContainer()).empty();
+        var $host = $(Swal.getHtmlContainer());
+        var treeScroll = $host.find('.ds-tree').scrollTop();
+        var $c = $host.empty();
 
-        var $crumbs = $('<div class="d-flex flex-wrap align-items-center gap-1 mb-2"></div>');
-        $crumbs.append(
+        var $search = $(
+          '<div class="input-group input-group-sm mb-2">' +
+            '<input type="text" class="form-control" placeholder="Search directories…">' +
+            '<button class="btn btn-outline-secondary" type="button"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i></button>' +
+          '</div>'
+        );
+        var $searchInput = $search.find('input');
+        var $results = $('<div class="list-group mb-2" style="max-height:160px;overflow-y:auto"></div>').hide();
+        $search.find('button').on('click', function () { runSearch($searchInput, $results); });
+        $searchInput.on('keydown', function (e) {
+          if (e.key === 'Enter') { e.preventDefault(); runSearch($searchInput, $results); }
+        });
+        $c.append($search).append($results);
+
+        var $toolbar = $('<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">');
+        $toolbar.append(
           $('<button type="button" class="btn btn-sm btn-outline-secondary">')
             .html('<i class="fa-solid fa-house" aria-hidden="true"></i> Home')
-            .on('click', function () { path = '.'; render(); })
+            .toggleClass('active', selected === '.')
+            .on('click', function () { selected = '.'; render(); })
         );
-        if (path !== '.') {
-          var accum = [];
-          path.split('/').forEach(function (seg) {
-            accum.push(seg);
-            var p = accum.join('/');
-            $crumbs.append($('<span class="px-1 text-secondary">/</span>'));
-            $crumbs.append(
-              $('<button type="button" class="btn btn-sm btn-link p-0">').text(seg)
-                .on('click', function () { path = p; render(); })
-            );
-          });
-        }
-        $c.append($crumbs);
+        var $hidden = $(
+          '<div class="form-check form-check-sm mb-0">' +
+            '<input class="form-check-input" type="checkbox" id="ds-tree-show-hidden">' +
+            '<label class="form-check-label" for="ds-tree-show-hidden">Show hidden</label>' +
+          '</div>'
+        );
+        $hidden.find('input').prop('checked', showHidden).on('change', function () {
+          showHidden = $(this).is(':checked');
+          render();
+        });
+        $toolbar.append($hidden);
+        $c.append($toolbar);
+
+        $c.append($('<div class="small text-secondary mb-2">').append('Selected: ').append($('<code>').text(selected)));
 
         var $newFolder = $(
           '<div class="input-group input-group-sm mb-2">' +
-            '<input type="text" class="form-control" placeholder="New folder name">' +
+            '<input type="text" class="form-control" placeholder="New folder name in selected directory">' +
             '<button class="btn btn-outline-secondary" type="button">Create</button>' +
           '</div>'
         );
         $newFolder.find('button').on('click', function () {
           var name = $newFolder.find('input').val().trim();
           if (!name) return;
-          mkdir(name).done(render).fail(function (xhr) {
+          var parent = selected;
+          var newPath = parent === '.' ? name : parent + '/' + name;
+          $.ajax({
+            url: '/api/v1/runtimes/' + runtimeId + '/browse/mkdir',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ path: newPath })
+          }).done(function () {
+            expandTo(newPath);
+            cache[parent].loaded = false;
+            selected = newPath;
+            render();
+          }).fail(function (xhr) {
             DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to create folder.');
           });
         });
         $c.append($newFolder);
 
-        var $list = $('<div class="list-group" style="max-height:260px;overflow-y:auto"></div>').text('Loading…');
-        $c.append($list);
-
-        list().done(function (entries) {
-          $list.empty();
-          var dirs = entries.filter(function (e) { return e.type === 'dir'; });
-          if (!dirs.length) {
-            $list.append($('<div class="text-secondary p-2">').text('No subfolders here.'));
-          }
-          dirs.forEach(function (e) {
-            var p = path === '.' ? e.name : path + '/' + e.name;
-            $('<button type="button" class="list-group-item list-group-item-action">')
-              .html('<i class="fa-solid fa-folder me-1" aria-hidden="true"></i>')
-              .append(document.createTextNode(e.name))
-              .on('click', function () { path = p; render(); })
-              .appendTo($list);
-          });
-        }).fail(function (xhr) {
-          $list.empty().append(
-            $('<div class="text-danger p-2">').text((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to list directory.')
-          );
-        });
+        var $tree = $('<div class="ds-tree" style="max-height:280px;overflow-y:auto"></div>');
+        $c.append($tree);
+        renderChildren($tree, '.', 0);
+        if (treeScroll) $tree.scrollTop(treeScroll);
       }
 
       return Swal.fire(base({
@@ -141,7 +242,7 @@
         showCancelButton: true,
         confirmButtonText: 'Select this folder',
         didOpen: render
-      })).then(function (r) { return r.isConfirmed ? path : null; });
+      })).then(function (r) { return r.isConfirmed ? selected : null; });
     }
   };
 })();

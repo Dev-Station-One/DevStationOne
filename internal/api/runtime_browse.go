@@ -37,6 +37,36 @@ func browseRuntimeHandler(db *database.DB, registry *runtimes.Registry) http.Han
 	}
 }
 
+// browseSearchHandler is GET .../runtimes/{runtimeID}/browse/search?q=&path=
+// — name-substring, directories-only search under the runtime's home
+// directory, for the Project setup UI's tree search box. Same bounded walk
+// as searchFilesHandler (docs/PROTOCOL.md, filesystem.searchCaps).
+func browseSearchHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		rt, conn, ok := resolveRuntime(w, r, db, registry, r.PathValue("runtimeID"))
+		if !ok {
+			return
+		}
+		p, ok := cleanQueryParam(w, r, "path")
+		if !ok {
+			return
+		}
+		q := r.URL.Query().Get("q")
+		if q == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "q is required"})
+			return
+		}
+		result, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{Action: "search", Root: rt.Capabilities.HomeDir, Path: p, Query: q, DirsOnly: true})
+		if !ok {
+			return
+		}
+		if result.Matches == nil {
+			result.Matches = []string{}
+		}
+		writeJSON(w, http.StatusOK, result.Matches)
+	}
+}
+
 // browseMkdirHandler is POST .../runtimes/{runtimeID}/browse/mkdir — create a
 // new directory under the runtime's home directory, for the picker's "new
 // folder" action.

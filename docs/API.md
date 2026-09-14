@@ -34,6 +34,7 @@ GET    /api/v1/runtimes
 POST   /api/v1/runtimes/{runtimeID}/revoke
 
 GET    /api/v1/runtimes/{runtimeID}/browse
+GET    /api/v1/runtimes/{runtimeID}/browse/search
 POST   /api/v1/runtimes/{runtimeID}/browse/mkdir
 
 WSS    /api/v1/runtimes/connect
@@ -51,9 +52,12 @@ outbound WebSocket connection, authenticating with `Authorization: Bearer
 <enrollment token>` instead of a session cookie. See `docs/PROTOCOL.md` for
 the message envelope exchanged on that connection.
 
-`GET .../browse` and `POST .../browse/mkdir` back the Project setup UI's
-directory picker — used before a Project exists, so there is no Project
-working directory to root the browse in. Both require only an authenticated
+`GET .../browse`, `GET .../browse/search`, and `POST .../browse/mkdir` back
+the Project setup UI's directory picker — used before a Project exists, so
+there is no Project working directory to root the browse in. `.../search`
+is a directories-only name-substring search over the subtree rooted at
+`path` (`dirs_only: true` on the `file.command` RPC), bounded by the same
+depth/match caps as `/files/search`. All three require only an authenticated
 session (same visibility as `GET /api/v1/runtimes`: runtimes are shared
 infrastructure, not owned per-user) and issue a `file.command` RPC to the
 runtime with `root` set to the runtime's reported home directory

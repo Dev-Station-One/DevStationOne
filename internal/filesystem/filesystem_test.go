@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -274,7 +275,7 @@ func TestSearch(t *testing.T) {
 		}
 	}
 
-	matches, err := f.Search(".", ".log")
+	matches, err := f.Search(".", ".log", false)
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
@@ -288,11 +289,93 @@ func TestSearch(t *testing.T) {
 		}
 	}
 
-	sub, err := f.Search("dir", "beta")
+	sub, err := f.Search("dir", "beta", false)
 	if err != nil || len(sub) != 1 || sub[0] != "dir/deep/beta.log" {
 		t.Errorf("Search subtree = %v, err %v", sub, err)
 	}
-	if _, err := f.Search(".", ""); err == nil {
+	if _, err := f.Search(".", "", false); err == nil {
 		t.Error("Search with empty query should fail")
+	}
+}
+
+// TestSearchVisitedCapTruncates reproduces a bug where hitting
+// searchMaxVisited returned an error and discarded every match found so
+// far (surfaced as a hard failure, e.g. 502 from the browse/search and
+// files/search HTTP handlers, on any real-world directory with more than
+// searchMaxVisited entries). Search must instead truncate the walk and
+// return the matches already collected, with no error.
+func TestSearchVisitedCapTruncates(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < searchMaxVisited+1; i++ {
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d", i)), nil, 0o644); err != nil {
+			t.Fatalf("seed file %d: %v", i, err)
+		}
+	}
+	f, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { f.Close() })
+
+	matches, err := f.Search(".", "target", true)
+	if err != nil {
+		t.Fatalf("Search should truncate, not error: %v", err)
+	}
+	if len(matches) != 1 || matches[0] != "target" {
+		t.Errorf("Search over-cap matches = %v, want [target]", matches)
+	}
+}
+
+// TestSearchFindsShallowMatchPastExpensiveSibling reproduces a bug where
+// Search recursed fully into each subdirectory before checking later
+// siblings, so one large sibling subtree (e.g. node_modules) could exhaust
+// searchMaxVisited before the walk ever reached a shallow match next to it
+// — dropping it regardless of directory read order. Search must scan every
+// directory's own children before descending into any of them, so a
+// top-level match is always found.
+func TestSearchFindsShallowMatchPastExpensiveSibling(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "target"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	decoy := filepath.Join(dir, "decoy")
+	if err := os.Mkdir(decoy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < searchMaxVisited+1; i++ {
+		if err := os.WriteFile(filepath.Join(decoy, fmt.Sprintf("f%d", i)), nil, 0o644); err != nil {
+			t.Fatalf("seed decoy file %d: %v", i, err)
+		}
+	}
+	f, err := Open(dir)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { f.Close() })
+
+	matches, err := f.Search(".", "target", true)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(matches) != 1 || matches[0] != "target" {
+		t.Errorf("Search matches = %v, want [target] (must not be starved by the decoy subtree)", matches)
+	}
+}
+
+func TestSearchDirsOnly(t *testing.T) {
+	f := openTestFS(t)
+	f.Mkdir("target")
+	f.Mkdir("other")
+	f.Write("target.txt", []byte("x"))
+
+	matches, err := f.Search(".", "target", true)
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(matches) != 1 || matches[0] != "target" {
+		t.Errorf("Search dirsOnly matches = %v, want [target]", matches)
 	}
 }

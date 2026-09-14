@@ -243,6 +243,8 @@ type FileCommandPayload struct {
 	Data []byte `json:"data,omitempty"`
 	// Query is the name substring for a "search" action.
 	Query string `json:"query,omitempty"`
+	// DirsOnly restricts a "search" action's matches to directories.
+	DirsOnly bool `json:"dirs_only,omitempty"`
 }
 
 // FileInfo describes one filesystem entry.

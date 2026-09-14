@@ -209,8 +209,9 @@ func (f *FS) Delete(p string) error {
 
 // Search returns root-relative paths of entries whose name contains query
 // (case-insensitive), walking the subtree rooted at p. Bounded by the
-// searchCaps constants.
-func (f *FS) Search(p, query string) ([]string, error) {
+// searchCaps constants. When dirsOnly is set, only directory matches are
+// returned (the walk still descends into every directory regardless).
+func (f *FS) Search(p, query string, dirsOnly bool) ([]string, error) {
 	c, err := Clean(p)
 	if err != nil {
 		return nil, err
@@ -222,6 +223,10 @@ func (f *FS) Search(p, query string) ([]string, error) {
 	var matches []string
 	visited := 0
 
+	// walk checks every entry directly under dir for a match before
+	// descending into any of dir's subdirectories, so a match near the
+	// search root is always found even when a sibling subtree (e.g.
+	// node_modules) alone exhausts searchMaxVisited.
 	var walk func(dir string, depth int) error
 	walk = func(dir string, depth int) error {
 		if depth > searchMaxDepth {
@@ -231,29 +236,33 @@ func (f *FS) Search(p, query string) ([]string, error) {
 		if err != nil {
 			return nil // unreadable subtree: skip it, keep searching elsewhere
 		}
+		var subdirs []string
 		for _, e := range ents {
 			visited++
 			if visited > searchMaxVisited {
-				return errors.New("search exceeded entry limit")
+				return nil // visited cap hit: stop walking, keep matches found so far
 			}
 			name := e.Name()
 			full := path.Join(dir, name)
 			if dir == "." {
 				full = name
 			}
-			if strings.Contains(strings.ToLower(name), q) {
+			if strings.Contains(strings.ToLower(name), q) && (!dirsOnly || e.IsDir()) {
 				matches = append(matches, full)
 				if len(matches) >= searchMaxMatches {
 					return nil
 				}
 			}
 			if e.IsDir() {
-				if err := walk(full, depth+1); err != nil {
-					return err
-				}
-				if len(matches) >= searchMaxMatches {
-					return nil
-				}
+				subdirs = append(subdirs, full)
+			}
+		}
+		for _, sub := range subdirs {
+			if err := walk(sub, depth+1); err != nil {
+				return err
+			}
+			if len(matches) >= searchMaxMatches {
+				return nil
 			}
 		}
 		return nil

@@ -212,9 +212,11 @@ whether this runtime build supports the capability.
 Slice 6 adds three message types, reusing the Slice 5 correlated
 request/response machinery unchanged:
 
-- `file.command` (server→runtime): `{action, root, path, to, data, query}`.
-  `action` is one of `list`, `stat`, `read`, `write`, `create`, `mkdir`,
-  `rename`, `copy`, `move`, `delete`, `search`.
+- `file.command` (server→runtime): `{action, root, path, to, data, query,
+  dirs_only}`. `action` is one of `list`, `stat`, `read`, `write`, `create`,
+  `mkdir`, `rename`, `copy`, `move`, `delete`, `search`. `dirs_only`
+  restricts a `search` action's matches to directories (used by the
+  Project setup UI's tree search).
 - `file.result` (runtime→server): exactly one of `{entries}`, `{info}`,
   `{data}`, `{matches}` populated, matching the action.
 - `file.error` (runtime→server): `{error}` — the same payload shape as

@@ -277,6 +277,56 @@ paths:
           description: The runtime could not read the directory
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/runtimes/{runtimeID}/browse/search:
+    get:
+      summary: Search directory names under a runtime's home directory
+      description: >
+        Case-insensitive name-substring search over the subtree rooted at
+        path, restricted to directories. For the Project setup UI's tree
+        search box. Bounded by the same depth/match caps as
+        /files/search. See docs/PROTOCOL.md.
+      tags: [Runtimes]
+      operationId: browseRuntimeSearch
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: runtimeID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: path
+          in: query
+          required: true
+          description: Subtree to search, relative to the runtime's home directory. "." searches the whole home directory.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Root-relative paths of matching directories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+        "400":
+          description: Invalid path (empty, absolute, or escaping the home directory), or empty q
+        "401":
+          description: Not authenticated
+        "404":
+          description: Runtime not found
+        "409":
+          description: The runtime is offline, or has not reported a home directory yet
+        "502":
+          description: The runtime could not search the directory
+        "504":
+          description: The runtime did not respond within the timeout
   /api/v1/runtimes/{runtimeID}/browse/mkdir:
     post:
       summary: Create a directory under a runtime's home directory
