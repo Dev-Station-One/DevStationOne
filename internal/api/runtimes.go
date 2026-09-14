@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
@@ -69,6 +70,7 @@ func createRuntimeHandler(db *database.DB) http.HandlerFunc {
 			return
 		}
 
+		audit.Record(r.Context(), db.Pool, audit.EventRuntimeRegistered, audit.Actor{UserID: user.ID, Email: user.Email}, "runtime", rt.ID, map[string]any{"name": rt.Name}, clientIP(r))
 		writeJSON(w, http.StatusCreated, runtimeWithTokenResponse{
 			runtimeResponse: toRuntimeResponse(rt, false),
 			Token:           token,
@@ -95,6 +97,7 @@ func listRuntimesHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 func revokeRuntimeHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		runtimeID := r.PathValue("runtimeID")
+		user, _ := userFromContext(r.Context())
 
 		ok, err := runtimes.Revoke(r.Context(), db.Pool, runtimeID)
 		if err != nil {
@@ -106,6 +109,7 @@ func revokeRuntimeHandler(db *database.DB, registry *runtimes.Registry) http.Han
 			return
 		}
 
+		audit.Record(r.Context(), db.Pool, audit.EventRuntimeRevoked, audit.Actor{UserID: user.ID, Email: user.Email}, "runtime", runtimeID, nil, clientIP(r))
 		registry.Revoke(runtimeID)
 		w.WriteHeader(http.StatusNoContent)
 	}

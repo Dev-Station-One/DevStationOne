@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
 )
@@ -120,6 +121,7 @@ func loginHandler(db *database.DB) http.HandlerFunc {
 
 		user, err := auth.Authenticate(r.Context(), db.Pool, req.Email, req.Password)
 		if errors.Is(err, auth.ErrNotFound) {
+			audit.Record(r.Context(), db.Pool, audit.EventLoginFailed, audit.Actor{Email: req.Email}, "user", "", nil, clientIP(r))
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid email or password"})
 			return
 		}
@@ -134,6 +136,7 @@ func loginHandler(db *database.DB) http.HandlerFunc {
 			return
 		}
 
+		audit.Record(r.Context(), db.Pool, audit.EventLoginSucceeded, audit.Actor{UserID: user.ID, Email: user.Email}, "user", user.ID, nil, clientIP(r))
 		setSessionCookie(w, r, token)
 		writeJSON(w, http.StatusOK, toUserResponse(user))
 	}
@@ -142,6 +145,9 @@ func loginHandler(db *database.DB) http.HandlerFunc {
 func logoutHandler(db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if cookie, err := r.Cookie(auth.CookieName); err == nil {
+			if _, user, err := auth.SessionAndUser(r.Context(), db.Pool, cookie.Value); err == nil {
+				audit.Record(r.Context(), db.Pool, audit.EventLogout, audit.Actor{UserID: user.ID, Email: user.Email}, "user", user.ID, nil, clientIP(r))
+			}
 			_ = auth.DeleteSessionByToken(r.Context(), db.Pool, cookie.Value)
 		}
 		clearSessionCookie(w, r)

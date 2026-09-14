@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,10 +13,16 @@ import (
 	"time"
 
 	"devstationone/internal/api"
+	"devstationone/internal/audit"
 	"devstationone/internal/config"
 	"devstationone/internal/database"
 	"devstationone/internal/logging"
 )
+
+// auditPurgeInterval is how often the retention policy is enforced
+// (docs/IMPLEMENTATION_PLAN.md Slice 11) — daily is frequent enough for a
+// day-granularity retention_days setting.
+const auditPurgeInterval = 24 * time.Hour
 
 func main() {
 	if err := run(); err != nil {
@@ -45,6 +52,8 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+
+	go auditPurgeLoop(ctx, db, logger)
 
 	handler := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
 	srv := &http.Server{
@@ -78,4 +87,32 @@ func run() error {
 	}
 	logger.Info("server stopped")
 	return nil
+}
+
+// auditPurgeLoop enforces the audit retention policy (internal/audit
+// Settings.RetentionDays) once at startup and then on auditPurgeInterval,
+// until ctx is cancelled.
+func auditPurgeLoop(ctx context.Context, db *database.DB, logger *slog.Logger) {
+	purge := func() {
+		n, err := audit.Purge(ctx, db.Pool)
+		if err != nil {
+			logger.Error("audit purge failed", "error", err)
+			return
+		}
+		if n > 0 {
+			logger.Info("audit purge", "deleted", n)
+		}
+	}
+
+	purge()
+	ticker := time.NewTicker(auditPurgeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			purge()
+		}
+	}
 }

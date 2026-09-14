@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
@@ -184,6 +185,7 @@ func createProjectHandler(db *database.DB, registry *runtimes.Registry) http.Han
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create project"})
 			return
 		}
+		audit.Record(r.Context(), db.Pool, audit.EventProjectCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "project", p.ID, map[string]any{"name": p.Name}, clientIP(r))
 		writeJSON(w, http.StatusCreated, toProjectResponse(p))
 	}
 }
@@ -309,13 +311,16 @@ func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update project"})
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventProjectUpdated, audit.Actor{UserID: user.ID, Email: user.Email}, "project", p.ID, map[string]any{"name": p.Name}, clientIP(r))
 		writeJSON(w, http.StatusOK, toProjectResponse(p))
 	}
 }
 
 func deleteProjectHandler(db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if _, ok := authorizedProject(w, r, db, r.PathValue("projectID")); !ok {
+		existing, ok := authorizedProject(w, r, db, r.PathValue("projectID"))
+		if !ok {
 			return
 		}
 
@@ -328,6 +333,8 @@ func deleteProjectHandler(db *database.DB) http.HandlerFunc {
 			writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventProjectDeleted, audit.Actor{UserID: user.ID, Email: user.Email}, "project", existing.ID, map[string]any{"name": existing.Name}, clientIP(r))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

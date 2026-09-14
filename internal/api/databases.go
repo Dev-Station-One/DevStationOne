@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/dbconnections"
 	"devstationone/internal/projects"
@@ -129,6 +130,7 @@ func createDatabaseConnectionHandler(db *database.DB, key []byte) http.HandlerFu
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create database connection"})
 			return
 		}
+		audit.Record(r.Context(), db.Pool, audit.EventDatabaseConnectionCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "database_connection", c.ID, map[string]any{"name": c.Name, "project_id": project.ID}, clientIP(r))
 		writeJSON(w, http.StatusCreated, toDatabaseConnectionResponse(c))
 	}
 }
@@ -262,6 +264,8 @@ func patchDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registry
 		if p, err := projects.Get(r.Context(), db.Pool, existing.ProjectID); err == nil {
 			invalidateRuntimeCache(registry, p.RuntimeID, c.ID)
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabaseConnectionUpdated, audit.Actor{UserID: user.ID, Email: user.Email}, "database_connection", c.ID, map[string]any{"name": c.Name, "project_id": existing.ProjectID}, clientIP(r))
 		writeJSON(w, http.StatusOK, toDatabaseConnectionResponse(c))
 	}
 }
@@ -284,6 +288,8 @@ func deleteDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registr
 		if p, err := projects.Get(r.Context(), db.Pool, existing.ProjectID); err == nil {
 			invalidateRuntimeCache(registry, p.RuntimeID, existing.ID)
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabaseConnectionDeleted, audit.Actor{UserID: user.ID, Email: user.Email}, "database_connection", existing.ID, map[string]any{"name": existing.Name, "project_id": existing.ProjectID}, clientIP(r))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -636,6 +642,8 @@ func createPrincipalHandler(db *database.DB, registry *runtimes.Registry, key []
 		if !ok {
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabasePrincipalCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "database_principal", req.Name, map[string]any{"connection_id": c.ID}, clientIP(r))
 		w.WriteHeader(http.StatusCreated)
 	}
 }
@@ -655,6 +663,8 @@ func deletePrincipalHandler(db *database.DB, registry *runtimes.Registry, key []
 		if !ok {
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabasePrincipalDeleted, audit.Actor{UserID: user.ID, Email: user.Email}, "database_principal", r.PathValue("principal"), map[string]any{"connection_id": c.ID}, clientIP(r))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -688,6 +698,8 @@ func setPrincipalPasswordHandler(db *database.DB, registry *runtimes.Registry, k
 		if !ok {
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabasePrincipalPasswordChanged, audit.Actor{UserID: user.ID, Email: user.Email}, "database_principal", r.PathValue("principal"), map[string]any{"connection_id": c.ID}, clientIP(r))
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
 }
@@ -745,6 +757,8 @@ func grantPrivilegeHandler(db *database.DB, registry *runtimes.Registry, key []b
 		if !ok {
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabaseGrantGranted, audit.Actor{UserID: user.ID, Email: user.Email}, "database_principal", r.PathValue("principal"), map[string]any{"connection_id": c.ID, "privilege": req.Privilege, "schema": req.Schema, "table": req.Table}, clientIP(r))
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
 }
@@ -774,6 +788,8 @@ func revokePrivilegeHandler(db *database.DB, registry *runtimes.Registry, key []
 		if !ok {
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventDatabaseGrantRevoked, audit.Actor{UserID: user.ID, Email: user.Email}, "database_principal", r.PathValue("principal"), map[string]any{"connection_id": c.ID, "privilege": req.Privilege, "schema": req.Schema, "table": req.Table}, clientIP(r))
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 	}
 }

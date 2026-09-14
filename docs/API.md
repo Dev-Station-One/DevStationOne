@@ -502,6 +502,63 @@ Response shape for every unit-returning endpoint:
 `enabled` is `"enabled"`, `"disabled"`, `"static"` (has no `[Install]`
 section — enable/disable are meaningless for it), or `"unknown"`.
 
+## Audit
+
+```text
+GET /api/v1/audit
+GET /api/v1/audit/settings
+PUT /api/v1/audit/settings
+```
+
+Both require an administrator session (`requireAdmin`) — the audit log is a
+system-wide security log, not scoped to a Project, so ordinary Project
+ownership authorization doesn't apply (ADR-025).
+
+`GET /api/v1/audit` lists recorded events, most recent first:
+```json
+{
+  "events": [
+    {
+      "id": "...",
+      "occurred_at": "2026-01-01T00:00:00Z",
+      "event_type": "project.created",
+      "actor_user_id": "...",
+      "actor_email": "dev@local.test",
+      "resource_type": "project",
+      "resource_id": "...",
+      "detail": {"name": "My App"},
+      "ip_address": "127.0.0.1"
+    }
+  ],
+  "total": 1
+}
+```
+Query parameters (all optional): `event_type`, `actor_user_id`,
+`resource_type` (exact match), `since`/`until` (RFC3339, inclusive),
+`limit` (default 100, capped at 500), `offset`. `total` reflects the filter
+ignoring `limit`/`offset`, for pagination.
+
+`actor_user_id` is `null` for an event with no authenticated actor (a failed
+login attempt) — `actor_email` still carries the attempted email so
+repeated-failure monitoring doesn't need a user record. A referenced user
+can later be deleted; `actor_user_id` becomes `null` (`ON DELETE SET NULL`)
+but `actor_email` (captured at event time) still identifies who it was.
+
+Recorded event types — authentication, runtime registration/revocation,
+project changes, terminal session lifecycle, database connection/principal/
+grant changes, service actions, and privileged filesystem operations
+(docs/SECURITY.md "Audit") — are the `audit.Event*` constants in
+`internal/audit/audit.go`. Recording is best-effort: a write failure is
+logged and never blocks the action it describes.
+
+`GET`/`PUT /api/v1/audit/settings` read/write the retention policy:
+```json
+{"retention_days": 90, "updated_at": "2026-01-01T00:00:00Z"}
+```
+`retention_days <= 0` means keep events forever. A daily background job on
+the Control Server (`cmd/devstationone-server` `auditPurgeLoop`) deletes
+events older than the policy; it also runs once at startup.
+
 ## Errors
 
 Use consistent machine-readable errors with:

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
@@ -183,6 +184,7 @@ func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up session"})
 			return
 		}
+		audit.Record(ctx, db.Pool, audit.EventSessionCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "session", final.ID, map[string]any{"project_id": project.ID, "name": final.Name}, clientIP(r))
 		writeJSON(w, http.StatusCreated, toTermSessionResponse(final))
 	}
 }
@@ -237,6 +239,8 @@ func deleteTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to close session"})
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventSessionTerminated, audit.Actor{UserID: user.ID, Email: user.Email}, "session", existing.ID, map[string]any{"project_id": project.ID, "name": existing.Name}, clientIP(r))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

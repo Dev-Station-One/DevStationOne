@@ -122,6 +122,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants", requireSession(db, grantPrivilegeHandler(db, registry, dbEncryptionKey)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants/revoke", requireSession(db, revokePrivilegeHandler(db, registry, dbEncryptionKey)))
 
+	mux.HandleFunc("GET /api/v1/audit", requireAdmin(db, listAuditEventsHandler(db)))
+	mux.HandleFunc("GET /api/v1/audit/settings", requireAdmin(db, getAuditSettingsHandler(db)))
+	mux.HandleFunc("PUT /api/v1/audit/settings", requireAdmin(db, updateAuditSettingsHandler(db)))
+
 	// StripPrefix: FileServer maps the full URL path under the root dir, so
 	// /assets/x must lose the /assets/ prefix before hitting http.Dir.
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir("assets"))))

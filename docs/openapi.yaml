@@ -2488,6 +2488,117 @@ paths:
           description: The project's runtime is not currently connected
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/audit:
+    get:
+      summary: List recorded audit events
+      description: Administrator-only system-wide security log (docs/SECURITY.md "Audit"). Most recent first.
+      tags: [Audit]
+      operationId: listAuditEvents
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: event_type
+          in: query
+          schema:
+            type: string
+        - name: actor_user_id
+          in: query
+          schema:
+            type: string
+        - name: resource_type
+          in: query
+          schema:
+            type: string
+        - name: since
+          in: query
+          description: RFC3339, inclusive.
+          schema:
+            type: string
+            format: date-time
+        - name: until
+          in: query
+          description: RFC3339, inclusive.
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Default 100, capped at 500.
+          schema:
+            type: integer
+        - name: offset
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Matching events, and the total count ignoring limit/offset
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [events, total]
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
+                  total:
+                    type: integer
+        "400":
+          description: since/until not RFC3339
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+  /api/v1/audit/settings:
+    get:
+      summary: Get the audit retention policy
+      tags: [Audit]
+      operationId: getAuditSettings
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Current retention policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditSettings"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+    put:
+      summary: Update the audit retention policy
+      tags: [Audit]
+      operationId: updateAuditSettings
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [retention_days]
+              properties:
+                retention_days:
+                  type: integer
+                  description: "<= 0 means keep events forever."
+      responses:
+        "200":
+          description: Updated retention policy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditSettings"
+        "400":
+          description: Invalid request body
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
 components:
   securitySchemes:
     cookieAuth:
@@ -2957,5 +3068,39 @@ components:
           type: string
           description: POSIX mode string, e.g. "-rw-r--r--"
         mtime:
+          type: string
+          format: date-time
+    AuditEvent:
+      type: object
+      description: One recorded audit event (docs/API.md "Audit"). actor_user_id is null for an event with no authenticated actor (e.g. a failed login) or once the referenced user is later deleted; actor_email is captured at event time and stays even then.
+      required: [id, occurred_at, event_type, actor_email, resource_type, resource_id, detail, ip_address]
+      properties:
+        id:
+          type: string
+        occurred_at:
+          type: string
+          format: date-time
+        event_type:
+          type: string
+        actor_user_id:
+          type: [string, "null"]
+        actor_email:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        detail:
+          type: object
+        ip_address:
+          type: string
+    AuditSettings:
+      type: object
+      required: [retention_days, updated_at]
+      properties:
+        retention_days:
+          type: integer
+          description: "<= 0 means keep events forever."
+        updated_at:
           type: string
           format: date-time

@@ -68,6 +68,15 @@
         + '<i class="fa-solid ' + it.icon + '" aria-hidden="true"></i> '
         + '<span class="nav-link-title">' + it.label + '</span></a></li>';
     }).join('');
+    var systemItems = [
+      { id: 'activity', href: '/activity.html', icon: 'fa-list-check', label: 'Activity' }
+    ];
+    var systemLinks = systemItems.map(function (it) {
+      return '<li class="nav-item' + (it.id === active ? ' active' : '') + '">'
+        + '<a class="nav-link" href="' + it.href + '">'
+        + '<i class="fa-solid ' + it.icon + '" aria-hidden="true"></i> '
+        + '<span class="nav-link-title">' + it.label + '</span></a></li>';
+    }).join('');
     host.innerHTML = '<div class="container-fluid">'
       + '<button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#sidebar-menu" aria-controls="sidebar-menu" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>'
       + '<h1 class="navbar-brand d-flex align-items-center"><a href="/">'
@@ -76,6 +85,8 @@
       + '<div class="collapse navbar-collapse" id="sidebar-menu"><ul class="navbar-nav pt-lg-3">'
       + '<li class="nav-item"><div class="ds-nav-title text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">Workspace</div></li>'
       + links
+      + '<li class="nav-item"><div class="ds-nav-title text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>'
+      + systemLinks
       + '</ul></div></div>';
   }
 

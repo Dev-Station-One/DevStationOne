@@ -293,6 +293,27 @@ Deliver:
 - retention policy/configuration
 - authorization
 
+**Status: Complete.** `audit_events`/`audit_settings` tables, `internal/audit`
+(`Record`/`List`/`Filter`/`GetSettings`/`UpdateSettings`/`Purge`), two new API
+endpoints (`GET /api/v1/audit`, `GET`/`PUT /api/v1/audit/settings`, both
+admin-only — ADR-025), and an Activity page (`web/static/activity.html`,
+sidebar SYSTEM section) with filters (event type/actor/resource/date range),
+pagination, and a retention-days setting. Event capture covers every
+category in docs/SECURITY.md "Audit" (authentication, runtime registration/
+revocation, project changes, session lifecycle, database connection/
+principal/grant changes, service actions, privileged filesystem operations)
+plus database principal/grant changes (Slice 10), which SECURITY.md's list
+predates — see ADR-025. Recording is best-effort and never blocks the action
+it describes. Retention is enforced by a daily background job
+(`cmd/devstationone-server` `auditPurgeLoop`), also run once at startup;
+`retention_days <= 0` keeps events forever.
+
+Verified with real-Postgres tests (`internal/audit/audit_test.go`:
+record/list/filter, settings, purge; `internal/api/audit_test.go`: admin-only
+enforcement, event capture from real requests, filtering, settings) and a
+real browser smoke test (login, filter by event type, save/restore
+retention policy, sidebar navigation) against the dev Control Server.
+
 ## Slice 12 — Production hardening
 
 Deliver:

@@ -28,6 +28,9 @@ func testDB(t *testing.T) *database.DB {
 	if _, err := db.Pool.Exec(context.Background(), "TRUNCATE projects, runtimes, sessions, users CASCADE"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
+	if _, err := db.Pool.Exec(context.Background(), "UPDATE audit_settings SET retention_days = 90 WHERE id = 1"); err != nil {
+		t.Fatalf("reset audit_settings: %v", err)
+	}
 	t.Cleanup(db.Close)
 	return db
 }

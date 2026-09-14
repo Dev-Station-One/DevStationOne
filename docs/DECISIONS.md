@@ -615,3 +615,67 @@ privilege keyword above, just for a different reason (DDL, not a keyword
 enum). `sqlLiteral` escapes by doubling embedded `'`, the standard SQL
 string-literal rule, shared by all three engines' implementations rather
 than three near-identical copies.
+
+## ADR-025 — Slice 11: best-effort recording at the call site, no runtime protocol, and principal/grant events added beyond SECURITY.md's list
+
+Date: 2026-09-14
+
+**Decision.** `internal/audit.Record` is called directly from each Control
+Server HTTP handler that performs a security-relevant action, right after
+that action succeeds — there is no event bus, no outbox table, and no
+runtime-side involvement. Every action this slice audits (auth, runtimes,
+projects, sessions, database connections/principals/grants, services,
+files) is already resolved entirely on the Control Server by the time the
+handler knows the outcome, so there is nothing for `docs/PROTOCOL.md` to
+carry; a runtime-side action (e.g. a PTY actually exiting) was deliberately
+left out of scope rather than inventing a new protocol message for it.
+
+**Why best-effort, not transactional with the action it describes.**
+`Record` swallows its own error (logged via `slog.Default()`, doesn't
+return one) rather than wrapping the triggering database write in a
+transaction with the audit insert, or failing the request when the insert
+fails. `docs/SECURITY.md` requires the *action* (login, revoke, delete...)
+to be safe and correct; making that action's success conditional on the
+audit log's availability would let an audit-table outage (e.g. a botched
+manual `DELETE` while debugging) take down login or project management with
+it. The failure mode this accepts — a gap in the log instead of a rejected
+request — matches the existing precedent for non-critical side effects in
+this codebase (`invalidateRuntimeCache`, `sessions.MarkFailed` are both
+fire-and-forget for the same reason).
+
+**Why principal/grant events (`database_principal.*`, `database_grant.*`)
+are recorded even though `docs/SECURITY.md`'s "Audit" list only names
+"database connection changes".** That list was written before Slice 10
+added principal/grant management; a database user creation or privilege
+grant is at least as security-relevant as a connection metadata edit, and
+leaving it unaudited would be a silent gap a reviewer would flag. Recorded
+instead of skipped; `docs/SECURITY.md` is updated to name it explicitly
+rather than leaving the API as the only source of truth.
+
+**Why filtering is structured query parameters, not the raw-SQL `WHERE`
+pattern Slice 9 uses for the data browser/SQL editor.** `internal/audit.List`
+takes a typed `Filter{EventType, ActorUserID, ResourceType, Since, Until,
+Limit, Offset}`, each bound as its own parameter in a fixed query — unlike
+`dbconnectors`' data browser, arbitrary-SQL execution is not this
+resource's trust model (ADR-021), and every real dimension an admin filters
+audit events by is already a fixed, known set of columns.
+
+**Why retention is a background loop in `cmd/devstationone-server`, not a
+`cron`/systemd-timer unit or a lazy per-write check.** A daily
+`time.Ticker` started alongside the HTTP server (`auditPurgeLoop`) matches
+this binary's existing pattern of self-contained background work (the
+runtime connection registry's heartbeat handling lives the same way) rather
+than depending on OS-level scheduling the Control Server doesn't otherwise
+require. It also runs once at startup so a policy change or a missed day
+doesn't wait a full interval to take effect. A per-write purge was rejected
+as needless work on every hot-path audit insert for a policy that only
+needs day-granularity enforcement.
+
+**Why `actor_email` is stored redundantly alongside `actor_user_id`.**
+`actor_user_id` is `ON DELETE SET NULL` — if a user is ever removed, the
+historical record of who performed an action would otherwise become
+anonymous. `actor_email` is captured at event time and never updated, so a
+security review of old events still shows who did what even after the
+account is gone. It's also the only actor identity available at all for a
+failed login (`auth.login_failed`), which by definition has no
+authenticated user to reference.

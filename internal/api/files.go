@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/filesystem"
 	"devstationone/internal/protocol"
@@ -121,6 +122,17 @@ func decodeFileBody(w http.ResponseWriter, r *http.Request) (from, to string, ok
 	}
 }
 
+// recordFileAudit records a privileged filesystem operation (docs/SECURITY.md
+// "Audit"). extra is merged into the detail alongside project_id and path.
+func recordFileAudit(r *http.Request, db *database.DB, eventType, p string, extra map[string]any) {
+	user, _ := userFromContext(r.Context())
+	detail := map[string]any{"project_id": r.PathValue("projectID"), "path": p}
+	for k, v := range extra {
+		detail[k] = v
+	}
+	audit.Record(r.Context(), db.Pool, eventType, audit.Actor{UserID: user.ID, Email: user.Email}, "file", p, detail, clientIP(r))
+}
+
 // listFilesHandler GET .../files?path= — list a directory.
 func listFilesHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -224,6 +236,7 @@ func writeFileHandler(db *database.DB, registry *runtimes.Registry) http.Handler
 		if _, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{Action: "write", Root: root, Path: p, Data: data}); !ok {
 			return
 		}
+		recordFileAudit(r, db, audit.EventFileWritten, p, nil)
 		writeJSON(w, http.StatusOK, map[string]string{"status": "written"})
 	}
 }
@@ -261,6 +274,11 @@ func fileMutateHandler(db *database.DB, registry *runtimes.Registry, action stri
 		if _, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{Action: action, Root: root, Path: p}); !ok {
 			return
 		}
+		eventType := audit.EventFileMkdir
+		if action == "create" {
+			eventType = audit.EventFileCreated
+		}
+		recordFileAudit(r, db, eventType, p, nil)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -279,6 +297,7 @@ func fileTransferHandler(db *database.DB, registry *runtimes.Registry, action st
 		if _, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{Action: action, Root: root, Path: from, To: to}); !ok {
 			return
 		}
+		recordFileAudit(r, db, audit.EventFileTransferred, from, map[string]any{"action": action, "to": to})
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -302,6 +321,7 @@ func deleteFileHandler(db *database.DB, registry *runtimes.Registry) http.Handle
 		if _, ok := fileCommand(w, r, conn, protocol.FileCommandPayload{Action: "delete", Root: root, Path: p}); !ok {
 			return
 		}
+		recordFileAudit(r, db, audit.EventFileDeleted, p, nil)
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -83,10 +83,16 @@ Audit security-relevant events:
 - project changes
 - session creation/termination
 - database connection changes
+- database principal/grant changes
 - service changes
 - privileged filesystem operations
 
 Do not store raw terminal streams in audit logs.
+
+Retention is configurable (`internal/audit` `Settings.RetentionDays`,
+`GET`/`PUT /api/v1/audit/settings`, admin-only); a daily background job
+purges events older than the policy. Recording is best-effort and never
+blocks the action it describes (ADR-025).
 
 ## Secrets
 

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/database"
 	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
@@ -129,6 +130,8 @@ func serviceActionHandler(db *database.DB, registry *runtimes.Registry, action s
 			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "runtime returned no service info"})
 			return
 		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventServiceAction, audit.Actor{UserID: user.ID, Email: user.Email}, "service", unit, map[string]any{"action": action, "project_id": r.PathValue("projectID")}, clientIP(r))
 		writeJSON(w, http.StatusOK, result.Service)
 	}
 }
