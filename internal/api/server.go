@@ -10,6 +10,7 @@ import (
 
 	"devstationone/internal/audit"
 	"devstationone/internal/database"
+	"devstationone/internal/editor"
 	"devstationone/internal/events"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
@@ -23,11 +24,12 @@ import (
 // instance.
 // dbEncryptionKey decrypts stored database connection credentials
 // (docs/SECURITY.md) — see internal/dbconnections.
-func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) (http.Handler, *sessions.Hub, *events.Bus) {
+func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub) {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
 	bus := events.NewBus()
+	editorHub := editor.NewHub()
 
 	// Per-IP rate limits (docs/SECURITY.md). One limiter instance per
 	// server process (not a package-level var): each Control Server, and
@@ -50,7 +52,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/reactivate", requireAdmin(db, reactivateRuntimeHandler(db)))
-	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, hub, bus, logger))
+	mux.HandleFunc("GET /api/v1/runtimes/connect", runtimeConnectHandler(db, registry, hub, bus, editorHub, logger))
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse", requireSession(db, browseRuntimeHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse/search", requireSession(db, browseSearchHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/browse/mkdir", requireSession(db, browseMkdirHandler(db, registry)))
@@ -63,6 +65,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/sessions", requireSession(db, listTermSessionsHandler(db)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/sessions", requireSession(db, createTermSessionHandler(db, registry, hub)))
+
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/editor/stream", requireSession(db, editorStreamHandler(db, registry, editorHub, logger)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/editor/state", requireSession(db, getEditorStateHandler(db)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/editor/state", requireSession(db, putEditorStateHandler(db)))
 
 	mux.HandleFunc("GET /api/v1/sessions/{sessionID}", requireSession(db, getTermSessionHandler(db)))
 	mux.HandleFunc("PATCH /api/v1/sessions/{sessionID}", requireSession(db, patchTermSessionHandler(db)))
@@ -178,5 +184,5 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	handler = csrfProtect(handler)
 	handler = securityHeaders(handler)
 	handler = withRequestLogging(logger, handler)
-	return handler, hub, bus
+	return handler, hub, bus, editorHub
 }

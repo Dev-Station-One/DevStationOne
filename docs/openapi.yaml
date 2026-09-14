@@ -534,6 +534,95 @@ paths:
           description: Not authenticated
         "404":
           description: Project not found, or not owned by the current user
+  /api/v1/projects/{projectID}/editor/state:
+    get:
+      summary: Get the signed-in user's stored editor tab state
+      tags: [Editor]
+      operationId: getProjectEditorState
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The stored state, or an empty object when nothing is stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  state:
+                    type: object
+                    additionalProperties: true
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found or not owned by the caller
+    put:
+      summary: Store the signed-in user's editor tab state (opaque JSON object)
+      tags: [Editor]
+      operationId: putProjectEditorState
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [state]
+              properties:
+                state:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "204":
+          description: Stored
+        "400":
+          description: Invalid JSON
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found or not owned by the caller
+        "413":
+          description: State exceeds 256 KiB
+  /api/v1/projects/{projectID}/editor/stream:
+    get:
+      summary: Live editing stream (WebSocket)
+      description: |
+        Cookie-authenticated WebSocket for the Code tab's editor: browser
+        sends {open|watch|save} messages, server replies {content|saved|
+        stale|deleted|error} and pushes external changes. Message shapes in
+        docs/API.md "Editor (Code tab)" and docs/PROTOCOL.md.
+      tags: [Editor]
+      operationId: openProjectEditorStream
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switched to the editor stream protocol
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found or not owned by the caller
+        "409":
+          description: Runtime is offline
   /api/v1/projects/{projectID}/sessions:
     get:
       summary: List a project's terminal sessions
@@ -3449,6 +3538,10 @@ components:
         rows:
           type: integer
           default: 24
+    EditorState:
+      type: object
+      description: Opaque per-user+project editor tab state (open tabs, active tab, cursor offsets). The server stores it verbatim; the browser owns the shape.
+      additionalProperties: true
     TerminalSession:
       type: object
       description: |

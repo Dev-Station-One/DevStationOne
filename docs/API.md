@@ -20,6 +20,7 @@ docs/openapi.yaml
 /projects
 /sessions
 /events
+/editor
 /files
 /databases
 /services
@@ -263,6 +264,41 @@ never render as a document on the DevStationOne origin.
 runtime never runs as root (ADR-014), and POSIX only lets root (or
 `CAP_CHOWN`) reassign a file's owning user. `group` succeeds for any group
 the runtime's OS user belongs to. See ADR-032.
+
+## Editor (Code tab)
+
+The Code tab's live editing uses a project-scoped WebSocket stream plus a
+REST pair for the signed-in user's persisted editor tab state.
+
+| endpoint | purpose |
+|---|---|
+| stream | `GET /api/v1/projects/{projectID}/editor/stream` — cookie-authenticated WebSocket (same authorization as the files endpoints: session + the project's runtime online) |
+| get state | `GET /api/v1/projects/{projectID}/editor/state` → `{"state": {...}}` (`{}` when nothing stored) |
+| put state | `PUT /api/v1/projects/{projectID}/editor/state` ← `{"state": {...}}` — opaque JSON object, 256 KiB cap, 204 |
+
+Browser→server stream messages (JSON text frames):
+```text
+{"type":"open","path":"src/main.go"}
+{"type":"watch","paths":["src/main.go","app.js"]}
+{"type":"save","path":"src/main.go","content":"<whole buffer>","base_mtime":"RFC3339","base_size":1234}
+```
+
+Server→browser stream messages:
+```text
+{"type":"content","path","mtime","size","data"}   open reply or external-change push
+{"type":"saved","path","mtime","size"}            clean save
+{"type":"stale","path","mtime","size","data"}     save whose base fingerprint no longer matched; `data` is the overwritten on-disk content
+{"type":"deleted","path"}                          a watched file vanished
+{"type":"error","path","error"}                    open/binary/oversize/save failure
+```
+
+Semantics (ADR-033, details in docs/PROTOCOL.md): the client autosaves the
+whole buffer ~300ms after the last keystroke; saves are last-write-wins
+with the pre-write content returned on a stale save; external changes to
+open files arrive as whole-file `content` pushes (detected by the runtime's
+1-second mtime+size poll). Files above 2 MiB (`MaxEditorFileBytes`) and
+binary files are refused with an `error` message — open them from the
+Files tab, which carries up to 24 MiB.
 
 ## Git
 

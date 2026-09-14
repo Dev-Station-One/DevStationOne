@@ -210,6 +210,28 @@ envelopes, capped at 24 MB per file (PROTOCOL.md).
 
 Both Control Server authorization and runtime containment checks are required.
 
+## Code tab (live editing)
+
+The Code tab edits files live over a project-scoped WebSocket
+(`internal/api/editor_ws.go`). Browser saves and runtime change pushes both
+carry whole files (ADR-033): the runtime's edit manager
+(`internal/agent/edit_manager.go`) polls mtime+size on the project's open
+file set once per second — no inotify — and pushes `code.file.changed`;
+the Control Server resolves the project from the runtime+root pair, fetches
+the content once via a `code.command` open RPC, and fans it out through
+`internal/editor.Hub` to every subscribed editor stream of that project
+(`internal/api/runtime_ws.go`). The fan-out handler runs in its own
+goroutine because it issues a correlated RPC back to the same runtime,
+whose reply only the runtime connection's read loop can resolve.
+
+Saves are last-write-wins: the runtime compares the client's base
+mtime/size fingerprint against the disk, and on a mismatch returns the
+pre-write content with `stale: true` after writing anyway. Editor file
+sizes are capped at 2 MiB (`protocol.MaxEditorFileBytes`), far below the
+Files REST path's 24 MB, because autosave puts the whole buffer on the
+wire per debounce tick. Open-tab state persists per user+project in
+`project_editor_state` (one opaque `jsonb` row, `internal/editor`).
+
 ## Databases
 
 Database connections execute on the runtime.

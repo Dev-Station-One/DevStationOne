@@ -210,14 +210,18 @@ func (m *editManager) replaceWatch(root string, paths []string) (protocol.CodeRe
 	return protocol.CodeResultPayload{}, nil
 }
 
-// removeWatch drops paths from a root's watched set, dropping the root when
-// nothing is left.
+// removeWatch drops paths from a root's watched set — an empty Paths list
+// clears the root's whole set — dropping the root when nothing is left.
 func (m *editManager) removeWatch(root string, paths []string) (protocol.CodeResultPayload, error) {
 	if root == "" {
 		return protocol.CodeResultPayload{}, fmt.Errorf("unwatch requires root")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if len(paths) == 0 {
+		delete(m.watched, root)
+		return protocol.CodeResultPayload{}, nil
+	}
 	for _, p := range paths {
 		delete(m.watched[root], p)
 	}

@@ -64,7 +64,7 @@ func run() error {
 
 	go auditPurgeLoop(ctx, db, logger)
 
-	handler, hub, bus := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
+	handler, hub, bus, _ := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
 	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
 	srv := &http.Server{
 		Addr:         cfg.Addr,

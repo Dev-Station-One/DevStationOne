@@ -430,8 +430,9 @@ correlated request/response machinery unchanged:
     files; one idempotent message per change). Paths whose stat the
     runtime already knows keep it, so a retained file is not re-pushed;
     newly watched paths are seeded silently on the first poll tick.
-  - `unwatch` — remove `paths` from the root's set (roots with nothing
-    left are dropped).
+  - `unwatch` — remove `paths` from the root's set — an empty `paths`
+    list clears the root's whole set (roots with nothing left are
+    dropped).
 - `code.result` / `code.error` (runtime→server): the same correlation shape
   as `file.result`/`file.error` (`code.error` reuses `ServiceErrorPayload`).
 
@@ -445,6 +446,14 @@ correlated request/response machinery unchanged:
   watched file pushes `{deleted: true}` once and stays in the set (it may
   reappear). The Control Server fans these out to the project's editor
   stream subscribers as `content`/`deleted` messages.
+
+**Browser-side stream** (`WSS /api/v1/projects/{projectID}/editor/stream`,
+cookie-authenticated; shapes in `docs/API.md`): the browser sends
+`{"type":"open"|"watch"|"save", ...}`; the server replies per-connection
+(`content` for an open, `saved`/`stale` for a save, `error` for a
+refusal/failure) and fans runtime pushes out to every subscribed
+connection of the project as `content`/`deleted`/`error`. Tab-state
+persistence goes over the REST pair (`editor/state`), not this stream.
 
 Accepted semantics (ADR-033): concurrent editing of the same file is
 last-write-wins — the side whose buffer loses gets the winner's content in

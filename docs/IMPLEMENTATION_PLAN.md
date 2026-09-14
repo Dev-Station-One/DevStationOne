@@ -758,6 +758,56 @@ stripping, Edited markers. Commit-picker live list requires a runtime
 with the new `log` action (this machine's dev runtime updated; other
 runtimes need a runtime-binary update).
 
+## Slice 19 — Code tab (VS Code-like editor)
+
+**Goal**: a `Code` tab on the Project workspace — project-rooted lazy file
+tree with a CRUD context menu, CodeMirror 6 tabbed editor with built-in
+completion, live whole-file sync over a project-scoped WebSocket (debounced
+autosave, external-change push), server-persisted open-tab state, and
+account-level font preferences for terminal + editor. Requirements:
+`docs/CODE_TAB_REQUIREMENTS.md`.
+
+**Design**:
+
+- Protocol (Stage 1, complete): `code.command`/`code.result`/`code.error`
+  (open/save/watch/unwatch) plus the `code.file.changed` runtime push, on
+  the existing control-plane connection via a new `editManager`
+  (`internal/agent/edit_manager.go`). 1-second stat poll (no inotify),
+  last-write-wins saves returning pre-write content on a stale base
+  fingerprint, 2 MiB editor cap (`protocol.MaxEditorFileBytes`). ADR-033.
+- Control server (Stage 2): `internal/editor` (project-keyed fan-out hub +
+  `project_editor_state` store), browser stream
+  `GET /api/v1/projects/{projectID}/editor/stream`
+  (`internal/api/editor_ws.go`), opaque editor tab-state REST pair
+  (`GET/PUT .../editor/state`, 256 KiB cap), migration
+  `0013_project_editor_state`, `projects.GetByRuntimeRoot` to resolve
+  runtime+root to a project. The push fan-out handler runs in its own
+  goroutine — it issues a correlated open RPC back to the same runtime,
+  whose reply only the runtime connection's read loop can resolve.
+- Font preferences (Stage 3): migration `0014_user_editor_font`
+  (`users.editor_font`, `users.font_size`), validation in `internal/auth`,
+  preferences PUT gains `editor_font`/`font_size`, three self-hosted woff2
+  faces (Fira Code, Cascadia Code, Source Code Pro) in
+  `web/static/vendor/fonts/`, shared `web/static/css/fonts.css`,
+  account-UI selects.
+- Frontend (Stage 4): CM6 IIFE bundle built via esbuild and committed under
+  `web/static/vendor/codemirror6/`; `web/static/js/filetree.js` extracted
+  from `dialogs.js`'s directory picker; `web/static/js/editor.js` pane
+  (tabs, dirty dot, 300ms debounced save, conflict prompts, always-dark
+  theme, tab-state restore); `Code` app tab in `project.html`; Files-tab
+  deep-link.
+
+**Tests**: runtime-side edit manager unit tests
+(`internal/agent/edit_manager_test.go`); hub union/drop/publish tests
+(`internal/editor/hub_test.go`); end-to-end editor stream integration
+tests against the in-process fake runtime
+(`internal/api/editor_ws_test.go`: open/watch/push/save/stale/deleted,
+two-connection fan-out, binary refusal, project authorization, state
+round-trip + size cap). Frontend behavior verified by a manual smoke of
+the requirements doc's acceptance criteria (no JS test infra in this repo).
+
+**Status: In Progress.** Stage 1 and Stage 2 complete; Stages 3–4 pending.
+
 ## Future, explicitly not MVP
 
 - Android client

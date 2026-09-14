@@ -118,6 +118,21 @@ func Get(ctx context.Context, pool *pgxpool.Pool, id string) (Project, error) {
 	return p, nil
 }
 
+// GetByRuntimeRoot looks up the project bound to runtimeID's root working
+// directory. The Code tab's runtime-side file-change pushes carry only the
+// runtime ID and absolute root, so the Control Server maps that pair back to
+// the project whose editor streams the change belongs to.
+func GetByRuntimeRoot(ctx context.Context, pool *pgxpool.Pool, runtimeID, root string) (Project, error) {
+	p, err := scanProject(pool.QueryRow(ctx, `SELECT `+projectColumns+` FROM projects WHERE runtime_id = $1 AND working_directory = $2`, runtimeID, root))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Project{}, ErrNotFound
+	}
+	if err != nil {
+		return Project{}, err
+	}
+	return p, nil
+}
+
 // Update overwrites a project's fields and reports whether a matching row
 // was found.
 func Update(ctx context.Context, pool *pgxpool.Pool, id string, f Fields) (Project, error) {

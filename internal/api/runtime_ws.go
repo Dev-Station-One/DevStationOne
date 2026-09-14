@@ -15,6 +15,7 @@ import (
 
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
+	"devstationone/internal/editor"
 	"devstationone/internal/events"
 	"devstationone/internal/notifications"
 	"devstationone/internal/projects"
@@ -30,7 +31,7 @@ const heartbeatTimeout = 45 * time.Second
 // runtimeConnectHandler accepts the outbound WebSocket connection a
 // Development Runtime opens using its enrollment token as a bearer
 // credential.
-func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger) http.HandlerFunc {
+func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		if token == "" {
@@ -57,7 +58,7 @@ func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *se
 			return // Accept already wrote the HTTP error response.
 		}
 
-		handleRuntimeConnection(r.Context(), conn, db, registry, hub, bus, logger, rt)
+		handleRuntimeConnection(r.Context(), conn, db, registry, hub, bus, editorHub, logger, rt)
 	}
 }
 
@@ -184,7 +185,7 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 	}
 	// Every RPC error type carries the same {"error": ...} shape; see
 	// ServiceErrorPayload's reuse by file.error/db.error/git.error.
-	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError || env.Type == protocol.MessageDBError || env.Type == protocol.MessageGitError {
+	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError || env.Type == protocol.MessageDBError || env.Type == protocol.MessageGitError || env.Type == protocol.MessageCodeError {
 		var e protocol.ServiceErrorPayload
 		_ = json.Unmarshal(env.Payload, &e)
 		ch <- rpcResponse{err: errors.New(e.Error)}
@@ -194,7 +195,7 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 	return true
 }
 
-func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger, rt runtimes.Runtime) {
+func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logger *slog.Logger, rt runtimes.Runtime) {
 	defer conn.CloseNow()
 	// The control connection carries the largest legal envelopes, including
 	// file.command/file.result payloads transferring up to
@@ -264,13 +265,13 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 		if wc.tryResolve(env) {
 			continue
 		}
-		handleRuntimeEnvelope(ctx, env, db, hub, bus, logger, rt.ID)
+		handleRuntimeEnvelope(ctx, env, db, registry, hub, bus, editorHub, logger, rt.ID)
 	}
 }
 
 // handleRuntimeEnvelope dispatches one control-plane JSON message received
 // from a connected runtime.
-func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, hub *sessions.Hub, bus *events.Bus, logger *slog.Logger, runtimeID string) {
+func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logger *slog.Logger, runtimeID string) {
 	switch env.Type {
 	case protocol.MessageHeartbeat:
 		if err := runtimes.Heartbeat(ctx, db.Pool, runtimeID); err != nil {
@@ -326,5 +327,46 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 			return
 		}
 		hub.Discard(p.SessionID)
+
+	case protocol.MessageCodeFileChanged:
+		var p protocol.CodeFileChangedPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		// In its own goroutine: it issues a correlated open RPC back to this
+		// same runtime, whose reply only this read loop can resolve.
+		go handleCodeFileChanged(ctx, db, registry, editorHub, logger, runtimeID, p)
 	}
+}
+
+// handleCodeFileChanged fans one runtime-side file-change push out to the
+// project's subscribed editor streams: the change envelope carries only the
+// root and path, so the project (and its subscribers) are resolved here,
+// and the content is fetched once via a code.command open RPC and then
+// published to every subscriber.
+func handleCodeFileChanged(ctx context.Context, db *database.DB, registry *runtimes.Registry, editorHub *editor.Hub, logger *slog.Logger, runtimeID string, p protocol.CodeFileChangedPayload) {
+	logger.Info("dbg: code.file.changed received", "push", p)
+	logger.Info("dbg: resolve proj for push")
+	proj, err := projects.GetByRuntimeRoot(ctx, db.Pool, runtimeID, p.Root)
+	if err != nil {
+		// No editor subscribers exist for a project the pair doesn't resolve
+		// to; not even worth a warn for an unbound root.
+		logger.Debug("file change push: project resolve failed", "runtime_id", runtimeID, "root", p.Root, "error", err)
+		return
+	}
+	if p.Deleted {
+		editorHub.Publish(proj.ID, editor.Message{Type: "deleted", Path: p.Path})
+		return
+	}
+	conn, online := registry.Get(runtimeID)
+	if !online {
+		return
+	}
+	out := editorFetch(ctx, conn, p.Root, p.Path)
+	if out.Type == "error" {
+		logger.Warn("file change push: content fetch failed", "path", p.Path, "error", out.Error)
+		editorHub.Publish(proj.ID, editor.Message{Type: "error", Path: p.Path, Error: out.Error})
+		return
+	}
+	editorHub.Publish(proj.ID, editor.Message{Type: out.Type, Path: p.Path, MTime: out.MTime, Size: out.Size, Data: out.Data})
 }

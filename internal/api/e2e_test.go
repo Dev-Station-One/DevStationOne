@@ -54,7 +54,7 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
+	router, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
