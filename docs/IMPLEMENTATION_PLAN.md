@@ -1153,23 +1153,43 @@ real session close, real pre_restore snapshot) via a real working directory,
 and runtime-scoped services against a real `systemd --user` unit.
 
 **Smoke**: covered by the automated integration tests above (real dump/
-restore/archive/extract tools, no mocks) — MySQL/MariaDB and SQL Server
-backup/restore are implemented (native `mysqldump`/`mysql` and `sqlcmd
-BACKUP`/`RESTORE DATABASE`) but **not exercised by a passing automated test
-in this environment**: the dev machine's `mysqldump`/`mysql` binaries are
-MariaDB's client, incompatible with the test MySQL 8 server's
-`caching_sha2_password` auth plugin (a client/server tooling mismatch, not a
-code defect — confirmed by the same failure from the bare `mysql` CLI
-outside any DevStationOne code), and no local `sqlcmd`/MSSQL client was
-available to test against the SQL Server test container. A runtime host
-running its own real MySQL/MSSQL client tooling remains the deployment
-prerequisite for those two engines' backups, same pattern as ADR-040's
-Docker socket prerequisite; this is not yet independently verified. A live
-browser click-through against the dev instance is also outstanding.
+restore/archive/extract tools, no mocks), **plus a live browser
+click-through against the dev instance** (Playwright, `dev@local.test` on
+`devstationone-dev.service`) — Runtimes → Services modal against the real
+desktop's actual `systemd --user` instance (119 real units), and the
+project Backups tab + per-connection Backups toggle against the real
+"DevStation" project and its real PostgreSQL connection. Two real bugs
+surfaced by this and fixed in the same pass (not left as known
+limitations):
+- `services.ValidUnitName` rejected systemd's own C-style-escaped unit
+  names (backslash, e.g. `app-at\x2dspi\x2ddbus\x2dbus@autostart.service`)
+  — ordinary desktop-generated units couldn't fetch logs. Backslash added
+  to the allowed set (`internal/services/services.go`); regression test
+  added.
+- The Runtimes Services modal's status/enabled badges used solid Tabler
+  badge classes (`bg-success`/`bg-secondary`/...), which render with
+  invisible same-color-on-same-color text inside a SweetAlert2 popup
+  (the CSS variable they depend on isn't in scope there). Switched to the
+  `-lt` (light) badge variants, confirmed legible by screenshot.
+
+MySQL/MariaDB and SQL Server backup/restore are implemented (native
+`mysqldump`/`mysql` and `sqlcmd BACKUP`/`RESTORE DATABASE`) but **not
+exercised by a passing automated test in this environment**: the dev
+machine's `mysqldump`/`mysql` binaries are MariaDB's client, incompatible
+with the test MySQL 8 server's `caching_sha2_password` auth plugin (a
+client/server tooling mismatch, not a code defect — confirmed by the same
+failure from the bare `mysql` CLI outside any DevStationOne code), and no
+local `sqlcmd`/MSSQL client was available to test against the SQL Server
+test container. A runtime host running its own real MySQL/MSSQL client
+tooling remains the deployment prerequisite for those two engines'
+backups, same pattern as ADR-040's Docker socket prerequisite; this is
+not yet independently verified.
 
 **Status: Implementation complete; PostgreSQL, SQLite, and project backup/
-restore are verified end-to-end by real (non-mocked) automated tests, as is
-the runtime-services relocation. MySQL/MariaDB and SQL Server backup/restore
-code paths exist but are unverified in this environment (see Smoke note) —
-a real deployment should confirm compatible client tooling before relying
-on them. Browser smoke test not yet performed.**
+restore are verified end-to-end by real (non-mocked) automated tests and a
+live browser click-through against the dev instance, as is the
+runtime-services relocation (also click-through-verified, two real bugs
+found and fixed in the process). MySQL/MariaDB and SQL Server backup/
+restore code paths exist but are unverified in this environment (see Smoke
+note) — a real deployment should confirm compatible client tooling before
+relying on them.**

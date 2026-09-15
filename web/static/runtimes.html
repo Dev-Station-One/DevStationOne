@@ -192,16 +192,19 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
 
     // --- Services (ADR-043: runtime-level, not project-scoped) ---
 
+    // "-lt" (light) badge variants only — solid bg-* badges render with
+    // invisible gray-on-gray/gray-on-color text inside a SweetAlert2 popup
+    // (Tabler's solid-badge text color variable isn't in scope there).
     function activeStateBadgeClass(state) {
-      if (state === 'active') return 'bg-success';
-      if (state === 'failed') return 'bg-danger';
-      if (state === 'activating' || state === 'deactivating' || state === 'reloading') return 'bg-info';
-      return 'bg-secondary';
+      if (state === 'active') return 'bg-success-lt';
+      if (state === 'failed') return 'bg-danger-lt';
+      if (state === 'activating' || state === 'deactivating' || state === 'reloading') return 'bg-info-lt';
+      return 'bg-secondary-lt';
     }
 
     function enabledBadgeClass(state) {
-      if (state === 'enabled') return 'bg-success';
-      if (state === 'disabled') return 'bg-secondary';
+      if (state === 'enabled') return 'bg-success-lt';
+      if (state === 'disabled') return 'bg-secondary-lt';
       return 'bg-azure-lt';
     }
 

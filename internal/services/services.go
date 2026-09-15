@@ -18,7 +18,12 @@ import (
 // defense-in-depth (SECURITY.md): os/exec never invokes a shell, so
 // argument injection isn't possible by construction, but this rejects
 // nonsensical or unexpected input before it ever reaches systemctl.
-var unitNamePattern = regexp.MustCompile(`^[A-Za-z0-9:_.@-]+\.service$`)
+// Backslash is legal here (not a shell metacharacter risk, since there's no
+// shell) — systemd itself C-style-escapes forbidden bytes in a unit name
+// with it (systemd.unit(5)), e.g. "app-at\x2dspi\x2ddbus\x2dbus@autostart.
+// service" for a real user-session generated unit; rejecting it would make
+// ordinary desktop units unusable through this API.
+var unitNamePattern = regexp.MustCompile(`^[A-Za-z0-9:_.@\\-]+\.service$`)
 
 // ValidUnitName reports whether name is an acceptable systemd service unit
 // name. Exported so the Control Server can reject an obviously-bad unit

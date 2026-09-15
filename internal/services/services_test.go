@@ -167,7 +167,13 @@ func TestStatus_UnknownUnit(t *testing.T) {
 }
 
 func TestValidUnitName(t *testing.T) {
-	valid := []string{"dbus.service", "my-app.service", "app@instance.service", "a_b.c.service"}
+	valid := []string{
+		"dbus.service", "my-app.service", "app@instance.service", "a_b.c.service",
+		// A real systemd --user generated unit, C-style-escaped by systemd
+		// itself (systemd.unit(5)) — must be accepted, or ordinary desktop
+		// session units become unusable through this API.
+		`app-at\x2dspi\x2ddbus\x2dbus@autostart.service`,
+	}
 	for _, name := range valid {
 		if !ValidUnitName(name) {
 			t.Errorf("ValidUnitName(%q) = false, want true", name)
