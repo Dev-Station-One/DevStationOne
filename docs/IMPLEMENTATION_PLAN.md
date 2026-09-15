@@ -1045,3 +1045,21 @@ unknown/self target guards, per-resource subset transfer, bulk empty-array
 transfer, delete succeeds after transfer, 2 audit events.
 
 **Status: Complete.**
+
+## Slice 25 — Runtime deletion (ADR-039 addendum)
+
+**Goal**: a real delete path for runtime records — revoke's soft state left
+no permanent cleanup.
+
+**Design**: `DELETE /api/v1/runtimes/{runtimeID}` (requireAdmin):
+projects-referencing guard (400 with count), row + token hash removed,
+live agent connection dropped via `registry.Revoke`, audited
+`runtime.deleted`. UI: trash icon on every runtimes row; confirm text
+mentions the dropped connection when online.
+
+**Tests**: `TestRuntimeHTTP_Delete` (project guard, 403 non-admin, 404
+unknown, revoked-runtime delete, audit event) +
+`TestRuntimeHTTP_DeleteDropsLiveConnection` (fake agent online; after
+delete the metrics `runtime_connections` gauge reaches 0).
+
+**Status: Complete.**

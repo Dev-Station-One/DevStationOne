@@ -23,6 +23,7 @@ const (
 	EventLoginFailed    = "auth.login_failed"
 	EventLogout         = "auth.logout"
 
+	EventRuntimeDeleted     = "runtime.deleted"
 	EventRuntimeRegistered  = "runtime.registered"
 	EventRuntimeRevoked     = "runtime.revoked"
 	EventRuntimeReactivated = "runtime.reactivated"

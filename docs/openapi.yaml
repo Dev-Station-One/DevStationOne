@@ -458,6 +458,35 @@ paths:
           description: Administrator access required
         "404":
           description: Runtime not found
+  /api/v1/runtimes/{runtimeID}:
+    delete:
+      summary: Delete a runtime record entirely (administrator only)
+      description: >
+        Unlike revoke, this is permanent: the record and its enrollment
+        token's hash are removed and a live agent's connection is dropped
+        immediately (the agent can no longer reconnect). A runtime whose
+        projects still reference it cannot be deleted.
+      tags: [Runtimes]
+      operationId: deleteRuntime
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: runtimeID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Runtime deleted
+        "400":
+          description: The runtime still has projects referencing it — delete or re-point them first
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: Runtime not found
   /api/v1/runtimes/{runtimeID}/browse:
     get:
       summary: List a directory under a runtime's home directory

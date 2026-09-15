@@ -35,6 +35,7 @@ POST   /api/v1/runtimes
 GET    /api/v1/runtimes
 POST   /api/v1/runtimes/{runtimeID}/revoke
 POST   /api/v1/runtimes/{runtimeID}/reactivate
+DELETE /api/v1/runtimes/{runtimeID}
 
 GET    /api/v1/runtimes/{runtimeID}/browse
 GET    /api/v1/runtimes/{runtimeID}/browse/search
@@ -56,6 +57,13 @@ needs no reconfiguration and can reconnect as soon as it retries (or is
 restarted). `404` if `runtimeID` doesn't exist. Calling it on a runtime that
 isn't currently revoked still succeeds (idempotent), forcing its status to
 `pending` regardless.
+
+`DELETE /api/v1/runtimes/{runtimeID}` removes the record entirely —
+permanently, unlike revoke: the row and its enrollment token's hash are
+gone, and a live agent's connection is dropped immediately (the agent can
+no longer reconnect). A runtime whose projects still reference it answers
+`400` — delete or re-point those projects first. Administrator-only;
+audited as `runtime.deleted`.
 
 `GET /api/v1/runtimes/connect` is where a Development Runtime opens its
 outbound WebSocket connection, authenticating with `Authorization: Bearer

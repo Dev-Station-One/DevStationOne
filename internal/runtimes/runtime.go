@@ -231,3 +231,14 @@ func (s *jsonScanner) Scan(src any) error {
 	}
 	return json.Unmarshal(raw, s.dst)
 }
+
+// Delete removes a runtime record entirely. Any project still referencing
+// it blocks the FK, so the caller must check ownership counts first. It
+// reports whether a matching runtime was found.
+func Delete(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
+	tag, err := pool.Exec(ctx, `DELETE FROM runtimes WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}

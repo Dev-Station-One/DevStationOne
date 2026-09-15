@@ -115,6 +115,7 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
           var actionBtn = rt.status === 'revoked'
             ? '<button class="icon-btn reactivate-btn" data-id="' + rt.id + '" aria-label="Re-enable runtime" title="Re-enable runtime"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>'
             : '<button class="icon-btn text-danger revoke-btn" data-id="' + rt.id + '" aria-label="Revoke runtime" title="Revoke runtime"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>';
+          actionBtn += ' <button class="icon-btn text-danger delete-btn" data-id="' + rt.id + '" data-online="' + (rt.online ? '1' : '0') + '" aria-label="Delete runtime" title="Delete runtime"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
           $body.append(
             '<tr><td>' + escapeHtml(rt.name) + '</td>' +
             '<td>' + statusBadge(rt) + '</td>' +
@@ -168,6 +169,20 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
     $('#runtimes-body').on('click', '.reactivate-btn', function () {
       var id = $(this).data('id');
       $.ajax({ url: '/api/v1/runtimes/' + id + '/reactivate', method: 'POST' }).always(loadRuntimes);
+    });
+
+    $('#runtimes-body').on('click', '.delete-btn', async function () {
+      var id = $(this).data('id');
+      var online = $(this).data('online') === 1 || $(this).data('online') === '1';
+      var msg = online
+        ? 'Delete this runtime? Its record and enrollment token are removed and its live connection is dropped immediately.'
+        : 'Delete this runtime? Its record and enrollment token are removed permanently.';
+      if (!(await DS.confirm(msg))) return;
+      $.ajax({ url: '/api/v1/runtimes/' + id, method: 'DELETE' })
+        .fail(function (xhr) {
+          DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to delete runtime.');
+        })
+        .always(loadRuntimes);
     });
 
     loadRuntimes();

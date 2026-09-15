@@ -1348,3 +1348,17 @@ carries the distinction for free. A runtime transfer only changes
 (ownership of a runtime is otherwise cosmetic). Transfers are audited as
 `ownership.transferred`; the UI's ownership-blocked delete error now opens
 the resources panel directly.
+
+**Addendum (runtime deletion).** Revoke alone left no cleanup path: revoked
+rows accumulate forever and cannot be reused, reconfigured, or removed. The
+manager gains `DELETE /api/v1/runtimes/{runtimeID}` (requireAdmin,
+ADR-039): a hard delete of the record and its enrollment token's hash —
+permanent, unlike revoke. A runtime whose projects still reference it
+answers `400` (the FK has no `ON DELETE`; the admin deletes or re-points
+those projects first, same block-with-explanation model as the user
+manager). Online status does not block: deleting drops the live agent's
+connection immediately (`registry.Revoke`), and the confirm dialog names
+that consequence — a dead machine that never reports offline would
+otherwise be undeletable. Audited as `runtime.deleted`. The UI adds a
+trash icon on every runtimes row next to revoke/reactivate, with the
+confirm text varying on the online badge.

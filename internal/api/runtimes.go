@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 
 	"devstationone/internal/audit"
 	"devstationone/internal/database"
@@ -135,6 +138,53 @@ func reactivateRuntimeHandler(db *database.DB) http.HandlerFunc {
 		}
 
 		audit.Record(r.Context(), db.Pool, audit.EventRuntimeReactivated, audit.Actor{UserID: user.ID, Email: user.Email}, "runtime", runtimeID, nil, clientIP(r))
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// deleteRuntimeHandler removes a runtime record entirely. Unlike revoke,
+// there is no coming back: the enrollment token's hashed form goes with the
+// row, and a runtime still referencing the record cannot reconnect. Projects
+// block the FK; the caller (admin) cleans them up first — the error says so.
+func deleteRuntimeHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		runtimeID := r.PathValue("runtimeID")
+		admin, _ := userFromContext(r.Context())
+
+		var name string
+		var projects int
+		if err := db.Pool.QueryRow(r.Context(),
+			`SELECT name, (SELECT count(*) FROM projects WHERE runtime_id = $1) FROM runtimes WHERE id = $1`,
+			runtimeID,
+		).Scan(&name, &projects); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				writeJSON(w, http.StatusNotFound, map[string]string{"error": "runtime not found"})
+				return
+			}
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up runtime"})
+			return
+		}
+		if projects > 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{
+				"error": "runtime still has projects: delete or re-point them first",
+			})
+			return
+		}
+
+		ok, err := runtimes.Delete(r.Context(), db.Pool, runtimeID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to delete runtime"})
+			return
+		}
+		if !ok {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "runtime not found"})
+			return
+		}
+
+		// A live agent's connection is dropped with the record; it can no
+		// longer reconnect (the row holding its token hash is gone).
+		registry.Revoke(runtimeID)
+		audit.Record(r.Context(), db.Pool, audit.EventRuntimeDeleted, audit.Actor{UserID: admin.ID, Email: admin.Email}, "runtime", runtimeID, map[string]any{"name": name}, clientIP(r))
 		w.WriteHeader(http.StatusNoContent)
 	}
 }

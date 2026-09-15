@@ -26,3 +26,13 @@ appear here as **pending**, then **online** once connected.
   of its projects become unusable until re-registered.
 
 Revoking a runtime does not delete the projects that reference it.
+
+## Deleting a runtime
+
+The trash icon removes a runtime record permanently — unlike revoke, there
+is no coming back and no re-enable. The runtime's enrollment token hash is
+destroyed, so its agent can never reconnect with the old token. If the
+runtime is online, its live connection is dropped immediately; the
+confirmation dialog warns you when that will happen. A runtime that still
+has projects cannot be deleted — delete or re-point those projects first
+(the error tells you).
