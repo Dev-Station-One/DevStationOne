@@ -1018,3 +1018,13 @@ Runtime device authentication: a bearer token issued at enrollment (`POST
 /api/v1/runtimes`), presented as `Authorization: Bearer <token>` on the
 `/api/v1/runtimes/connect` WebSocket upgrade. The server stores only a
 SHA-256 hash of the token, the same pattern as browser sessions.
+
+Optional Cloudflare Turnstile challenge on login (docs/DECISIONS.md
+ADR-044). `GET /api/v1/auth/turnstile-config` (unauthenticated) returns
+`{"enabled": bool, "site_key": string}`; the login page renders the widget
+only when `enabled`. When enabled, `POST /api/v1/auth/login` requires a
+`turnstile_token` field alongside `email`/`password` — missing or invalid
+tokens are rejected with `400` before the password is checked, and audited
+as `auth.login_turnstile_failed` (distinct from `auth.login_failed`).
+Disabled by default; see docs/SECURITY.md "Authentication" for the
+server-side verification and fail-closed behavior.

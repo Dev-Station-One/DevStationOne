@@ -56,7 +56,7 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "")
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
@@ -144,7 +144,7 @@ func TestE2E_HelpSystem(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "")
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
@@ -249,7 +249,7 @@ func TestE2E_AboutModal(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "")
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 

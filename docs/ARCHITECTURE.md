@@ -393,6 +393,10 @@ Control Server:
 - PostgreSQL
 - static assets
 - reverse-proxy/TLS friendly
+- optional: Cloudflare Turnstile (login bot-mitigation, docs/DECISIONS.md
+  ADR-044) — the only outbound third-party dependency in the Control
+  Server; unconfigured by default, so a fully offline/self-hosted
+  deployment needs nothing external
 
 Runtime:
 - Go binary

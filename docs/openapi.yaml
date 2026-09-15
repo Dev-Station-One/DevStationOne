@@ -79,6 +79,9 @@ paths:
                   format: email
                 password:
                   type: string
+                turnstile_token:
+                  type: string
+                  description: Cloudflare Turnstile token (docs/DECISIONS.md ADR-044). Required only when GET /api/v1/auth/turnstile-config reports enabled=true; ignored otherwise.
       responses:
         "200":
           description: Authenticated; session cookie set
@@ -87,9 +90,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/User"
         "400":
-          description: Invalid request body
+          description: Invalid request body, or Turnstile verification failed/missing while enabled
         "401":
           description: Invalid email or password
+  /api/v1/auth/turnstile-config:
+    get:
+      summary: Whether login requires a Cloudflare Turnstile token, and the public site key
+      tags: [Auth]
+      operationId: getTurnstileConfig
+      responses:
+        "200":
+          description: Turnstile configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, site_key]
+                properties:
+                  enabled:
+                    type: boolean
+                  site_key:
+                    type: string
+                    description: Public Cloudflare site key; empty when disabled
   /api/v1/auth/logout:
     post:
       summary: Log out and destroy the current session

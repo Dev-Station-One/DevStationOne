@@ -19,9 +19,10 @@ import (
 // Event types. The string values are the stored event_type column and the
 // stable API/UI vocabulary — do not rename an existing constant's value.
 const (
-	EventLoginSucceeded = "auth.login"
-	EventLoginFailed    = "auth.login_failed"
-	EventLogout         = "auth.logout"
+	EventLoginSucceeded       = "auth.login"
+	EventLoginFailed          = "auth.login_failed"
+	EventLoginTurnstileFailed = "auth.login_turnstile_failed"
+	EventLogout               = "auth.logout"
 
 	EventRuntimeDeleted     = "runtime.deleted"
 	EventRuntimeRegistered  = "runtime.registered"

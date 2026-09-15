@@ -34,8 +34,9 @@
               <label class="form-label">Password</label>
               <input type="password" id="password" class="form-control" autocomplete="current-password" required>
             </div>
+            <div id="turnstile-widget" class="mb-2"></div>
             <div class="form-footer">
-              <button type="submit" class="btn btn-primary w-100">Sign in</button>
+              <button type="submit" id="login-submit" class="btn btn-primary w-100">Sign in</button>
             </div>
           </form>
         </div>
@@ -48,6 +49,42 @@
   <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
   <script src="/js/dialogs.js"></script>
   <script>
+    var turnstileToken = '';
+
+    function turnstileLoadFailed() {
+      turnstileToken = '';
+      $('#login-error').text('Security check failed to load. Refresh the page, or contact your administrator.').prop('hidden', false);
+      $('#login-submit').prop('disabled', true);
+    }
+
+    // Optional (docs/DECISIONS.md ADR-044): the endpoint reports enabled:false
+    // when no site key is configured, and the form behaves exactly as before.
+    $.get('/api/v1/auth/turnstile-config').done(function (cfg) {
+      if (!cfg.enabled) return;
+      $('#login-submit').prop('disabled', true);
+      var script = document.createElement('script');
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+      script.async = true;
+      script.defer = true;
+      script.onload = function () {
+        window.turnstile.render('#turnstile-widget', {
+          sitekey: cfg.site_key,
+          theme: 'auto',
+          callback: function (token) {
+            turnstileToken = token;
+            $('#login-submit').prop('disabled', false);
+          },
+          'expired-callback': function () {
+            turnstileToken = '';
+            $('#login-submit').prop('disabled', true);
+          },
+          'error-callback': turnstileLoadFailed
+        });
+      };
+      script.onerror = turnstileLoadFailed;
+      document.body.appendChild(script);
+    });
+
     $('#login-form').on('submit', function (e) {
       e.preventDefault();
       $('#login-error').prop('hidden', true);
@@ -57,7 +94,8 @@
         contentType: 'application/json',
         data: JSON.stringify({
           email: $('#email').val(),
-          password: $('#password').val()
+          password: $('#password').val(),
+          turnstile_token: turnstileToken
         })
       }).done(function () {
         window.location.href = '/';

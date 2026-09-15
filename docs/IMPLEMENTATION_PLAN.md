@@ -1193,3 +1193,46 @@ found and fixed in the process). MySQL/MariaDB and SQL Server backup/
 restore code paths exist but are unverified in this environment (see Smoke
 note) — a real deployment should confirm compatible client tooling before
 relying on them.**
+
+## Slice 28 — Optional Cloudflare Turnstile on login (ADR-044)
+
+**Goal**: bot/credential-stuffing mitigation on login beyond the existing
+per-IP rate limit, without imposing an external dependency on operators
+who don't want one.
+
+**Design**: `internal/config.Server` gains
+`TurnstileSiteKey`/`TurnstileSecretKey` (`DEVSTATIONONE_TURNSTILE_SITE_KEY`/
+`DEVSTATIONONE_TURNSTILE_SECRET_KEY`), both optional but must be set
+together. New `internal/turnstile` package verifies a token against
+Cloudflare's `siteverify` API, failing closed on any error. `POST
+/api/v1/auth/login` gains an optional `turnstile_token` field, checked
+before `auth.Authenticate` when the feature is enabled; a new
+unauthenticated `GET /api/v1/auth/turnstile-config` exposes the public site
+key so the login page knows whether to render the widget. New audit event
+`auth.login_turnstile_failed`, distinct from `auth.login_failed`. CSP
+(`securityHeaders`) widened with a `challenges.cloudflare.com` carve-out in
+`script-src`/`frame-src`. `web/static/login.html`: widget loaded and
+rendered only when the config endpoint reports `enabled`; submit disabled
+until a token is obtained; script load/verification failure disables
+submit with an inline error rather than allowing a token-less submit.
+
+**Tests**: `internal/turnstile` unit tests (success, rejected token,
+upstream failure) against an `httptest.Server` standing in for Cloudflare.
+`internal/config` tests for the optional/both-or-neither validation.
+`internal/api`: `TestTurnstileConfigHandler` (enabled/disabled response
+shapes) and `TestLogin_TurnstileEnabled` (missing/wrong token rejected
+before the password check, both audited; valid token + correct password
+succeeds) — `turnstile.SiteVerifyURL` overridden to a local fake server.
+
+**Smoke**: live browser click-through (Playwright) against a temporary
+server instance pointed at the disposable test Postgres, using
+Cloudflare's public always-pass Turnstile test keys
+(`1x00000000000000000000AA`/`1x0000000000000000000000000000000AA`) —
+confirmed the real widget script loads from `challenges.cloudflare.com`,
+renders and auto-resolves ("Success!"), the submit button enables only
+after resolution, and login completes end-to-end (redirect to `/`). The
+disabled-by-default path (no keys configured, e.g. the persistent
+`devstationone-dev.service`) is unchanged and covered by the pre-existing
+`TestLoginLogoutFlow`.
+
+**Status: Complete.**

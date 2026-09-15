@@ -1493,3 +1493,49 @@ tab, which is a net UX improvement, not a regression. The
 the runtime-side `internal/services` implementation are unchanged — only
 the Control Server's resolution and the URL space moved. Audit events for
 service actions now carry `runtime_id` instead of `project_id`.
+
+## ADR-044 — Optional Cloudflare Turnstile on login, CSP carve-out
+
+**Decision.** `POST /api/v1/auth/login` can optionally require a Cloudflare
+Turnstile token, configured via `DEVSTATIONONE_TURNSTILE_SITE_KEY` /
+`DEVSTATIONONE_TURNSTILE_SECRET_KEY` (`internal/config`). Both unset
+(the default) leaves login exactly as it was before this feature existed —
+no widget, no `turnstile_token` field, no outbound call. Setting only one
+of the two is a startup config error, not a silently half-enabled feature.
+Verification (`internal/turnstile.Verify`) calls Cloudflare's `siteverify`
+API and fails closed: a network error, timeout, or non-`success` response
+rejects the login rather than letting it through, and is audited as
+`auth.login_turnstile_failed` — distinct from `auth.login_failed`, so an
+operator can tell a bot-blocked attempt from a wrong password in the audit
+trail. `GET /api/v1/auth/turnstile-config` is unauthenticated (the site key
+is public by Cloudflare's own design, embedded in every page load) and
+tells the login page whether to render the widget.
+
+This required widening the Content-Security-Policy
+(`internal/api/middleware.go` `securityHeaders`), which had stated
+same-origin-only as an explicit invariant: `script-src` and a new
+`frame-src` directive now allow `https://challenges.cloudflare.com`,
+unconditionally rather than only when Turnstile is configured — a static
+CSP string is simpler than branching it per-request, and the allowance is
+inert when the widget script is never loaded.
+
+**Why.** The existing per-IP rate limit on login
+(`internal/api/middleware.go` `rateLimit`) throttles a single attacking IP
+but does nothing against distributed or IP-rotating credential-stuffing.
+Turnstile blocks that traffic before it reaches `auth.Authenticate` at all,
+without adding a second interactive step for the common case (Cloudflare's
+managed/non-interactive challenge mode resolves silently for most real
+browsers).
+
+**Consequence.** A self-hosted deployment with no Cloudflare account gets
+no behavior change and no external dependency — DevStationOne otherwise has
+no other third-party network dependency in the Control Server
+(docs/ARCHITECTURE.md "Deployment"). An operator who enables it accepts
+that login now depends on Cloudflare's `challenges.cloudflare.com` being
+reachable from both the browser (widget script/iframe) and the Control
+Server (`siteverify`); fail-closed means a Cloudflare outage blocks login
+entirely rather than degrading silently — accepted as the more secure
+default, matching this project's "fail fast with descriptive messages"
+standard, over an availability-first fail-open that would defeat the
+feature's purpose during exactly the kind of network event an attacker
+might also be exploiting.

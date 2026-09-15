@@ -79,15 +79,19 @@ func requireAdmin(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
 // 'unsafe-inline' for script-src/style-src: every page in web/static uses
 // inline <script>/<style> blocks by design (no bundler/build step — see
 // docs/DECISIONS.md), so a stricter policy would break the app; every
-// resource is still same-origin only, which is the meaningful boundary
-// this policy enforces.
+// resource is otherwise same-origin only, except for Cloudflare Turnstile's
+// script and challenge iframe (docs/DECISIONS.md ADR-044) — an explicit,
+// narrow carve-out rather than a same-origin-everywhere policy, present
+// even when Turnstile is unconfigured since the allowance is inert without
+// the widget script being loaded.
 func securityHeaders(next http.Handler) http.Handler {
 	const csp = "default-src 'self'; " +
-		"script-src 'self' 'unsafe-inline'; " +
+		"script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data:; " +
 		"font-src 'self'; " +
 		"connect-src 'self' ws: wss:; " +
+		"frame-src https://challenges.cloudflare.com; " +
 		"frame-ancestors 'none'"
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

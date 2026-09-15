@@ -10,12 +10,14 @@ import (
 
 // Server holds configuration for the devstationone-server binary.
 type Server struct {
-	Addr              string
-	DatabaseURL       string
-	LogLevel          string
-	Environment       string
-	DBEncryptionKey   []byte
-	IdleNotifySeconds int
+	Addr               string
+	DatabaseURL        string
+	LogLevel           string
+	Environment        string
+	DBEncryptionKey    []byte
+	IdleNotifySeconds  int
+	TurnstileSiteKey   string
+	TurnstileSecretKey string
 }
 
 // Runtime holds configuration for the devstationone-runtime binary.
@@ -29,11 +31,16 @@ type Runtime struct {
 // LoadServer reads Server config from the environment, applying defaults.
 func LoadServer() (Server, error) {
 	cfg := Server{
-		Addr:              getenv("DEVSTATIONONE_SERVER_ADDR", ":8080"),
-		DatabaseURL:       getenv("DEVSTATIONONE_DATABASE_URL", "postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable"),
-		LogLevel:          getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
-		Environment:       getenv("DEVSTATIONONE_ENV", "development"),
-		IdleNotifySeconds: getenvInt("DEVSTATIONONE_IDLE_NOTIFY_SECONDS", 120),
+		Addr:               getenv("DEVSTATIONONE_SERVER_ADDR", ":8080"),
+		DatabaseURL:        getenv("DEVSTATIONONE_DATABASE_URL", "postgres://devstation:devstation@localhost:55432/devstation?sslmode=disable"),
+		LogLevel:           getenv("DEVSTATIONONE_LOG_LEVEL", "info"),
+		Environment:        getenv("DEVSTATIONONE_ENV", "development"),
+		IdleNotifySeconds:  getenvInt("DEVSTATIONONE_IDLE_NOTIFY_SECONDS", 120),
+		TurnstileSiteKey:   getenv("DEVSTATIONONE_TURNSTILE_SITE_KEY", ""),
+		TurnstileSecretKey: getenv("DEVSTATIONONE_TURNSTILE_SECRET_KEY", ""),
+	}
+	if (cfg.TurnstileSiteKey == "") != (cfg.TurnstileSecretKey == "") {
+		return Server{}, fmt.Errorf("DEVSTATIONONE_TURNSTILE_SITE_KEY and DEVSTATIONONE_TURNSTILE_SECRET_KEY must both be set, or both unset")
 	}
 	keyB64 := os.Getenv("DEVSTATIONONE_DB_ENCRYPTION_KEY")
 	if keyB64 == "" {

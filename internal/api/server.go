@@ -24,7 +24,7 @@ import (
 // without a second, disconnected instance.
 // dbEncryptionKey decrypts stored database connection credentials
 // (docs/SECURITY.md) — see internal/dbconnections.
-func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub, *runtimes.Registry) {
+func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte, turnstileSiteKey, turnstileSecretKey string) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub, *runtimes.Registry) {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
@@ -50,7 +50,8 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/users/{userID}/resources", requireAdmin(db, getUserResourcesHandler(db)))
 	mux.HandleFunc("POST /api/v1/users/{userID}/reassign", requireAdmin(db, reassignUserResourcesHandler(db)))
 
-	mux.HandleFunc("POST /api/v1/auth/login", rateLimit(loginRateLimit, loginHandler(db)))
+	mux.HandleFunc("GET /api/v1/auth/turnstile-config", turnstileConfigHandler(turnstileSiteKey))
+	mux.HandleFunc("POST /api/v1/auth/login", rateLimit(loginRateLimit, loginHandler(db, turnstileSecretKey)))
 	mux.HandleFunc("POST /api/v1/auth/logout", logoutHandler(db))
 	mux.HandleFunc("GET /api/v1/auth/session", requireSession(db, currentSessionHandler))
 	mux.HandleFunc("PUT /api/v1/auth/preferences", requireSession(db, updatePreferencesHandler(db)))

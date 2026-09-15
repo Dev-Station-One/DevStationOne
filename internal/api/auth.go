@@ -11,11 +11,13 @@ import (
 	"devstationone/internal/audit"
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
+	"devstationone/internal/turnstile"
 )
 
 type loginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	TurnstileToken string `json:"turnstile_token"`
 }
 
 type userResponse struct {
@@ -160,12 +162,39 @@ func clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func loginHandler(db *database.DB) http.HandlerFunc {
+type turnstileConfigResponse struct {
+	Enabled bool   `json:"enabled"`
+	SiteKey string `json:"site_key"`
+}
+
+// turnstileConfigHandler exposes the public Turnstile site key so the login
+// page knows whether to render the widget. Unauthenticated: the site key is
+// meant to be embedded in every page load and carries no secret.
+func turnstileConfigHandler(siteKey string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, turnstileConfigResponse{Enabled: siteKey != "", SiteKey: siteKey})
+	}
+}
+
+// loginHandler builds the login endpoint. turnstileSecretKey is the
+// Cloudflare Turnstile secret (docs/DECISIONS.md ADR-044); empty disables
+// the check entirely, so a request with no turnstile_token behaves exactly
+// as before the feature existed.
+func loginHandler(db *database.DB, turnstileSecretKey string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req loginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
+		}
+
+		if turnstileSecretKey != "" {
+			ok, err := turnstile.Verify(r.Context(), turnstileSecretKey, req.TurnstileToken, clientIP(r))
+			if err != nil || !ok {
+				audit.Record(r.Context(), db.Pool, audit.EventLoginTurnstileFailed, audit.Actor{Email: req.Email}, "user", "", nil, clientIP(r))
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "security check failed"})
+				return
+			}
 		}
 
 		user, err := auth.Authenticate(r.Context(), db.Pool, req.Email, req.Password)

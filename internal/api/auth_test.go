@@ -11,8 +11,10 @@ import (
 	"os"
 	"testing"
 
+	"devstationone/internal/audit"
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
+	"devstationone/internal/turnstile"
 )
 
 func testDB(t *testing.T) *database.DB {
@@ -47,7 +49,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
 
 	// Wrong password: unauthorized, no cookie.
 	body, _ := json.Marshal(map[string]string{"email": "flow@example.com", "password": "wrong"})
@@ -123,7 +125,7 @@ func TestSessionCookieSecureFlagFollowsRequestScheme(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
 	body, _ := json.Marshal(map[string]string{"email": "cookie-scheme@example.com", "password": "password123"})
 
 	cookieFrom := func(mutate func(*http.Request)) *http.Cookie {
@@ -169,7 +171,7 @@ func TestTerminalFontPreference(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
 	cookie := loginAs(t, router, "fontpref@example.com", "password123")
 
 	get := func() userResponse {
@@ -310,5 +312,90 @@ func TestTerminalFontPreference(t *testing.T) {
 	json.NewDecoder(rec.Body).Decode(&otherUser)
 	if otherUser.TerminalFont != "system" {
 		t.Fatalf("other user terminal_font = %q, want system", otherUser.TerminalFont)
+	}
+}
+
+func TestTurnstileConfigHandler(t *testing.T) {
+	db := testDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	get := func(router http.Handler) turnstileConfigResponse {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/auth/turnstile-config", nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d", rec.Code)
+		}
+		var resp turnstileConfigResponse
+		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		return resp
+	}
+
+	disabled, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
+	if resp := get(disabled); resp.Enabled || resp.SiteKey != "" {
+		t.Fatalf("unconfigured: %+v, want disabled/empty", resp)
+	}
+
+	enabled, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "sitekey123", "secretkey456")
+	if resp := get(enabled); !resp.Enabled || resp.SiteKey != "sitekey123" {
+		t.Fatalf("configured: %+v, want enabled with site key", resp)
+	}
+}
+
+func TestLogin_TurnstileEnabled(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	if _, err := auth.CreateUser(ctx, db.Pool, "turnstile@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		json.NewEncoder(w).Encode(map[string]any{"success": r.FormValue("response") == "valid-token"})
+	}))
+	t.Cleanup(server.Close)
+	origURL := turnstile.SiteVerifyURL
+	turnstile.SiteVerifyURL = server.URL
+	t.Cleanup(func() { turnstile.SiteVerifyURL = origURL })
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "sitekey", "secretkey")
+
+	login := func(turnstileToken string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{
+			"email": "turnstile@example.com", "password": "password123", "turnstile_token": turnstileToken,
+		})
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// Missing/invalid token: rejected before password is even checked, no
+	// session cookie, and the rejection is audited distinctly from a bad
+	// password.
+	if rec := login(""); rec.Code != http.StatusBadRequest {
+		t.Fatalf("missing token: status = %d, want 400", rec.Code)
+	}
+	if rec := login("wrong-token"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("wrong token: status = %d, want 400", rec.Code)
+	}
+	events, _, err := audit.List(ctx, db.Pool, audit.Filter{EventType: audit.EventLoginTurnstileFailed})
+	if err != nil || len(events) != 2 {
+		t.Fatalf("audit EventLoginTurnstileFailed: %v, %d events, want 2", err, len(events))
+	}
+
+	// Valid token, correct password: succeeds exactly like the no-Turnstile
+	// flow.
+	rec := login("valid-token")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("valid token: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if len(rec.Result().Cookies()) != 1 {
+		t.Fatalf("valid token: expected session cookie")
 	}
 }

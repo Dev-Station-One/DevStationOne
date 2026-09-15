@@ -143,6 +143,17 @@ one instance per Control Server process:
 
 Exceeding a bucket returns `429`.
 
+Optional, additional to the rate limit above: Cloudflare Turnstile on
+login (docs/DECISIONS.md ADR-044), configured via
+`DEVSTATIONONE_TURNSTILE_SITE_KEY`/`DEVSTATIONONE_TURNSTILE_SECRET_KEY`
+(`internal/config`). Disabled by default — both unset leaves `POST
+/api/v1/auth/login` exactly as it was before this feature existed; setting
+only one is a startup config error. When enabled, `internal/turnstile`
+verifies the submitted token against Cloudflare's `siteverify` API before
+`auth.Authenticate` runs, failing closed on any verification error
+(network failure, timeout, non-`success` response) rather than letting the
+login through. See docs/API.md "Authentication" for the endpoint contract.
+
 ## Security headers
 
 Every response carries `X-Content-Type-Options: nosniff`,
@@ -155,8 +166,11 @@ via `X-Forwarded-Proto: https`, matching the session cookie's own `Secure`
 logic). The CSP keeps `'unsafe-inline'` for `script-src`/`style-src`: every
 page under `web/static/` uses inline `<script>`/`<style>` by design (no
 build step), so a stricter policy would break the app while adding little
-— everything is same-origin already, which is what this policy actually
-enforces.
+— everything is otherwise same-origin, with one explicit carve-out in
+`script-src`/`frame-src` for `https://challenges.cloudflare.com` (optional
+Turnstile login challenge, docs/DECISIONS.md ADR-044) — present even when
+Turnstile is unconfigured, since the allowance is inert without the widget
+script being loaded.
 
 ## Observability
 

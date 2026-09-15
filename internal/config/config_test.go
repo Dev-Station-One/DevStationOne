@@ -80,6 +80,42 @@ func TestLoadServer_RejectsBadEncryptionKeyLength(t *testing.T) {
 	}
 }
 
+func TestLoadServer_TurnstileOptional(t *testing.T) {
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", testEncryptionKey)
+	cfg, err := LoadServer()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.TurnstileSiteKey != "" || cfg.TurnstileSecretKey != "" {
+		t.Errorf("Turnstile keys = %q/%q, want both empty", cfg.TurnstileSiteKey, cfg.TurnstileSecretKey)
+	}
+}
+
+func TestLoadServer_TurnstileBothSet(t *testing.T) {
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", testEncryptionKey)
+	t.Setenv("DEVSTATIONONE_TURNSTILE_SITE_KEY", "site123")
+	t.Setenv("DEVSTATIONONE_TURNSTILE_SECRET_KEY", "secret456")
+	cfg, err := LoadServer()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.TurnstileSiteKey != "site123" || cfg.TurnstileSecretKey != "secret456" {
+		t.Errorf("Turnstile keys = %q/%q, want site123/secret456", cfg.TurnstileSiteKey, cfg.TurnstileSecretKey)
+	}
+}
+
+func TestLoadServer_TurnstileMismatchedKeysRejected(t *testing.T) {
+	t.Setenv("DEVSTATIONONE_DATABASE_URL", "postgres://example")
+	t.Setenv("DEVSTATIONONE_DB_ENCRYPTION_KEY", testEncryptionKey)
+	t.Setenv("DEVSTATIONONE_TURNSTILE_SITE_KEY", "site123")
+	t.Setenv("DEVSTATIONONE_TURNSTILE_SECRET_KEY", "")
+	if _, err := LoadServer(); err == nil {
+		t.Fatal("expected error when only DEVSTATIONONE_TURNSTILE_SITE_KEY is set")
+	}
+}
+
 func TestLoadRuntime_RequiresServerURL(t *testing.T) {
 	t.Setenv("DEVSTATIONONE_SERVER_URL", "")
 	t.Setenv("DEVSTATIONONE_RUNTIME_TOKEN", "sometoken")
