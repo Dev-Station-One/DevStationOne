@@ -231,11 +231,9 @@
             <div class="page-header d-print-none mb-3">
               <div class="row align-items-center">
                 <div class="col">
-                  <div class="page-pretitle">
-                    <a href="/projects.html">&larr; Projects</a>
+                  <div class="page-pretitle text-truncate" id="project-header-line" title="">
+                    <a href="/projects.html">&larr; Projects</a> - <span id="project-header-text">—</span>
                   </div>
-                  <h2 class="page-title" id="project-name">—</h2>
-                  <div class="text-secondary" id="project-summary">—</div>
                 </div>
                 <div class="col-auto" id="overview-actions">
                   <button id="edit-btn" class="icon-btn" aria-label="Edit project" title="Edit project"><i class="fa-solid fa-pen-to-square" aria-hidden="true"></i></button>
@@ -860,11 +858,10 @@
     var runtimesById = {};
 
     function render() {
-      $('#project-name').text(project.name);
-      $('#project-summary').text(
-        project.name + ' · ' + (runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id) +
-        ' · ' + project.working_directory
-      );
+      var headerText = project.name + ' · ' + (runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id) +
+        ' · ' + project.working_directory;
+      $('#project-header-text').text(headerText);
+      $('#project-header-line').attr('title', headerText);
       $('#view-runtime').text(runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id);
       $('#view-shell').text(project.shell);
       $('#view-cwd').text(project.working_directory);
