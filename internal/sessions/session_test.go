@@ -66,7 +66,7 @@ func TestSessionLifecycle(t *testing.T) {
 	ctx := context.Background()
 	projectID, userID := testProject(t, pool)
 
-	s, err := Create(ctx, pool, projectID, "bash", 80, 24, userID)
+	s, err := Create(ctx, pool, projectID, "bash", 80, 24, userID, "xterm")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -130,12 +130,42 @@ func TestSessionLifecycle(t *testing.T) {
 	}
 }
 
+func TestCreate_RenderMode(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	projectID, userID := testProject(t, pool)
+
+	xterm, err := Create(ctx, pool, projectID, "bash", 80, 24, userID, "xterm")
+	if err != nil {
+		t.Fatalf("create xterm: %v", err)
+	}
+	if xterm.RenderMode != "xterm" {
+		t.Fatalf("render_mode = %q, want xterm", xterm.RenderMode)
+	}
+
+	cards, err := Create(ctx, pool, projectID, "claude", 80, 24, userID, "cards")
+	if err != nil {
+		t.Fatalf("create cards: %v", err)
+	}
+	if cards.RenderMode != "cards" {
+		t.Fatalf("render_mode = %q, want cards", cards.RenderMode)
+	}
+
+	got, err := Get(ctx, pool, cards.ID)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.RenderMode != "cards" {
+		t.Fatalf("render_mode after Get = %q, want cards", got.RenderMode)
+	}
+}
+
 func TestSessionLifecycle_Failed(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	projectID, userID := testProject(t, pool)
 
-	s, err := Create(ctx, pool, projectID, "bash", 80, 24, userID)
+	s, err := Create(ctx, pool, projectID, "bash", 80, 24, userID, "xterm")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -158,15 +188,15 @@ func TestListForProject_ScopesAndOrders(t *testing.T) {
 	projectID, userID := testProject(t, pool)
 	otherProjectID, _ := testProject(t, pool)
 
-	first, err := Create(ctx, pool, projectID, "bash", 80, 24, userID)
+	first, err := Create(ctx, pool, projectID, "bash", 80, 24, userID, "xterm")
 	if err != nil {
 		t.Fatalf("create first: %v", err)
 	}
-	second, err := Create(ctx, pool, projectID, "npm dev", 80, 24, userID)
+	second, err := Create(ctx, pool, projectID, "npm dev", 80, 24, userID, "xterm")
 	if err != nil {
 		t.Fatalf("create second: %v", err)
 	}
-	if _, err := Create(ctx, pool, otherProjectID, "bash", 80, 24, userID); err != nil {
+	if _, err := Create(ctx, pool, otherProjectID, "bash", 80, 24, userID, "xterm"); err != nil {
 		t.Fatalf("create other project session: %v", err)
 	}
 
@@ -186,18 +216,18 @@ func TestActiveCountsByProjectIDs(t *testing.T) {
 	idleProject, _ := testProject(t, pool)
 	untouchedProject, _ := testProject(t, pool)
 
-	running, err := Create(ctx, pool, activeProject, "bash", 80, 24, userID)
+	running, err := Create(ctx, pool, activeProject, "bash", 80, 24, userID, "xterm")
 	if err != nil {
 		t.Fatalf("create running: %v", err)
 	}
 	if err := MarkRunning(ctx, pool, running.ID); err != nil {
 		t.Fatalf("mark running: %v", err)
 	}
-	if _, err := Create(ctx, pool, activeProject, "npm dev", 80, 24, userID); err != nil {
+	if _, err := Create(ctx, pool, activeProject, "npm dev", 80, 24, userID, "xterm"); err != nil {
 		t.Fatalf("create requested: %v", err)
 	}
 
-	exited, err := Create(ctx, pool, idleProject, "bash", 80, 24, userID)
+	exited, err := Create(ctx, pool, idleProject, "bash", 80, 24, userID, "xterm")
 	if err != nil {
 		t.Fatalf("create exited: %v", err)
 	}

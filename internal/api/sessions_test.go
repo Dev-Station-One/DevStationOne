@@ -203,6 +203,53 @@ func TestSessionHTTP_CreateAttachEcho(t *testing.T) {
 	readUntilContains(t, conn, "hello-from-session", 5*time.Second)
 }
 
+func TestSessionHTTP_RenderMode(t *testing.T) {
+	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+
+	s := createSession(t, router, cookie, projectID, "bash")
+	if s.RenderMode != "xterm" {
+		t.Fatalf("render_mode = %q, want default xterm", s.RenderMode)
+	}
+
+	body, _ := json.Marshal(termSessionRequest{Name: "claude", Cols: 80, Rows: 24, RenderMode: "cards"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/sessions", bytes.NewReader(body))
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create cards session: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var cards termSessionResponse
+	if err := json.NewDecoder(rec.Body).Decode(&cards); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if cards.RenderMode != "cards" {
+		t.Fatalf("render_mode = %q, want cards", cards.RenderMode)
+	}
+
+	// Reattach (GET) round-trips render_mode without a dedicated field.
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+cards.ID, nil)
+	getReq.AddCookie(cookie)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	var fetched termSessionResponse
+	if err := json.NewDecoder(getRec.Body).Decode(&fetched); err != nil {
+		t.Fatalf("decode get: %v", err)
+	}
+	if fetched.RenderMode != "cards" {
+		t.Fatalf("render_mode on GET = %q, want cards", fetched.RenderMode)
+	}
+
+	invalidBody, _ := json.Marshal(termSessionRequest{Name: "bogus", Cols: 80, Rows: 24, RenderMode: "vim"})
+	invalidReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/sessions", bytes.NewReader(invalidBody))
+	invalidReq.AddCookie(cookie)
+	invalidRec := httptest.NewRecorder()
+	router.ServeHTTP(invalidRec, invalidReq)
+	if invalidRec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid render_mode: status = %d, want 400", invalidRec.Code)
+	}
+}
+
 func TestSessionHTTP_TwoSimultaneousSessionsDoNotCrossTalk(t *testing.T) {
 	router, server, cookie, projectID, _ := sessionsTestSetup(t)
 

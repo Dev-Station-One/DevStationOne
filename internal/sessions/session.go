@@ -43,14 +43,15 @@ type Session struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	ClosedAt     *time.Time
+	RenderMode   string
 }
 
-const sessionColumns = `id, project_id, name, status, cols, rows, exit_code, error_message, created_by, created_at, updated_at, closed_at`
+const sessionColumns = `id, project_id, name, status, cols, rows, exit_code, error_message, created_by, created_at, updated_at, closed_at, render_mode`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var s Session
 	var errMsg *string
-	err := row.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Status, &s.Cols, &s.Rows, &s.ExitCode, &errMsg, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt, &s.ClosedAt)
+	err := row.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Status, &s.Cols, &s.Rows, &s.ExitCode, &errMsg, &s.CreatedBy, &s.CreatedAt, &s.UpdatedAt, &s.ClosedAt, &s.RenderMode)
 	if err != nil {
 		return Session{}, err
 	}
@@ -60,13 +61,15 @@ func scanSession(row pgx.Row) (Session, error) {
 	return s, nil
 }
 
-// Create inserts a new terminal session in StatusRequested.
-func Create(ctx context.Context, pool *pgxpool.Pool, projectID, name string, cols, rows int, createdByUserID string) (Session, error) {
+// Create inserts a new terminal session in StatusRequested. renderMode is
+// "xterm" or "cards" (Slice 17) — callers resolve an empty/omitted request
+// field to "xterm" before calling Create.
+func Create(ctx context.Context, pool *pgxpool.Pool, projectID, name string, cols, rows int, createdByUserID, renderMode string) (Session, error) {
 	return scanSession(pool.QueryRow(ctx, `
-		INSERT INTO terminal_sessions (project_id, name, cols, rows, created_by)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO terminal_sessions (project_id, name, cols, rows, created_by, render_mode)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING `+sessionColumns,
-		projectID, name, cols, rows, createdByUserID,
+		projectID, name, cols, rows, createdByUserID, renderMode,
 	))
 }
 

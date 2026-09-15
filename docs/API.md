@@ -200,6 +200,13 @@ unattached), `exited`, `failed`, `closed`.
 field; working directory/shell/environment come from the Project and
 cannot be overridden per-session.
 
+`render_mode` (`"xterm"` default, or `"cards"` — Slice 17) selects the
+client rendering mode at creation and is immutable afterward; switching
+means opening a new session. An invalid value is a `400`. It round-trips
+through the normal session-info response, so a reattach from another
+device (the existing `GET`/`attach` flow) picks it up without a dedicated
+endpoint.
+
 `DELETE` sends `session.close` to the runtime (best-effort — it also
 succeeds if the runtime is offline) and marks the session `closed`. This
 is a terminal state: a closed session's row is kept for history but can no

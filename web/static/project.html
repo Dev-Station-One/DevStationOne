@@ -111,6 +111,43 @@
       inset: 0;
       padding: .5rem;
     }
+    /* Cards render mode (Slice 17): web/static/js/termcards.js. */
+    .ds-cards-pane {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: #000;
+      color: #ddd;
+      font-family: courier-new, courier, monospace;
+      font-size: 13px;
+    }
+    .ds-cards-scrollback {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: .5rem;
+    }
+    .ds-cards-line {
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .ds-cards-diff-body {
+      background: rgba(255, 255, 255, .05);
+      color: inherit;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+    .ds-card.ds-card-done .btn {
+      pointer-events: none;
+      opacity: .5;
+    }
+    .ds-cards-input-row {
+      flex-shrink: 0;
+    }
+    .ds-cards-input-label {
+      font-family: inherit;
+    }
     @media (min-width: 992px) {
       #terminal-canvas { height: 70vh; }
     }
@@ -769,6 +806,7 @@
   <script type="module" src="/vendor/codemirror6/cm6.bundle.js"></script>
   <script src="/js/filetree.js"></script>
   <script src="/js/editor.js"></script>
+  <script src="/js/termcards.js"></script>
   <script>
     function escapeHtml(s) {
       return $('<div>').text(s).html();
@@ -1057,6 +1095,14 @@
       if (st.pane) return st.pane;
       var $pane = $('<div class="session-term-pane" hidden>').appendTo('#terminal-canvas');
       st.pane = $pane[0];
+
+      if (st.info.render_mode === 'cards') {
+        st.term = window.DS.termCards.create(st.pane);
+        st.term.onData(function (data) { sendInput(st.ws, data); });
+        st.fit = { fit: function () {} }; // cards mode has no PTY resize UI; fixed cols/rows from creation
+        return st.pane;
+      }
+
       var termOptions = { convertEol: true, cursorBlink: true, fontSize: 13, theme: { background: '#000000' } };
       if (terminalFontPref === 'jetbrainsmono-nerd') termOptions.fontFamily = TERMINAL_FONT_STACKS['jetbrainsmono-nerd'];
       st.term = new Terminal(termOptions);
@@ -1174,11 +1220,11 @@
     }
 
     $('#new-session-btn').on('click', async function () {
-      var name = await DS.prompt({ title: 'Session name', value: 'bash' });
-      if (!name) return;
+      var choice = await DS.newSession();
+      if (!choice) return;
       $.ajax({
         url: '/api/v1/projects/' + projectID + '/sessions', method: 'POST', contentType: 'application/json',
-        data: JSON.stringify({ name: name, cols: 80, rows: 24 })
+        data: JSON.stringify({ name: choice.name, cols: 80, rows: 24, render_mode: choice.render_mode })
       }).done(function (info) {
         addSession(info);
       }).fail(function (xhr) {

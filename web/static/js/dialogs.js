@@ -49,6 +49,44 @@
       return Swal.fire(base({ title: text, icon: 'error' }));
     },
 
+    // New-terminal-session prompt: name plus render mode (Slice 17).
+    // Resolves {name, render_mode} or null on cancel.
+    newSession: function (defaultName) {
+      var html =
+        '<div class="mb-3 text-start">' +
+          '<label class="form-label">Name</label>' +
+          '<input type="text" id="ds-new-session-name" class="form-control" value="' + (defaultName || 'bash') + '">' +
+        '</div>' +
+        '<div class="text-start">' +
+          '<label class="form-label mb-1">Render mode</label>' +
+          '<div class="form-check">' +
+            '<input class="form-check-input" type="radio" name="ds-new-session-mode" id="ds-new-session-mode-xterm" value="xterm" checked>' +
+            '<label class="form-check-label" for="ds-new-session-mode-xterm">Terminal (xterm)</label>' +
+          '</div>' +
+          '<div class="form-check">' +
+            '<input class="form-check-input" type="radio" name="ds-new-session-mode" id="ds-new-session-mode-cards" value="cards">' +
+            '<label class="form-check-label" for="ds-new-session-mode-cards">Cards <span class="text-secondary">(structured prompts/diffs)</span></label>' +
+          '</div>' +
+        '</div>';
+      return Swal.fire(base({
+        title: 'New terminal session',
+        html: html,
+        showCancelButton: true,
+        didOpen: function () {
+          $(Swal.getHtmlContainer()).find('#ds-new-session-name').trigger('focus').trigger('select');
+        },
+        preConfirm: function () {
+          var $c = $(Swal.getHtmlContainer());
+          var name = $c.find('#ds-new-session-name').val().trim();
+          if (!name) {
+            Swal.showValidationMessage('Required.');
+            return false;
+          }
+          return { name: name, render_mode: $c.find('input[name="ds-new-session-mode"]:checked').val() };
+        }
+      })).then(function (r) { return r.isConfirmed ? r.value : null; });
+    },
+
     // Directory picker for Project setup: an expandable, searchable tree
     // over runtimeId's home directory via GET/POST .../runtimes/{id}/browse*
     // (there is no Project yet at this point, so the runtime's home dir is

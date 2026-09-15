@@ -90,6 +90,18 @@ Terminal is the primary workspace. Use xterm.js or another mature terminal emula
 
 The terminal canvas gets the majority of available workspace height. Toolbars stay compact. Session status must be visible and must not rely on color alone.
 
+New-session creation asks for a name and a render mode (xterm, the
+default, or cards — Slice 17), chosen once and fixed for that session's
+lifetime. Cards mode (`web/static/js/termcards.js`) replaces the xterm.js
+canvas with a plain-text scrollback plus structured cards for recognized
+prompts — a yes/no card, a numbered-menu card, and a collapsible diff card
+— each with a hard fallback to plain text on no match, and a permanent
+fallback to plain text for the rest of the session the moment full-screen
+terminal output (vim, htop, fzf, an arrow-key menu) is detected. A single
+persistent input box at the bottom of the pane sends typed lines; it picks
+up the detected prompt text as its label for a free-text prompt instead of
+a separate input card.
+
 ## Files
 
 Files is a project-aware file manager with breadcrumbs, tree/list navigation, search, create, upload/download, rename, copy, move, delete, metadata, editor, and preview. The Project directory is the default context.

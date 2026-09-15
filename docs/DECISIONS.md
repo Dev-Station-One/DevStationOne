@@ -1123,3 +1123,44 @@ is the actual visibility switch. Two overlapping Tab implementations
 `modalInstance()` off `tabler.Modal` onto `bootstrap.Modal` and dropping
 `tabler.min.js`'s component layer entirely is the natural follow-up if a
 similar `data-bs-toggle` collision is ever hit for another component.
+
+## ADR-035 — Cards terminal render mode: client-side regex/idle-timer detection, a single persistent input box, and a permanent full-screen-TUI bail-out
+
+**Decision.** Slice 17 adds a second, opt-in terminal render mode
+(`terminal_sessions.render_mode`, `'xterm'`/`'cards'`, migration 0016) that
+is purely a `web/static/js/termcards.js` rendering choice — the PTY byte
+stream, protocol, and runtime are unchanged. `termcards.js` line-buffers
+the same bytes xterm.js would receive, waits ~150ms of idle on an
+unterminated trailing line, and runs regex detectors for a yes/no prompt,
+a numbered menu, and a `diff --git` block; anything unmatched is a plain
+scrollback line. A single persistent input box at the pane's bottom
+(rather than a separate free-text-prompt card) sends typed lines, and
+picks up a detected free-text prompt as its label. The moment
+cursor-repositioning/alt-screen/clear-screen sequences are seen (vim,
+htop, fzf, an arrow-key menu), the session permanently falls back to
+plain text — cards mode never attempts to be a terminal emulator.
+
+**Why.** A real output-format parser per tool (e.g. Claude Code's
+`--output-format stream-json`) would be the fidelity-correct approach, but
+nothing in this slice's scope needs that precision yet; regex-over-plain-text
+is the smallest thing that satisfies the success criteria (`ponytail`,
+`docs/IMPLEMENTATION_PLAN.md` Slice 17). The single input box (instead of a
+fifth "free-text input" card type, and instead of the progress/spinner
+card considered during design) avoids a second input surface and a fussy
+`\r`-redraw-as-in-place-update detector for a need nobody has hit yet.
+
+**Consequence — two real bugs the Slice 17 smoke test caught, both fixed
+in `termcards.js`.** (1) A PTY's `onlcr` translation (`\n` → `\r\n`) leaves
+every "complete" line ending in a bare `\r` once split on `\n` alone; since
+JS regex treats `\r` as a line terminator, `.` and `$` both stop short of
+it, so the numbered-menu detector's `$`-anchored pattern silently matched
+nothing until `write()` strips all `\r` before line-splitting. (2) `less`
+(git's default diff pager) sends `ESC =` / `ESC >` (DECKPAM/DECKPNM) around
+its session even when it exits immediately because the diff fits on one
+screen — these are not CSI sequences, so the original `\x1b\[...` strip
+regex left a stray `ESC =` in front of `diff --git `, breaking that
+detector's start anchor; `ANSI_RE` now also strips bare `ESC [=>]`. Neither
+bug was reachable from Go tests (this logic is JS-only, per the repo's
+existing no-JS-test-harness precedent) — both were only found by driving a
+real PTY (a live `read -p` menu and a real `git diff`) through the actual
+running dev instance in a browser.

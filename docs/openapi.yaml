@@ -3552,6 +3552,13 @@ components:
         rows:
           type: integer
           default: 24
+        render_mode:
+          type: string
+          enum: [xterm, cards]
+          default: xterm
+          description: |
+            Client rendering mode (Slice 17). Immutable after creation —
+            switch modes by opening a new session.
     EditorState:
       type: object
       description: Opaque per-user+project editor tab state (open tabs, active tab, cursor offsets). The server stores it verbatim; the browser owns the shape.
@@ -3562,7 +3569,7 @@ components:
         A persistent PTY session running on its project's runtime. Named
         "TerminalSession" (not "Session") to avoid confusion with the
         unrelated browser-auth Session schema above (see ADR-015).
-      required: [id, project_id, name, status, cols, rows, exit_code, created_by, created_at, updated_at]
+      required: [id, project_id, name, status, cols, rows, exit_code, created_by, created_at, updated_at, render_mode]
       properties:
         id:
           type: string
@@ -3589,6 +3596,9 @@ components:
         updated_at:
           type: string
           format: date-time
+        render_mode:
+          type: string
+          enum: [xterm, cards]
     ServiceInfo:
       type: object
       description: A systemd --user unit's live status. Not a stored resource — see docs/API.md "Services".

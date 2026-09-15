@@ -645,38 +645,94 @@ a repo with no commits yet.
 structured cards for prompts/diffs instead of raw ANSI — alongside the
 existing xterm.js terminal, which remains the default and is unmodified.
 
-**Design** (see `/sc:design` pass, 2026-09-14): this is a client-side
-rendering mode only, not a new execution path. The PTY byte stream is
-identical to today's terminal (same `pty.Session`, same `SendFrame`/binary
-WS frames) — zero protocol or runtime changes. Only `web/static/project.html`
-gets a second mode that line-buffers the same bytes and runs a pattern
-matcher before choosing card vs. plain-text rendering.
+**Design** (see `/sc:brainstorm` + `/sc:design` passes, 2026-09-14): this is
+a client-side rendering mode only, not a new execution path. The PTY byte
+stream is identical to today's terminal (same `pty.Session`, same
+`SendFrame`/binary WS frames) — zero protocol or runtime changes beyond the
+new session field below. Only the frontend gets a second mode that
+line-buffers the same bytes and runs a pattern matcher before choosing card
+vs. plain-text rendering. Render mode is chosen once at session creation and
+is immutable for that session's lifetime (switching modes means opening a
+new terminal tab) — it is not a `localStorage` preference, so it travels
+correctly when a session is reattached from another device.
 
-- Detection is regex-based over plain text (trailing `? `/`(y/n)`/numbered-menu
-  lines → button card; a `diff --git` block → collapsible diff card).
-  Anything unmatched falls back to plain scrolling text — never breaks,
-  never guesses wrong into a stuck UI.
-  `ponytail: regex-based generic detection, not a real parser — add a
-  dedicated adapter (e.g. Claude Code's --output-format stream-json) when
-  one specific tool's fidelity matters enough to justify it.`
-- Card buttons (yes/no, menu choice) send the equivalent literal keystrokes
-  back over the existing binary WS frame path — no backend input change.
-- New nullable `terminal_sessions.render_mode` column (migration; default
-  `'xterm'`, opt-in `'cards'`), set at session creation, so the mode travels
-  with a session that's reattached from another device — not stored in
-  `localStorage`.
+Card set (v1), each with a hard fallback to plain scrolling text on
+non-match — detection never guesses wrong into a stuck UI:
+- **yes/no** — trailing `(y/n)`/`[y/n]`/`(yes/no)` on an unterminated line →
+  button card; click sends the literal keystroke + `\n`.
+- **numbered menu** — 2+ consecutive `N)`/`N.` lines followed by an idle
+  unterminated line → button-per-option card; click sends the digit + `\n`.
+- **diff** — a `diff --git` line opens a collapsible card, collecting until
+  the next blank line/shell prompt. View-only — no stage/commit actions;
+  that stays in the Slice 16 Source Control tab.
+- **free-text prompt** — labels the persistent input box (see below) with
+  the detected prompt text instead of a separate input card.
+
+`ponytail: dropped the progress/spinner card from v1 — no confirmed workflow
+needs it yet and `\r`-redraw-as-in-place-update is the fussiest detector of
+the set. Falls back to plain text (a `\r`-heavy line just re-renders each
+redraw, same as today). Add it when a real cards-mode session shows spinner
+noise that's actually annoying.`
+
+`ponytail: regex/idle-timer detection, not a real parser — add a dedicated
+adapter (e.g. Claude Code's --output-format stream-json) when one specific
+tool's fidelity matters enough to justify it.`
+
+**Explicit non-goal**: full-screen TUI apps that use cursor-repositioning
+ANSI (vim, htop, fzf, inquirer-style arrow menus — detected via
+`\x1b[...H`/`\x1b[2J`/alt-screen-enter `\x1b[?1049h`) permanently bail that
+session to plain-text rendering the moment one is seen; no detection is
+attempted afterward. These tools must never be misrendered as broken cards.
+
+**Data model / API** — new migration `migrations/0016_terminal_session_render_mode.{up,down}.sql`:
+`ALTER TABLE terminal_sessions ADD COLUMN render_mode text NOT NULL DEFAULT 'xterm' CHECK (render_mode IN ('xterm','cards'))`.
+`internal/sessions.Session` gets `RenderMode string`; `Create(...)` takes it
+as a param. `internal/api` term-session request/response structs gain
+`render_mode` (omit → server defaults to `xterm`; any value outside the enum
+→ 400). No new endpoint: the existing GET/attach session-info round-trip
+already returns the full row, so reattach picks up `render_mode` for free.
+`PATCH` stays name-only — mode is immutable after creation. OpenAPI:
+`TerminalSessionFields`/`TerminalSession` schemas gain the `render_mode`
+enum field.
+
+**Frontend**:
+- New-session dialog stays the existing `DS.prompt()` SweetAlert2 flow in
+  `dialogs.js` — add a radio input (`input: 'radio'`, native Swal option,
+  no new modal markup) for `xterm` vs `cards`, default `xterm`.
+  `ponytail: reuses the existing dialog pattern instead of a new Bootstrap
+  modal/segmented-control component for a single binary choice.`
+- New `web/static/js/termcards.js`: per cards-mode session, a scrollback
+  pane (plain `<pre>` lines and rendered cards interleaved, append-only)
+  plus one persistent input box fixed at the pane bottom (always present;
+  sends Enter-terminated text over the existing `sendInput(ws, str)` path).
+  PTY bytes are split on `\n`; an unterminated trailing line is evaluated
+  against the detectors above after a ~150ms idle period.
 
 **Success Criteria**: a session started in "cards" mode renders at least a
-yes/no-prompt card and a diff card as structured UI for a tool with a
-conventional prompt format; unmatched output still displays correctly as
-plain text; the existing xterm terminal type is unchanged in behavior.
+yes/no-prompt card and a diff card as structured UI, for both a generic
+bash test script and the Claude Code CLI; unmatched output and full-screen
+TUI output still display correctly as plain text; the existing xterm
+terminal type is unchanged in behavior.
 
-**Tests**: JS unit tests for the pattern matcher (matched → card, unmatched
-→ plain text, no false crash on arbitrary bytes); migration test for the new
-column and its default; browser E2E confirming input round-trips correctly
-from a card button.
+**Tests**: Go — session create/API tests for `render_mode` persistence,
+default, and enum rejection (400); `make openapi-lint`. No JS test harness
+exists in this repo (precedent: Slices 15/16 frontend, verified by manual
+smoke test only) — `termcards.js` detection is likewise verified by real
+smoke test: a generic bash script exercising y/n, menu, and diff output,
+plus a manual Claude Code CLI session.
 
-**Status**: Not Started
+**Docs to update in the same commit as implementation**: `WEB_UI_DESIGN.md`
+(new-session modal), `VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md`
+("Terminal Components" — render-mode toggle, each card state, full-screen-TUI
+bail state), `API.md` "Sessions" (`render_mode`), `DECISIONS.md` new
+ADR-035 (regex/idle-timer detection choice + full-screen-TUI bail-out +
+single-input-box consolidation, with the ponytail upgrade path noted above).
+
+**Status**: Complete. See `docs/DECISIONS.md` ADR-035 for the detection
+approach and two real bugs (`\r`-anchored regex, `less`'s bare `ESC =`/
+`ESC >`) the browser smoke test caught and fixed; `docs/API.md` "Sessions"
+and `docs/WEB_UI_DESIGN.md`/`docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md`
+"Terminal" for the contract and UI. Migration `0016`.
 
 ## Slice 18 — Project Journal
 

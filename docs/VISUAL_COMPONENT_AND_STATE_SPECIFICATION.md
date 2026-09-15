@@ -85,6 +85,28 @@ Running sessions use a clear status indicator. Background activity may mark an i
 
 The terminal canvas must support keyboard input, copy/paste, selection, scrollback, resize, mouse behavior, signals, links, and terminal-native control sequences. Application shortcuts must not break normal terminal controls such as Ctrl+C, Ctrl+D, Ctrl+Z, Ctrl+L, Ctrl+A, and Ctrl+R.
 
+### Cards render mode (Slice 17)
+
+An alternate per-session rendering mode, chosen at creation (new-session
+dialog: name + xterm/cards choice) and fixed for that session — no
+resize/mouse/terminal-native-sequence support, since it is a plain-text
++ structured-card view, not a terminal emulator.
+
+Card states, each falling back to a plain scrollback line when detection
+doesn't match:
+
+- yes/no prompt — two buttons (Yes/No)
+- numbered menu — one button per option
+- diff (`diff --git`) — collapsible card, Collapse/Expand toggle, view-only
+- free-text prompt — no card; labels the pane's persistent input box with
+  the detected prompt text
+- full-screen terminal output detected (vim, htop, fzf, arrow-key menus) —
+  a one-line notice, then plain text for the rest of that session; never
+  attempts a card again
+
+The pane is scrollback (interleaved plain lines and cards, append-only)
+plus one persistent input box fixed at the bottom, always present.
+
 ## File Manager Components
 
 Desktop:

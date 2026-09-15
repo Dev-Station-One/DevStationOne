@@ -20,38 +20,41 @@ import (
 const openTimeout = 10 * time.Second
 
 type termSessionRequest struct {
-	Name string `json:"name"`
-	Cols int    `json:"cols"`
-	Rows int    `json:"rows"`
+	Name       string `json:"name"`
+	Cols       int    `json:"cols"`
+	Rows       int    `json:"rows"`
+	RenderMode string `json:"render_mode,omitempty"`
 }
 
 type termSessionResponse struct {
-	ID        string    `json:"id"`
-	ProjectID string    `json:"project_id"`
-	Name      string    `json:"name"`
-	Status    string    `json:"status"`
-	Cols      int       `json:"cols"`
-	Rows      int       `json:"rows"`
-	ExitCode  *int      `json:"exit_code"`
-	Error     string    `json:"error,omitempty"`
-	CreatedBy string    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         string    `json:"id"`
+	ProjectID  string    `json:"project_id"`
+	Name       string    `json:"name"`
+	Status     string    `json:"status"`
+	Cols       int       `json:"cols"`
+	Rows       int       `json:"rows"`
+	ExitCode   *int      `json:"exit_code"`
+	Error      string    `json:"error,omitempty"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	RenderMode string    `json:"render_mode"`
 }
 
 func toTermSessionResponse(s sessions.Session) termSessionResponse {
 	return termSessionResponse{
-		ID:        s.ID,
-		ProjectID: s.ProjectID,
-		Name:      s.Name,
-		Status:    s.Status,
-		Cols:      s.Cols,
-		Rows:      s.Rows,
-		ExitCode:  s.ExitCode,
-		Error:     s.ErrorMessage,
-		CreatedBy: s.CreatedBy,
-		CreatedAt: s.CreatedAt,
-		UpdatedAt: s.UpdatedAt,
+		ID:         s.ID,
+		ProjectID:  s.ProjectID,
+		Name:       s.Name,
+		Status:     s.Status,
+		Cols:       s.Cols,
+		Rows:       s.Rows,
+		ExitCode:   s.ExitCode,
+		Error:      s.ErrorMessage,
+		CreatedBy:  s.CreatedBy,
+		CreatedAt:  s.CreatedAt,
+		UpdatedAt:  s.UpdatedAt,
+		RenderMode: s.RenderMode,
 	}
 }
 
@@ -118,11 +121,18 @@ func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 		if req.Rows <= 0 {
 			req.Rows = 24
 		}
+		if req.RenderMode == "" {
+			req.RenderMode = "xterm"
+		}
+		if req.RenderMode != "xterm" && req.RenderMode != "cards" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "render_mode must be 'xterm' or 'cards'"})
+			return
+		}
 
 		user, _ := userFromContext(r.Context())
 		ctx := r.Context()
 
-		sess, err := sessions.Create(ctx, db.Pool, project.ID, req.Name, req.Cols, req.Rows, user.ID)
+		sess, err := sessions.Create(ctx, db.Pool, project.ID, req.Name, req.Cols, req.Rows, user.ID, req.RenderMode)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create session"})
 			return
