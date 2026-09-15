@@ -462,6 +462,48 @@ server-side revision numbers. A runtime restart drops the in-memory watch
 set; the browser re-sends `watch` when it sees the runtime come back
 online, so changes during the gap go undetected.
 
+## Implementation (Docker tab): docker commands (ADR-040)
+
+Project-scoped Docker management (ADR-040, `docs/REQUIREMENTS_DOCKER_TAB.md`):
+the runtime talks to the local daemon via the moby client over the local
+unix socket (standard paths only) and shells out to the `docker compose`
+CLI plugin for compose actions. Visibility is strictly project-scoped:
+containers carrying the derived compose project label
+(`com.docker.compose.project`, default = working directory basename) or
+bind-mounting the Project working directory. The runtime re-validates every
+container ID against that scope independently of the Control Server.
+
+- `docker.command` (server→runtime, correlated): `{action, root, container?,
+  remove_volumes?, stream_id?, tail?}`. `root` is the Project's working
+  directory, taken from the Project record — never from a client request.
+  Actions: `list` (capability + compose-file detection + scoped container
+  list in one `DockerStatusPayload`), `resources` (read-only
+  images/volumes/networks referenced by scoped containers), `start`/`stop`/
+  `restart`/`remove` (scoped container, returns the refreshed list),
+  `compose_up`/`compose_down`/`compose_stop`/`compose_restart` (bounded CLI
+  subprocess — up/down carry a 10-minute bound, output capped at 64 KiB tail),
+  `logs_start`/`logs_stop` (`stream_id` keys the follow; `tail` replays past
+  lines before following).
+- `docker.result` / `docker.error` (runtime→server): the same correlation
+  shape as `file.result`/`file.error` (`docker.error` reuses
+  `ServiceErrorPayload`).
+- `docker.logs` (runtime→server push, no `Envelope.ID`):
+  `{stream_id, lines[], end?}` — one batch of followed log lines, batched
+  at ~200 ms/100 lines. `end: true` on the final push before a stream ends
+  (follow over, or cancelled by `logs_stop`).
+
+`Capabilities.docker` (`{available, version, compose}`) reports real,
+current daemon availability — nil when no socket is reachable, same
+"report reality" rule as `services`.
+
+**Browser-side log stream** (`WSS
+/api/v1/projects/{projectID}/docker/containers/{containerID}/logs`,
+cookie-authenticated): the server upgrades the request, starts
+`logs_start` with a fresh stream ID, and relays pushed batches as JSON
+frames (`{stream_id, lines, end}`) until the browser disconnects or the
+follow ends; disconnect triggers `logs_stop` on the runtime. Slow browsers
+drop batches rather than block the runtime read loop.
+
 ## Security
 
 Every runtime connection is authenticated.

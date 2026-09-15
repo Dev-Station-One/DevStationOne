@@ -195,6 +195,9 @@
       border-radius: var(--tblr-border-radius);
     }
     .db-data-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    /* Docker tab: same dense-table scroll behavior as the Files tab. */
+    .docker-table { min-width: 640px; margin-bottom: 0; }
+    .docker-table .btn, .docker-table .icon-btn { min-height: 44px; }
     .db-data-table { min-width: 480px; margin-bottom: 0; }
     .db-data-table th[data-sort] { cursor: pointer; user-select: none; white-space: nowrap; }
     .db-data-table td[contenteditable="true"] { cursor: text; }
@@ -239,6 +242,7 @@
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="databases" data-bs-target="#databases-panel" role="tab" aria-controls="databases-panel" aria-selected="false"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="services" data-bs-target="#services-panel" role="tab" aria-controls="services-panel" aria-selected="false"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="docker" data-bs-target="#docker-panel" role="tab" aria-controls="docker-panel" aria-selected="false"><i class="fa-brands fa-docker" aria-hidden="true"></i> Docker</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="journal" data-bs-target="#journal-panel" role="tab" aria-controls="journal-panel" aria-selected="false"><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</a></li>
               </ul>
               <button type="button" id="app-help-btn" class="icon-btn ms-2 flex-shrink-0" data-help="project-overview" aria-label="Help: Project overview" title="Help: Project overview"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
@@ -289,6 +293,59 @@
                 <div class="card-body text-secondary"><i class="fa-solid fa-gears me-1" aria-hidden="true"></i>No systemd --user services found on this runtime.</div>
               </div>
               <div id="services-list" class="row row-cards"></div>
+            </div>
+
+            <div id="docker-panel" class="tab-pane" role="tabpanel" tabindex="0">
+              <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
+                <div id="docker-summary" class="text-secondary">—</div>
+                <div class="d-flex gap-2 align-items-center">
+                  <button id="docker-compose-up-btn" class="btn btn-primary btn-sm" hidden><i class="fa-brands fa-docker me-1" aria-hidden="true"></i>Compose up</button>
+                  <button id="docker-compose-down-btn" class="btn btn-sm" hidden><i class="fa-solid fa-stop me-1" aria-hidden="true"></i>Compose down</button>
+                  <button id="docker-refresh-btn" class="icon-btn" aria-label="Refresh Docker status" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                </div>
+              </div>
+              <div id="docker-loading" class="text-secondary">Loading Docker…</div>
+              <div id="docker-error" class="alert alert-danger" hidden></div>
+              <div id="docker-unavailable" class="card" hidden>
+                <div class="card-body text-secondary"><i class="fa-brands fa-docker me-1" aria-hidden="true"></i>Docker is not available on this runtime — no reachable daemon socket.</div>
+              </div>
+              <div id="docker-nocompose" class="alert alert-info" hidden>
+                No compose file in this project's directory — showing containers that mount the project directory.
+              </div>
+              <div id="docker-body" hidden>
+                <div class="table-responsive">
+                  <table class="table table-vcenter card-table docker-table">
+                    <thead>
+                      <tr><th>Name</th><th>Image</th><th>State</th><th>Ports</th><th class="w-1">Actions</th></tr>
+                    </thead>
+                    <tbody id="docker-rows"></tbody>
+                  </table>
+                </div>
+                <div id="docker-empty" class="card mt-2" hidden>
+                  <div class="card-body text-secondary"><i class="fa-brands fa-docker me-1" aria-hidden="true"></i>No containers in this project's scope yet. Use "Compose up" to start the stack.</div>
+                </div>
+
+                <div id="docker-compose-output-card" class="card mt-3" hidden>
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong id="docker-compose-output-title">Compose</strong>
+                    <button id="docker-compose-output-close" class="icon-btn" aria-label="Close compose output" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                  </div>
+                  <div class="card-body py-2"><pre id="docker-compose-output" class="mb-0 small bg-dark-subtle p-2" style="max-height: 240px; overflow-y: auto;"></pre></div>
+                </div>
+
+                <div id="docker-logs-card" class="card mt-3" hidden>
+                  <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong id="docker-logs-title">Logs</strong>
+                    <button id="docker-logs-close" class="icon-btn" aria-label="Stop following logs" title="Stop following"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+                  </div>
+                  <div class="card-body py-2"><pre id="docker-logs" class="mb-0 small bg-dark-subtle p-2" style="max-height: 320px; overflow-y: auto;"></pre></div>
+                </div>
+
+                <details id="docker-resources-details" class="mt-3" hidden>
+                  <summary class="text-secondary">Images, volumes, networks (read-only)</summary>
+                  <div id="docker-resources" class="mt-2"></div>
+                </details>
+              </div>
             </div>
 
             <div id="databases-panel" class="tab-pane" role="tabpanel" tabindex="0">
@@ -1366,6 +1423,238 @@
     }
 
     $('#services-refresh-btn').on('click', loadServices);
+
+    // --- Docker (ADR-040, docs/REQUIREMENTS_DOCKER_TAB.md: project-scoped
+    // --- containers + compose, streamed logs, no built-in exec) ---
+
+    var dockerStatus = null;
+    var dockerLogWS = null;
+    var dockerLogContainer = null;
+
+    function dockerStateBadge(state) {
+      if (state === 'running') return 'bg-success';
+      if (state === 'exited' || state === 'dead') return 'bg-secondary';
+      if (state === 'paused') return 'bg-warning';
+      if (state === 'restarting') return 'bg-info';
+      return 'bg-azure-lt';
+    }
+
+    function closeDockerLogs() {
+      if (dockerLogWS) {
+        dockerLogWS.close();
+        dockerLogWS = null;
+      }
+      dockerLogContainer = null;
+      $('#docker-logs-card').prop('hidden', true);
+    }
+
+    function appendDockerLogLines(lines) {
+      var $pre = $('#docker-logs');
+      var stick = $pre[0].scrollTop + $pre[0].clientHeight >= $pre[0].scrollHeight - 4;
+      $pre.append(lines.map(function (l) { return document.createTextNode(l + '\n'); }));
+      // Cap the pane: keep the newest tail, drop the oldest.
+      var node = $pre[0];
+      while (node.childNodes.length > 4000) node.removeChild(node.firstChild);
+      if (stick) node.scrollTop = node.scrollHeight;
+    }
+
+    function openDockerLogs(container) {
+      closeDockerLogs();
+      dockerLogContainer = container;
+      $('#docker-logs-title').text('Logs — ' + container);
+      $('#docker-logs-card').prop('hidden', false);
+      $('#docker-logs').empty().text('Connecting…');
+
+      var proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+      var ws = new WebSocket(proto + window.location.host + '/api/v1/projects/' + projectID
+        + '/docker/containers/' + encodeURIComponent(container) + '/logs');
+      dockerLogWS = ws;
+      ws.onmessage = function (evt) {
+        try {
+          var p = JSON.parse(evt.data);
+          if (p.lines && p.lines.length) {
+            if ($('#docker-logs').text() === 'Connecting…') $('#docker-logs').empty();
+            appendDockerLogLines(p.lines);
+          }
+          if (p.end) closeDockerLogs();
+        } catch (e) { /* malformed frame: ignore */ }
+      };
+      ws.onclose = function () {
+        if (dockerLogWS === ws) {
+          dockerLogWS = null;
+          dockerLogContainer = null;
+        }
+      };
+      ws.onerror = function () {
+        if ($('#docker-logs').text() === 'Connecting…') $('#docker-logs').text('Log stream failed.');
+      };
+    }
+
+    $('#docker-logs-close').on('click', closeDockerLogs);
+
+    function renderDockerRows(st) {
+      var $rows = $('#docker-rows').empty();
+      $('#docker-empty').prop('hidden', st.containers.length > 0);
+      st.containers.forEach(function (c) {
+        var $tr = $('<tr>');
+        $('<td class="fw-bold text-truncate" style="max-width: 180px;">').text(c.name).attr('title', c.name).appendTo($tr);
+        $('<td class="text-secondary text-truncate" style="max-width: 220px;">').text(c.image).attr('title', c.image).appendTo($tr);
+        var $state = $('<td>').appendTo($tr);
+        $('<span class="badge ' + dockerStateBadge(c.state) + '">').text(c.state).appendTo($state);
+        if (c.health && c.health !== 'none') {
+          $('<span class="badge ms-1 ' + (c.health === 'healthy' ? 'bg-success' : c.health === 'unhealthy' ? 'bg-danger' : 'bg-info') + '">').text(c.health).appendTo($state);
+        }
+        $('<td class="text-secondary small">').text((c.ports || []).join(', ') || '—').appendTo($tr);
+
+        var $actions = $('<td>').appendTo($tr);
+        var running = c.state === 'running';
+        function iconBtn(action, icon, label, disabled) {
+          return $('<button type="button" class="icon-btn" data-action="' + action + '" aria-label="' + label + '" title="' + label + '"' + (disabled ? ' disabled' : '') + '>')
+            .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>');
+        }
+        iconBtn('start', 'play', 'Start', running).appendTo($actions);
+        iconBtn('stop', 'stop', 'Stop', !running).appendTo($actions);
+        iconBtn('restart', 'rotate', 'Restart', false).appendTo($actions);
+        iconBtn('logs', 'file-lines', 'Logs', false).appendTo($actions);
+        iconBtn('remove', 'trash', 'Remove', false).appendTo($actions);
+        $actions.find('button').on('click', function () {
+          runDockerContainerAction(c, $(this).data('action'));
+        });
+        $rows.append($tr);
+      });
+    }
+
+    function runDockerContainerAction(c, action) {
+      if (action === 'logs') {
+        if (dockerLogContainer === c.id) { closeDockerLogs(); return; }
+        openDockerLogs(c.id);
+        return;
+      }
+      if (action === 'remove') {
+        DS.confirm('Remove container "' + c.name + '"? Anonymous volumes and its retained logs are deleted; named volumes are kept.').then(function (ok) {
+          if (ok) dockerContainerAction(c.id, action);
+        });
+        return;
+      }
+      dockerContainerAction(c.id, action);
+    }
+
+    function dockerContainerAction(id, action) {
+      $.ajax({
+        url: '/api/v1/projects/' + projectID + '/docker/containers/' + encodeURIComponent(id) + '/' + action,
+        method: 'POST'
+      }).done(function (st) {
+        dockerStatus = st;
+        renderDockerRows(st);
+      }).fail(function (xhr) {
+        DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' the container.'));
+        loadDocker();
+      });
+    }
+
+    function dockerComposeAction(action) {
+      var doRun = function () {
+        $('#docker-compose-up-btn, #docker-compose-down-btn').prop('disabled', true);
+        $('#docker-compose-output-title').text('Compose ' + action + ' — running…');
+        $('#docker-compose-output').text('');
+        $('#docker-compose-output-card').prop('hidden', false);
+        $.ajax({
+          url: '/api/v1/projects/' + projectID + '/docker/compose/' + action,
+          method: 'POST',
+          timeout: 660000
+        }).done(function (res) {
+          $('#docker-compose-output-title').text('Compose ' + action + ' — done');
+          $('#docker-compose-output').text(res.output || '(no output)');
+          loadDocker();
+        }).fail(function (xhr) {
+          $('#docker-compose-output-title').text('Compose ' + action + ' — failed');
+          $('#docker-compose-output').text((xhr.responseJSON && xhr.responseJSON.error) || 'Compose ' + action + ' failed.');
+          loadDocker();
+        }).always(function () {
+          $('#docker-compose-up-btn, #docker-compose-down-btn').prop('disabled', false);
+        });
+      };
+      if (action === 'down') {
+        DS.confirm('Compose down stops and removes the stack\'s containers. Named volumes are kept unless the compose file says otherwise. Continue?').then(function (ok) {
+          if (ok) doRun();
+        });
+      } else {
+        doRun();
+      }
+    }
+
+    $('#docker-compose-up-btn').on('click', function () { dockerComposeAction('up'); });
+    $('#docker-compose-down-btn').on('click', function () { dockerComposeAction('down'); });
+    $('#docker-compose-output-close').on('click', function () {
+      $('#docker-compose-output-card').prop('hidden', true);
+    });
+
+    function loadDockerResources() {
+      $.get('/api/v1/projects/' + projectID + '/docker/resources').done(function (res) {
+        var $body = $('#docker-resources').empty();
+        function section(title, rows) {
+          var $div = $('<div class="mb-2">');
+          $('<div class="text-secondary small fw-bold">').text(title).appendTo($div);
+          var $ul = $('<ul class="small mb-1">').appendTo($div);
+          (rows || []).forEach(function (r) { $('<li>').text(r).appendTo($ul); });
+          if (!rows || !rows.length) $('<div class="text-secondary small">').text('None').appendTo($div);
+          return $div;
+        }
+        $body.append(section('Images', (res.images || []).map(function (i) {
+          return (i.tags && i.tags.length ? i.tags[0] : i.id) + ' (' + Math.round(i.size / 1048576) + ' MB)';
+        })));
+        $body.append(section('Volumes', (res.volumes || []).map(function (v) { return v.name + ' (' + v.driver + ')'; })));
+        $body.append(section('Networks', (res.networks || []).map(function (n) { return n.name + ' (' + n.driver + ')'; })));
+      }).fail(function () {
+        $('#docker-resources').html('<div class="text-secondary small">Failed to load resources.</div>');
+      });
+    }
+
+    function renderDocker(st) {
+      $('#docker-loading').prop('hidden', true);
+      if (!st.available) {
+        $('#docker-summary').text('Docker not available');
+        $('#docker-unavailable').prop('hidden', false);
+        $('#docker-body').prop('hidden', true);
+        $('#docker-compose-up-btn, #docker-compose-down-btn').prop('hidden', true);
+        return;
+      }
+      $('#docker-unavailable').prop('hidden', true);
+      $('#docker-body').prop('hidden', false);
+      $('#docker-nocompose').prop('hidden', !!st.compose_file);
+      var composeReady = !!st.compose_file && !!st.compose;
+      $('#docker-compose-up-btn').prop('hidden', !composeReady);
+      $('#docker-compose-down-btn').prop('hidden', !composeReady);
+      var running = st.containers.filter(function (c) { return c.state === 'running'; }).length;
+      $('#docker-summary').text(st.containers.length + ' container' + (st.containers.length === 1 ? '' : 's')
+        + ' (' + running + ' running)' + (st.version ? ' — ' + st.version : ''));
+      renderDockerRows(st);
+      if ($('#docker-resources-details').prop('open')) loadDockerResources();
+    }
+
+    function loadDocker() {
+      $('#docker-error').prop('hidden', true);
+      $('#docker-loading').prop('hidden', false);
+      $('#docker-unavailable').prop('hidden', true);
+      $.get('/api/v1/projects/' + projectID + '/docker')
+        .done(function (st) {
+          dockerStatus = st;
+          renderDocker(st);
+        })
+        .fail(function (xhr) {
+          $('#docker-loading').prop('hidden', true);
+          $('#docker-unavailable').prop('hidden', true);
+          $('#docker-summary').text(xhr.status === 409 ? 'Offline' : '—');
+          var msg = (xhr.responseJSON && xhr.responseJSON.error) ||
+            (xhr.status === 409 ? 'Runtime is offline.' : 'Failed to load Docker status.');
+          $('#docker-error').text(msg).prop('hidden', false);
+        });
+    }
+
+    $('#docker-refresh-btn').on('click', loadDocker);
+    $('#docker-resources-details').on('toggle', function () {
+      if (this.open) loadDockerResources();
+    });
 
     // --- Databases (docs/PRD.md §6 Database Manager — Slice 7: connections,
     // --- protected credentials, connection test. Schema/data browsing and
@@ -3202,7 +3491,7 @@
     var HELP_TOPIC_BY_TAB = {
       overview: 'project-overview', terminal: 'terminal', files: 'files',
       code: 'code', git: 'source-control', databases: 'databases',
-      services: 'services', journal: 'journal'
+      services: 'services', docker: 'docker', journal: 'journal'
     };
     if (window.DSHelp) window.DSHelp.ensureTopics(Object.keys(HELP_TOPIC_BY_TAB).map(function (k) { return HELP_TOPIC_BY_TAB[k]; }));
 
@@ -3228,6 +3517,12 @@
       }
       if (tab === 'services') {
         loadServices();
+      }
+      if (tab === 'docker') {
+        loadDocker();
+      } else {
+        // Leaving the Docker tab stops the followed log stream (ADR-040).
+        closeDockerLogs();
       }
       if (tab === 'files' && !filesLoaded) {
         filesLoaded = true;

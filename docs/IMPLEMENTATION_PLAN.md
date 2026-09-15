@@ -1063,3 +1063,42 @@ unknown, revoked-runtime delete, audit event) +
 delete the metrics `runtime_connections` gauge reaches 0).
 
 **Status: Complete.**
+
+## Slice 26 — Docker/Compose tab (ADR-040, REQUIREMENTS_DOCKER_TAB.md)
+
+**Goal**: manage the project's compose stack and its containers from the
+workspace UI, through the runtime, via moby client + compose CLI plugin.
+
+**Design**:
+
+- *Protocol*: new message types `docker.command` (list/lifecycle/compose
+  RPCs, mirroring `service.command`) and `docker.logs` streaming messages
+  over the existing WS gateway. `Capabilities` gains `docker{available,
+  version, compose}`.
+- *Runtime*: `internal/docker` — moby client dial on demand, compose
+  discovery (stat the four compose filenames in project root), project
+  scoping (compose label + bind-mount match), `docker compose` subprocess
+  with fixed argv and 10-min timeout, `logs -f` streaming. Independent
+  scope re-validation (server-side containment rule).
+- *Control Server*: `internal/api/docker.go` handlers —
+  `GET/POST .../projects/{id}/docker/...` (list, start/stop/restart/remove,
+  compose up/down/stop/restart, logs WS upgrade, images/volumes/networks
+  read-only), following `runtimeConnForProject`/`serviceCommand` patterns;
+  audit events for lifecycle + compose actions.
+- *UI*: Docker app tab in `project.html` per VISUAL spec — state strip
+  (not available / no compose file), container datatable (existing
+  dense-table pattern), log pane with follow/toggle, compose action
+  buttons, read-only resource lists. Tab hidden/disabled when capability
+  absent.
+- *OpenAPI*: all endpoints in `docs/openapi.yaml`; *PROTOCOL.md*: new
+  messages.
+
+**Tests**: runtime unit tests with a real daemon when present +
+scope-containment security tests (traversal, decoy out-of-scope container
+never listed); API handler tests (authz, offline runtime, bad paths); E2E
+for list/lifecycle/logs.
+
+**Smoke**: real `docker compose up` against the dev runtime, follow logs,
+stop stack.
+
+**Status: Complete.**

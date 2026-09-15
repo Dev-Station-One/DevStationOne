@@ -20,6 +20,7 @@ tags:
   - name: Git
   - name: Databases
   - name: Services
+  - name: Docker
   - name: Audit
   - name: Metrics
 paths:
@@ -1104,6 +1105,186 @@ paths:
           description: The project's runtime is not currently connected
         "502":
           description: Failed to reach the runtime
+  /api/v1/projects/{projectID}/docker:
+    get:
+      summary: Docker tab first-render status for the project's runtime
+      description: Live RPC — availability, compose-file detection, and the project-scoped container list in one payload. See docs/API.md "Docker".
+      tags: [Docker]
+      operationId: getDockerStatus
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Capability, compose detection, and scoped containers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DockerStatus"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime failed to answer
+
+  /api/v1/projects/{projectID}/docker/resources:
+    get:
+      summary: Read-only images, volumes, and networks referenced by the project's scoped containers
+      description: Live RPC. Read-only by design (ADR-040) — resources are never created or deleted from the UI.
+      tags: [Docker]
+      operationId: getDockerResources
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Scoped resource lists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DockerResources"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime failed to answer
+
+  /api/v1/projects/{projectID}/docker/containers/{containerID}/logs:
+    get:
+      summary: Follow one scoped container's logs over a WebSocket
+      description: Upgrades to a WebSocket relaying batched `docker logs -f` lines ({stream_id, lines, end}); works on stopped containers; stops when the browser disconnects. See docs/PROTOCOL.md "Docker tab".
+      tags: [Docker]
+      operationId: streamDockerLogs
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: containerID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "101":
+          description: Switched to WebSocket
+        "400":
+          description: Invalid container id
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+
+  /api/v1/projects/{projectID}/docker/containers/{containerID}/{dockerAction}:
+    post:
+      summary: Run one container lifecycle action
+      description: Action is one of start/stop/restart/remove (validated server-side; the runtime re-validates scope). Returns the refreshed scoped list.
+      tags: [Docker]
+      operationId: dockerContainerAction
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: containerID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dockerAction
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [start, stop, restart, remove]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                remove_volumes:
+                  type: boolean
+                  description: remove only — also delete anonymous volumes
+      responses:
+        "200":
+          description: The refreshed scoped container list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DockerStatus"
+        "400":
+          description: Invalid container id
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or unknown action
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime rejected the action (e.g. container outside project scope)
+
+  /api/v1/projects/{projectID}/docker/compose/{dockerAction}:
+    post:
+      summary: Run one docker compose action on the project's compose file
+      description: Action is one of up/down/stop/restart. up is `docker compose up -d --build`; up/down carry a 10-minute bound. Returns the bounded tail of the CLI output. Requires a compose file in the project working directory.
+      tags: [Docker]
+      operationId: dockerComposeAction
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: dockerAction
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [up, down, stop, restart]
+      responses:
+        "200":
+          description: The bounded CLI output tail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DockerComposeOutput"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found, or unknown action
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The compose run failed (no compose file, CLI failure, timeout)
+
   /api/v1/projects/{projectID}/services:
     get:
       summary: List systemd --user services on the project's runtime
@@ -3903,6 +4084,105 @@ components:
         render_mode:
           type: string
           enum: [xterm, cards]
+    DockerStatus:
+      type: object
+      description: The Docker tab's first-render payload — capability, compose detection, and the project-scoped container list (ADR-040).
+      required: [available, compose, containers]
+      properties:
+        available:
+          type: boolean
+          description: False when the runtime host has no reachable Docker daemon; then version/compose_file/containers are empty.
+        version:
+          type: string
+        compose:
+          type: boolean
+          description: The `docker compose` CLI plugin is installed.
+        compose_file:
+          type: string
+          description: Absolute path of the detected compose file in the project working directory, if any.
+        containers:
+          type: array
+          items:
+            $ref: "#/components/schemas/DockerContainer"
+
+    DockerContainer:
+      type: object
+      description: A project-scoped Docker container.
+      required: [id, name, image, state, status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        image:
+          type: string
+        state:
+          type: string
+          enum: [created, running, paused, restarting, removing, exited, dead]
+        status:
+          type: string
+        health:
+          type: string
+        ports:
+          type: array
+          items:
+            type: string
+        compose_service:
+          type: string
+        compose_project:
+          type: string
+
+    DockerResources:
+      type: object
+      description: Read-only image/volume/network lists referenced by the project's scoped containers (ADR-040).
+      properties:
+        images:
+          type: array
+          items:
+            type: object
+            required: [id, size, created]
+            properties:
+              id:
+                type: string
+              tags:
+                type: array
+                items:
+                  type: string
+              size:
+                type: integer
+                format: int64
+              created:
+                type: integer
+                format: int64
+        volumes:
+          type: array
+          items:
+            type: object
+            required: [name, driver]
+            properties:
+              name:
+                type: string
+              driver:
+                type: string
+        networks:
+          type: array
+          items:
+            type: object
+            required: [name, driver]
+            properties:
+              name:
+                type: string
+              driver:
+                type: string
+
+    DockerComposeOutput:
+      type: object
+      description: The bounded tail of one `docker compose` CLI run's combined output.
+      required: [output]
+      properties:
+        output:
+          type: string
+
     ServiceInfo:
       type: object
       description: A systemd --user unit's live status. Not a stored resource — see docs/API.md "Services".

@@ -31,7 +31,7 @@ const heartbeatTimeout = 45 * time.Second
 // runtimeConnectHandler accepts the outbound WebSocket connection a
 // Development Runtime opens using its enrollment token as a bearer
 // credential.
-func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logger *slog.Logger) http.HandlerFunc {
+func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logsHub *dockerLogsHub, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		token := bearerToken(r)
 		if token == "" {
@@ -58,7 +58,7 @@ func runtimeConnectHandler(db *database.DB, registry *runtimes.Registry, hub *se
 			return // Accept already wrote the HTTP error response.
 		}
 
-		handleRuntimeConnection(r.Context(), conn, db, registry, hub, bus, editorHub, logger, rt)
+		handleRuntimeConnection(r.Context(), conn, db, registry, hub, bus, editorHub, logsHub, logger, rt)
 	}
 }
 
@@ -185,7 +185,7 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 	}
 	// Every RPC error type carries the same {"error": ...} shape; see
 	// ServiceErrorPayload's reuse by file.error/db.error/git.error.
-	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError || env.Type == protocol.MessageDBError || env.Type == protocol.MessageGitError || env.Type == protocol.MessageCodeError {
+	if env.Type == protocol.MessageServiceError || env.Type == protocol.MessageFileError || env.Type == protocol.MessageDBError || env.Type == protocol.MessageGitError || env.Type == protocol.MessageCodeError || env.Type == protocol.MessageDockerError {
 		var e protocol.ServiceErrorPayload
 		_ = json.Unmarshal(env.Payload, &e)
 		ch <- rpcResponse{err: errors.New(e.Error)}
@@ -195,7 +195,7 @@ func (w *wsConn) tryResolve(env protocol.Envelope) bool {
 	return true
 }
 
-func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logger *slog.Logger, rt runtimes.Runtime) {
+func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, dockerLogsHub *dockerLogsHub, logger *slog.Logger, rt runtimes.Runtime) {
 	defer conn.CloseNow()
 	// The control connection carries the largest legal envelopes, including
 	// file.command/file.result payloads transferring up to
@@ -265,13 +265,13 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 		if wc.tryResolve(env) {
 			continue
 		}
-		handleRuntimeEnvelope(ctx, env, db, registry, hub, bus, editorHub, logger, rt.ID)
+		handleRuntimeEnvelope(ctx, env, db, registry, hub, bus, editorHub, dockerLogsHub, logger, rt.ID)
 	}
 }
 
 // handleRuntimeEnvelope dispatches one control-plane JSON message received
 // from a connected runtime.
-func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logger *slog.Logger, runtimeID string) {
+func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logsHub *dockerLogsHub, logger *slog.Logger, runtimeID string) {
 	switch env.Type {
 	case protocol.MessageHeartbeat:
 		if err := runtimes.Heartbeat(ctx, db.Pool, runtimeID); err != nil {
@@ -336,6 +336,13 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 		// In its own goroutine: it issues a correlated open RPC back to this
 		// same runtime, whose reply only this read loop can resolve.
 		go handleCodeFileChanged(ctx, db, registry, editorHub, logger, runtimeID, p)
+
+	case protocol.MessageDockerLogs:
+		var p protocol.DockerLogsPayload
+		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		logsHub.forward(p)
 	}
 }
 

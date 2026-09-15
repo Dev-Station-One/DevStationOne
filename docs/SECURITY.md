@@ -26,6 +26,23 @@ Cryptographically authenticated runtime identity.
 
 Normal user privileges. OS permissions remain a primary defense.
 
+### Runtime → Docker daemon (ADR-040)
+
+The Docker tab's runtime-side operations reach the daemon only through a
+local unix socket (standard paths — `/var/run/docker.sock`, `/run/docker.sock`,
+or the rootless `~/.docker/run/docker.sock`); never TCP, never `DOCKER_HOST`
+in any other scheme. Granting the runtime user access to that socket (docker
+group membership or rootless docker) is **host-root-equivalent** on that
+machine — it is an explicit deployment prerequisite, chosen by whoever
+installs the runtime, not something the code grants. All container IDs,
+compose actions, and the compose file location are resolved or re-validated
+by the runtime against the project scope (compose project label or
+bind-mount of the Project working directory); a client-supplied container ID
+can only ever select among containers the scoped list already showed. The
+`docker compose` subprocess is invoked with fixed argv and the project
+directory as cwd — no shell interpolation, no client-provided paths or
+project names.
+
 ## Authorization
 
 Every request must establish:

@@ -13,6 +13,7 @@ import (
 	"devstationone/internal/config"
 	"devstationone/internal/connection"
 	"devstationone/internal/dbconnectors"
+	"devstationone/internal/docker"
 	"devstationone/internal/protocol"
 	"devstationone/internal/services"
 )
@@ -55,6 +56,15 @@ func Run(ctx context.Context, cfg config.Runtime, logger *slog.Logger) error {
 			Shells:     readShells("/etc/shells"),
 			Users:      readColonNames("/etc/passwd"),
 			Groups:     readColonNames("/etc/group"),
+			// Docker reflects a reachable daemon and installed compose
+			// plugin, same "report reality" rule as Services (ADR-040).
+			Docker: func() *protocol.DockerCapability {
+				cap := docker.Discover(ctx)
+				if !cap.Available {
+					return nil
+				}
+				return &cap
+			}(),
 		},
 	}
 

@@ -1362,3 +1362,49 @@ that consequence — a dead machine that never reports offline would
 otherwise be undeletable. Audited as `runtime.deleted`. The UI adds a
 trash icon on every runtimes row next to revoke/reactivate, with the
 confirm text varying on the online badge.
+
+## ADR-040 — Docker tab: moby client over local socket, compose via CLI plugin, project-scoped visibility, no built-in exec
+
+**Decision.** The project workspace gains a Docker tab backed by a new
+runtime docker subsystem. The runtime talks to the daemon through
+`github.com/moby/moby/client` (v0.6.x, current as of Sep 2026) over the
+local unix socket — default `/var/run/docker.sock`, rootless
+`~/.docker/run/docker.sock` fallback; never TCP. Compose operations shell
+out to the `docker compose` CLI plugin with fixed argv (the moby client has
+no compose API; docker.sock doesn't expose compose — it lives in the CLI
+plugin). Visibility is project-scoped only: containers belonging to the
+detected compose project (`com.docker.compose.project` label) plus
+containers whose mounts bind the project working directory; dev-infra
+containers outside that scope are invisible by design. The compose file is
+auto-detected in the project working directory (containment-checked, no
+project setting). Container logs stream with `docker logs -f` semantics
+over WebSocket, work on stopped containers, and stop when the tab closes.
+Compose up/down is a bounded RPC with an extended timeout (10 min)
+returning final output — no live build streaming. Container exec is
+excluded: the Terminal tab is already a PTY in the project directory where
+`docker exec -it` works today; built-in exec would add a protocol session
+type, ExecAttach plumbing, and container-ID scope validation for one saved
+keystroke. Images/volumes/networks are read-only lists, filtered to
+resources referenced by in-scope containers.
+
+**Why.** Local-socket-only matches the runtime's security posture (no
+network-exposed docker); the socket grant itself is the documented trust
+boundary — docker-group membership is host-root-equivalent, so SECURITY.md
+gets an explicit deployment prerequisite entry. Project-scoped visibility
+keeps the tab honest to its context; the filter is one label check to relax
+later if it bites. CLI-plugin compose gets full v2 semantics (build, env
+interpolation, profiles) for free — reimplementing compose in Go against
+raw container APIs is a known tar pit. Logs streaming reuses the existing
+WS transport patterns; polling was rejected as worse UX for watching a dev
+server boot.
+
+**Consequence.** Runtime user needs docker socket access — a documented
+prerequisite, not a code concern. The socket path is standard-only (no
+config surface): a socket living elsewhere (podman, `DOCKER_HOST`) simply
+reports not-available, and a runtime config field is the upgrade path if
+that ever bites. A runtime host without Docker reports it
+via `protocol.Capabilities` (new `docker` field: socket reachable, daemon
+version, compose plugin present) and the tab renders a not-available empty
+state. Compose output arrives only at completion; live progress is the
+upgrade path if slow builds annoy (`ponytail:` marker). Exec stays out
+until someone actually asks.

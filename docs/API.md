@@ -665,6 +665,56 @@ Response shape for every unit-returning endpoint:
 `enabled` is `"enabled"`, `"disabled"`, `"static"` (has no `[Install]`
 section — enable/disable are meaningless for it), or `"unknown"`.
 
+## Docker
+
+```text
+GET  /api/v1/projects/{projectID}/docker
+GET  /api/v1/projects/{projectID}/docker/resources
+GET  /api/v1/projects/{projectID}/docker/containers/{containerID}/logs   (WebSocket)
+POST /api/v1/projects/{projectID}/docker/containers/{containerID}/{dockerAction}
+POST /api/v1/projects/{projectID}/docker/compose/{dockerAction}
+```
+
+Project-scoped Docker management on the Project's runtime (ADR-040,
+`docs/REQUIREMENTS_DOCKER_TAB.md`). Not a stored resource — every request
+is a live RPC over the runtime's control-plane connection (`docs/PROTOCOL.md`
+"Implementation (Docker tab): docker commands"), so there is no docker
+table. Authorization reuses `authorizedProject` (ADR-013): `404` on a
+project the caller does not own, `409` if the runtime is not connected.
+
+Visibility is strictly project-scoped: containers carrying the compose
+project label derived from the Project's working directory, or bind-mounting
+that directory. Everything else on the runtime host is never listed. The
+runtime re-validates every container ID against that scope independently
+(`502` for an out-of-scope target); the Control Server additionally rejects
+malformed IDs (`400`).
+
+`GET .../docker` returns the tab's first-render payload in one round trip:
+`{available, version, compose, compose_file, containers}`. `available` is
+false when the runtime host has no reachable Docker socket — the UI shows
+a not-available state and the other routes still answer `409`/`502` shaped
+by the runtime.
+
+`{dockerAction}` on containers is `start`/`stop`/`restart`/`remove`
+(`remove` accepts an optional `{"remove_volumes": true}` body); it returns
+the refreshed scoped list. On compose, `{dockerAction}` is
+`up`/`down`/`stop`/`restart` against the compose file auto-detected in the
+Project's working directory — `up` is `docker compose up -d --build`;
+`up`/`down` carry a 10-minute bound and return the bounded (64 KiB) tail of
+the CLI's combined output. No compose file answers `502`.
+
+`GET .../containers/{containerID}/logs` upgrades to a WebSocket relaying
+batched followed log lines (`{stream_id, lines, end}`), replaying the last
+200 lines then following, `docker logs -f` semantics — works for stopped
+containers too, and ends (`end: true`) when the retained log ends. The
+stream stops when the browser disconnects.
+
+`GET .../docker/resources` returns read-only images/volumes/networks
+referenced by the scoped containers. Docker resources are never created,
+deleted, or pulled from the UI (ADR-040). Container exec is deliberately
+absent — the Terminal tab is already a PTY in the project directory where
+`docker exec -it` works (ADR-040).
+
 ## Audit
 
 ```text

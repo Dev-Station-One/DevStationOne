@@ -78,6 +78,11 @@ const (
 	EventUserDeleted = "user.deleted"
 
 	EventOwnershipTransferred = "ownership.transferred"
+
+	// EventDockerAction covers container start/stop/restart/remove and
+	// compose up/down/stop/restart; the specific action is carried in
+	// Detail["action"] (same pattern as EventServiceAction).
+	EventDockerAction = "docker.action"
 )
 
 // Actor identifies who triggered an event. UserID is empty for an

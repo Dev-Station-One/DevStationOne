@@ -20,6 +20,7 @@ type dispatcher struct {
 	db      *dbManager
 	git     *gitManager
 	edit    *editManager
+	docker  *dockerManager
 }
 
 // NewManager builds the runtime's top-level connection.Manager, driving
@@ -38,6 +39,7 @@ func NewManager(logger *slog.Logger) connection.Manager {
 		db:      newDBManager(logger),
 		git:     newGitManager(logger),
 		edit:    newEditManager(logger),
+		docker:  newDockerManager(logger),
 	}
 }
 
@@ -48,6 +50,7 @@ func (d *dispatcher) SetSender(s connection.Sender) {
 	d.db.SetSender(s)
 	d.git.SetSender(s)
 	d.edit.SetSender(s)
+	d.docker.SetSender(s)
 }
 
 func (d *dispatcher) HandleEnvelope(env protocol.Envelope) {
@@ -69,6 +72,10 @@ func (d *dispatcher) HandleEnvelope(env protocol.Envelope) {
 	}
 	if env.Type == protocol.MessageCodeCommand {
 		d.edit.HandleEnvelope(env)
+		return
+	}
+	if env.Type == protocol.MessageDockerCommand {
+		d.docker.HandleEnvelope(env)
 		return
 	}
 	d.session.HandleEnvelope(env)

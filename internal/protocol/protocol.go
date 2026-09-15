@@ -114,6 +114,22 @@ const (
 	// is not a reply) when a watched file's mtime/size changed, or the file
 	// vanished, as observed by the edit manager's poll loop.
 	MessageCodeFileChanged MessageType = "code.file.changed"
+
+	// MessageDockerCommand is sent server->runtime to manage the project's
+	// Docker containers/compose stack (ADR-040). Like service.command, it
+	// uses Envelope.ID for request/response correlation.
+	MessageDockerCommand MessageType = "docker.command"
+	// MessageDockerResult is sent runtime->server with a successful
+	// docker.command result, carrying the same Envelope.ID as the request.
+	MessageDockerResult MessageType = "docker.result"
+	// MessageDockerError is sent runtime->server when a docker.command
+	// fails, carrying the same Envelope.ID as the request. Its payload shape
+	// is identical to ServiceErrorPayload, which is reused for it.
+	MessageDockerError MessageType = "docker.error"
+	// MessageDockerLogs is pushed runtime->server (no Envelope.ID — it is
+	// not a reply) carrying one batch of followed container log lines,
+	// keyed by the StreamID from the docker.command logs_start request.
+	MessageDockerLogs MessageType = "docker.logs"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
@@ -156,6 +172,19 @@ type Capabilities struct {
 	// a normal file.error.
 	Users  []string `json:"users,omitempty"`
 	Groups []string `json:"groups,omitempty"`
+	// Docker reports real, current availability of the local Docker daemon
+	// (ADR-040): socket reachable, daemon version, and whether the compose
+	// CLI plugin is installed. Nil when the runtime build has no docker
+	// support or no socket could be reached.
+	Docker *DockerCapability `json:"docker,omitempty"`
+}
+
+// DockerCapability describes the runtime host's Docker daemon availability.
+type DockerCapability struct {
+	Available bool   `json:"available"`
+	Version   string `json:"version,omitempty"`
+	// Compose is true when the `docker compose` CLI plugin is installed.
+	Compose bool `json:"compose"`
 }
 
 // HelloPayload is the payload of a MessageHello envelope.
@@ -258,6 +287,108 @@ type ServiceResultPayload struct {
 // ServiceErrorPayload is the payload of a MessageServiceError envelope.
 type ServiceErrorPayload struct {
 	Error string `json:"error"`
+}
+
+// DockerCommandPayload is the payload of a MessageDockerCommand envelope.
+// Container and ComposeFile are always validated by the runtime against the
+// project scope (ADR-040) — the client's value only ever selects among
+// resources the scoped list already showed it.
+type DockerCommandPayload struct {
+	// Action is one of: list, start, stop, restart, remove, compose_up,
+	// compose_down, compose_stop, compose_restart, logs_start, logs_stop,
+	// resources.
+	Action string `json:"action"`
+	// Root is the Project's working directory, taken from the Project
+	// record — never from a client request, same rule as
+	// FileCommandPayload.Root. Compose-file detection, container scoping,
+	// and compose subprocess cwd all resolve against it.
+	Root string `json:"root"`
+	// Container is the target container ID or name. Required for every
+	// action except compose_* and logs_stop.
+	Container string `json:"container,omitempty"`
+	// RemoveVolumes accompanies a "remove" action's anonymous-volume cleanup.
+	RemoveVolumes bool `json:"remove_volumes,omitempty"`
+	// StreamID keys a logs_start/logs_stop pair; log batches are pushed as
+	// MessageDockerLogs with the same StreamID.
+	StreamID string `json:"stream_id,omitempty"`
+	// Tail is the number of past lines a logs_start replays before
+	// following.
+	Tail int `json:"tail,omitempty"`
+}
+
+// ContainerInfo is the project-scoped projection of one Docker container.
+type ContainerInfo struct {
+	ID     string   `json:"id"`
+	Name   string   `json:"name"`
+	Image  string   `json:"image"`
+	State  string   `json:"state"`
+	Status string   `json:"status"`
+	Health string   `json:"health,omitempty"`
+	Ports  []string `json:"ports,omitempty"`
+	// ComposeService/ComposeProject are the com.docker.compose.* labels,
+	// empty for non-compose containers that made the scope via bind mounts.
+	ComposeService string `json:"compose_service,omitempty"`
+	ComposeProject string `json:"compose_project,omitempty"`
+}
+
+// ImageInfo is a read-only image summary (ADR-040: images are never managed
+// from the UI).
+type ImageInfo struct {
+	ID      string `json:"id"`
+	Tags    []string
+	Size    int64 `json:"size"`
+	Created int64 `json:"created"`
+}
+
+// VolumeInfo is a read-only volume summary.
+type VolumeInfo struct {
+	Name   string `json:"name"`
+	Driver string `json:"driver"`
+}
+
+// NetworkInfo is a read-only network summary.
+type NetworkInfo struct {
+	Name   string `json:"name"`
+	Driver string `json:"driver"`
+}
+
+// DockerStatusPayload is the payload of a "list" docker.command result:
+// everything the Docker tab's first render needs in one round trip.
+type DockerStatusPayload struct {
+	// Available is false when the runtime host has no reachable Docker
+	// daemon; then Version/ComposeFile/Containers are empty.
+	Available   bool   `json:"available"`
+	Version     string `json:"version,omitempty"`
+	Compose     bool   `json:"compose"`
+	ComposeFile string `json:"compose_file,omitempty"`
+	// Containers is always an array (never null/omitted) — the tab renders
+	// from it directly.
+	Containers []ContainerInfo `json:"containers"`
+}
+
+// DockerComposeOutputPayload is the payload of a compose_* docker.command
+// result: the bounded tail of the compose CLI's combined output.
+type DockerComposeOutputPayload struct {
+	Output string `json:"output"`
+}
+
+// DockerResourcesPayload is the payload of a "resources" docker.command
+// result: read-only images/volumes/networks referenced by the project's
+// scoped containers.
+type DockerResourcesPayload struct {
+	Images   []ImageInfo   `json:"images,omitempty"`
+	Volumes  []VolumeInfo  `json:"volumes,omitempty"`
+	Networks []NetworkInfo `json:"networks,omitempty"`
+}
+
+// DockerLogsPayload is the payload of a MessageDockerLogs push: one batch of
+// followed log lines for the stream keyed by StreamID. End is set on the
+// final push before the stream closes normally (follow ended, container
+// removed).
+type DockerLogsPayload struct {
+	StreamID string   `json:"stream_id"`
+	Lines    []string `json:"lines"`
+	End      bool     `json:"end,omitempty"`
 }
 
 // MaxFileBytes caps the size of one file transferred in a file.command
