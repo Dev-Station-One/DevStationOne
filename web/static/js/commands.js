@@ -99,15 +99,35 @@
 
   function run(c, $btn) {
     $btn.prop('disabled', true);
-    $.ajax({ url: apiBase() + '/commands/' + c.id + '/run', method: 'POST' }).done(function (session) {
+    // Fire-and-collect (ADR-045): the run's session is created server-side
+    // but the browser never attaches — the 2s poll below refetches the row
+    // (and then the list) once the session.exit finalize lands.
+    $.ajax({ url: apiBase() + '/commands/' + c.id + '/run', method: 'POST' }).done(function () {
       $btn.prop('disabled', false);
-      // The run's history row finalizes when the session exits; refresh any
-      // open history panel so a just-finished run shows without a reload.
-      if (state.onSession) state.onSession(session);
+      pollRun(c.id);
     }).fail(function (xhr) {
       $btn.prop('disabled', false);
       DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to run command.');
     });
+  }
+
+  var pollTimer = null;
+
+  function pollRun(commandID) {
+    if (pollTimer) return; // one watcher at a time; Refresh covers the rest
+    pollTimer = setInterval(function () {
+      $.get(apiBase() + '/command-runs?command_id=' + encodeURIComponent(commandID) + '&limit=1').done(function (res) {
+        var run = res.runs[0];
+        if (!run || run.finished_at) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          load();
+        }
+      }).fail(function () {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      });
+    }, 2000);
   }
 
   function onSession(info) {
@@ -149,7 +169,12 @@
 
   function showOutput(runID) {
     $.get(apiBase() + '/command-runs/' + encodeURIComponent(runID)).done(function (run) {
-      $('#command-output-pre').text(run.output_tail || (run.error ? 'Error: ' + run.error : '(no output captured)'));
+      var tail = run.output_tail || (run.error ? 'Error: ' + run.error : '(no output captured)');
+      var CLAMP = 1024 * 1024;
+      var body = tail.length > CLAMP
+        ? '[output truncated to the last 1 MiB for display — full output is stored]\n\n' + tail.slice(-CLAMP)
+        : tail;
+      $('#command-output-pre').text(body);
       DSCommands.modal('command-output-modal').show();
     });
   }
@@ -327,7 +352,7 @@
   // --- entry point (project.html's lazy-tab wiring) ---
 
   function render($panel, opts) {
-    state = { projectID: opts.projectID, onSession: opts.onSession };
+    state = { projectID: opts.projectID };
     $panel.html(
       '<div class="d-flex justify-content-between align-items-center mb-3">'
       + '<div id="commands-summary" class="text-secondary">—</div>'

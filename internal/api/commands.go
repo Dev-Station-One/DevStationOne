@@ -162,6 +162,9 @@ func deleteCommandHandler(db *database.DB) http.HandlerFunc {
 // runCommandHandler opens a new PTY session executing one Quick Command
 // (shell -c <command>, ADR-045), recording it in command_runs; the captured
 // output tail is flushed to the history row by the session.exit handler.
+// The command-run session is deliberately NOT returned for the browser to
+// attach to (fire-and-collect) — the run executes and its results are read
+// back from the history endpoints.
 func runCommandHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		project, ok := authorizedProject(w, r, db, r.PathValue("projectID"))

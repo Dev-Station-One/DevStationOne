@@ -3428,12 +3428,11 @@
         }
       }
       if (tab === 'commands') {
-        // Quick Commands (web/static/js/commands.js, ADR-045); renders once,
-        // then its own buttons refetch. onSession: a run opens the terminal
-        // tab it created.
+        // Quick Commands (web/static/js/commands.js, ADR-045) —
+        // fire-and-collect: a run executes server-side and is read back
+        // from the history endpoints; no terminal tab is opened.
         window.DSCommands.render($('#commands-panel'), {
-          projectID: projectID,
-          onSession: function (info) { showAppTab('terminal'); addSession(info); }
+          projectID: projectID
         });
       }
       if (tab === 'backups') {

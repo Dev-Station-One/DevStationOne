@@ -225,8 +225,7 @@ Security must be enforced at:
 
 ## Command run output capture (ADR-045)
 
-The Quick Commands feature persists the **last 64 KiB of a command-run
-session's PTY output** into `command_runs.output_tail` — the one deliberate
+The Quick Commands feature persists the **full output of a command-run session (capped at 100 MiB as a safety net)** into `command_runs.output_tail` — the one deliberate
 exception to "do not store raw terminal streams" above, scoped strictly to
 sessions opened by a Quick Command click (ordinary terminals capture zero
 bytes). Risks and mitigations:
@@ -239,7 +238,7 @@ bytes). Risks and mitigations:
   terminal session attach (404 for everyone without project access),
   never logged server-side, never included in list responses (only the
   single-run GET).
-- Bounded (64 KiB per run, newest 100 runs per project, pruned on insert),
+- Bounded (full output per run up to 100 MiB, newest 100 runs per project, pruned on insert),
   ANSI-stripped, forced to valid UTF-8.
 - The command string itself is treated like typed terminal input: never
   logged, never interpolated server-side, executed by the runtime as

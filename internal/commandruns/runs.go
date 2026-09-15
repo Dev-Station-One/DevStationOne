@@ -19,9 +19,10 @@ import (
 // ErrNotFound is returned when a lookup finds no matching run.
 var ErrNotFound = errors.New("not found")
 
-// tailLimit is how much of a run's PTY output is kept (the last N bytes),
-// mirroring sessions.Hub's in-memory capture cap.
-const tailLimit = 64 * 1024
+// tailLimit is how much of a run's PTY output is kept — the full captured
+// output, capped at 100 MiB as a safety net (ADR-045; the same cap the
+// Hub's in-memory capture uses).
+const tailLimit = 100 * 1024 * 1024
 
 // runsPerPage caps ?limit= on the history list, and the per-project prune
 // keeps at most this many newest runs.

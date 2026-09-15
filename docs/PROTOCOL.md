@@ -600,7 +600,7 @@ lifecycle/exit-code rule applies unchanged. Empty `command` is byte-for-byte
 the pre-ADR-045 interactive shell.
 
 Run history (`command_runs`, `internal/commandruns`) records each run: who,
-when, exit status, and the **last 64 KiB of the session's PTY output**
+when, exit status, and the **full session PTY output, capped at 100 MiB**
 captured at exit — the one deliberate exception to ADR-007's never-persist
 rule, scoped to command-run sessions only. Capture needs no new protocol
 message: `sessions.Hub.Forward` is already the single point every runtime

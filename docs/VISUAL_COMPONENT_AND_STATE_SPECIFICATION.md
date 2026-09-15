@@ -337,7 +337,7 @@ States per the Commands tab (`web/static/js/commands.js`):
   "time ago" of `started_at`, runner display name (email fallback), duration
   (`finished_at - started_at`), and an **Output** button (only when a tail
   or error exists) opening the output modal.
-- **Output modal** — read-only monospace `<pre>` of the captured 64 KiB
+- **Output modal** — read-only monospace `<pre>` of the captured output (full run output, capped at 100 MiB)
   tail (`white-space: pre-wrap`, scrollable); empty tail with an error shows
   the error instead.
 - **Add/Edit modal** — Name input + Command textarea (monospace,

@@ -1562,7 +1562,7 @@ A Project's Quick Commands tab lets a member store named CLI commands
    byte passes through, so a per-session capture buffer registered before
    `session.open` rides that choke point, and the runtime's
    `session.error`/`session.exit` handling flushes it into `command_runs`.
-   The tail is capped at the last 64 KiB (per run) and 100 runs per
+   The tail keeps the full output up to 100 MiB per run, and 100 runs per
    project; ANSI-stripped and forced to valid UTF-8 for the text column.
 
 Known trade-off, documented rather than hidden: a captured tail can contain
@@ -1589,3 +1589,16 @@ session is flushed into the tail while it is still reachable). Sweeps are
 idempotent against the `finished_at IS NULL` guard. Known edge: a run whose
 runtime row is deleted entirely is invisible to the join and stays
 `running`, bounded by the 100-per-project prune.
+
+### ADR-045 addendum — fire-and-collect, full output
+
+Post-smoke revision: a run's session is deliberately **not** returned for
+the browser to attach to. The command executes and its results are read
+back from `command_runs` (the Commands tab polls the run row until it
+finalizes, then shows the captured output in a modal) — no terminal tab is
+opened for a run. The capture cap was raised from a 64 KiB tail to the
+**full output capped at 100 MiB** (the same cap `commandruns.Tail` enforces
+on the stored row and the Hub's in-memory buffer uses), because a
+"response" that silently drops all but the last 64 KiB is not an auditable
+record. A display-only 1 MiB clamp applies in the output modal, with the
+full row still available via the API.

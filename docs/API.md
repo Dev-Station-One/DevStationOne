@@ -1052,7 +1052,7 @@ creating sessions.
   `GET .../command-runs?command_id=&limit=&offset=` (paged, newest first —
   rows carry the runner, timing, exit code/error, and never the output
   tail) and `GET .../command-runs/{runID}` (adds `output_tail`: the last
-  64 KiB of the run's PTY output, ANSI-stripped, captured at session exit —
+  full output of the run's PTY output (capped at 100 MiB), ANSI-stripped, captured at session exit —
   ADR-045). Deleting a project deletes its history (FK CASCADE).
 - `POST .../commands/import` — one-shot scan of the project directory via
   the runtime's file RPC: Makefile targets (`make <target>`), `package.json`

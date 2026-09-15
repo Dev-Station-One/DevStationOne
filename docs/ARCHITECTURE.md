@@ -372,7 +372,7 @@ PostgreSQL stores:
 - audit events
 - settings
 - a project's Quick Commands (`project_commands`) and their run history
-  (`command_runs`, including the bounded 64 KiB output tail — ADR-045's
+  (`command_runs`, including the full output capped at 100 MiB — ADR-045's
   one exception to the PTY-bytes-never-persisted rule, command-run
   sessions only)
 

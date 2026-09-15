@@ -1242,7 +1242,7 @@ disabled-by-default path (no keys configured, e.g. the persistent
 **Goal**: a **Commands** tab on the project workspace — per-project named CLI
 commands ("Build" → `make build`) runnable with one click, each opening a
 real PTY session running `shell -c <command>`, with a per-run history
-(runner, timing, exit status, and the captured last 64 KiB of PTY output)
+(runner, timing, exit status, and the captured output, full up to a 100 MiB safety cap)
 for self-audit. Requirements via `/sc:brainstorm`; design via `/sc:design`.
 
 **Design**:
@@ -1253,7 +1253,7 @@ for self-audit. Requirements via `/sc:brainstorm`; design via `/sc:design`.
   output_tail text).
 - *Control Server*: `internal/commands` (CRUD + the pure Makefile/
   package.json/`scripts/` import parsers), `internal/commandruns` (run
-  lifecycle + 64 KiB `Tail()` — ANSI-stripped, forced valid UTF-8), and
+  lifecycle + `Tail()` — full output capped at 100 MiB, ANSI-stripped, forced valid UTF-8), and
   `internal/api/commands.go` (CRUD, run, import scan, history list/detail).
   `startSession()` extracted from `createTermSessionHandler` so the run
   path and the plain-session path share one open dance verbatim.
@@ -1276,7 +1276,7 @@ for self-audit. Requirements via `/sc:brainstorm`; design via `/sc:design`.
 - *Security*: commands pass through like typed terminal input (never
   logged, never interpolated server-side); import reads are fixed
   filenames + `scripts/` inside the project root through the existing
-  containment; capture is project-access-gated, bounded (64 KiB/run, 100
+  containment; capture is project-access-gated, bounded (full output per run up to 100 MiB, 100
   runs/project), ANSI-stripped, valid UTF-8 — ADR-045's exception to
   ADR-007, command-run sessions only. Audit events `command.created/
   updated/deleted`.

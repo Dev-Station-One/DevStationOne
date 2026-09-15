@@ -23,8 +23,10 @@ type BrowserConn interface {
 }
 
 // captureLimit is how much of one session's output is captured for the
-// Quick Command run history (ADR-045's bounded persistence exception).
-const captureLimit = 64 * 1024
+// Quick Command run history (ADR-045's bounded persistence exception) —
+// the full output, capped at 100 MiB as a safety net; the same cap
+// commandruns.Tail enforces on the stored row.
+const captureLimit = 100 * 1024 * 1024
 
 // Hub routes terminal bytes and open-session results between runtime
 // connections and attached browser connections. It is in-memory and scoped
