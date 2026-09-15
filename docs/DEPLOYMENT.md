@@ -13,9 +13,19 @@ go build -o devstationone-server ./cmd/devstationone-server
 go build -o devstationone-admin ./cmd/devstationone-admin
 ```
 
-Static assets (`web/static/`, `assets/`) and SQL migrations
-(`migrations/*.sql`) are embedded in the binary — nothing else needs to
-ship alongside it except PostgreSQL itself.
+SQL migrations (`migrations/*.sql`) are embedded in the binary
+(`migrations/embed.go`, `go:embed`) — no separate migration step.
+
+**Static assets are not embedded.** `web/static/` and `assets/` are served
+straight from disk at request time (`http.Dir`, `internal/api/server.go`
+`NewRouter`/`GET /`, `GET /assets/`), resolved relative to the server
+process's working directory. They must ship alongside the binary and stay
+in sync with it — a binary-only update (copying just
+`devstationone-server` without also updating `web/static/`/`assets/` in
+that working directory) silently serves stale HTML/JS/CSS while every API
+endpoint runs the new code. There is no cache-busting or version check to
+catch this; it looks fine until a feature that changed the frontend
+doesn't show up.
 
 ### Configuration (environment variables)
 
@@ -26,6 +36,8 @@ ship alongside it except PostgreSQL itself.
 | `DEVSTATIONONE_SERVER_ADDR` | no (default `:8080`) | Listen address |
 | `DEVSTATIONONE_LOG_LEVEL` | no (default `info`) | `debug`\|`info`\|`warn`\|`error` |
 | `DEVSTATIONONE_ENV` | no (default `development`) | `development`\|`production` (informational, logged at startup) |
+| `DEVSTATIONONE_TURNSTILE_SITE_KEY` | no (default unset — disabled) | Cloudflare Turnstile bot-check on login (docs/DECISIONS.md ADR-044). From the Cloudflare dashboard: Turnstile → Add widget → this server's domain → copy the Site Key. Must be set together with `..._SECRET_KEY`, or not at all — one without the other is a startup config error. |
+| `DEVSTATIONONE_TURNSTILE_SECRET_KEY` | no (default unset — disabled) | Paired secret key for the site key above. |
 
 See `internal/config` for the authoritative list.
 
@@ -59,7 +71,16 @@ Two supported paths:
   `devstationone` system account (`useradd --system --no-create-home`) and
   auto-generates `DEVSTATIONONE_DB_ENCRYPTION_KEY` on first install. See
   README.md "Installing the Control Server" — the recommended path for a
-  real deployment.
+  real deployment. **Known issue:** the release tarball
+  (`.github/workflows/release.yml`) contains only the three binaries, and
+  the unit `install.sh` writes has no `WorkingDirectory=`
+  (systemd defaults it to `/`). Since static assets are served from disk relative
+  to the working directory (see above), a stock `install.sh --server`
+  install has nowhere to find `web/static/`/`assets/` and the web UI
+  404s. Not yet fixed; a real deployment needs `web/static/`/`assets/`
+  copied to a location the unit's `WorkingDirectory` (or an absolute-path
+  fix to the two `http.Dir` calls in `internal/api/server.go`) can reach,
+  until the packaging itself is fixed to include them.
 - **Manual, user-level (below)** — for building from source and running
   under your own account (e.g. a personal homelab instance), no root
   required at all:
@@ -107,6 +128,19 @@ set +a
 echo '<password>' | ./devstationone-admin -email admin@example.com
 ```
 
+**Changing config later** (e.g. enabling Turnstile above, or any other
+variable in the table) on a manual unit: there's no `server.env` to edit —
+add/change the `Environment=` line directly in the unit file, then reload
+and restart:
+
+```bash
+systemctl --user edit --full devstationone-server.service
+# add: Environment=DEVSTATIONONE_TURNSTILE_SITE_KEY=...
+# add: Environment=DEVSTATIONONE_TURNSTILE_SECRET_KEY=...
+systemctl --user daemon-reload
+systemctl --user restart devstationone-server.service
+```
+
 ### Reverse proxy / TLS
 
 The Control Server speaks plain HTTP; terminate TLS at a reverse proxy
@@ -144,9 +178,15 @@ dashboard.
 
 1. Back up PostgreSQL first — see docs/BACKUPS.md.
 2. Stop the running server.
-3. Replace the binary with the new build.
+3. Replace the binary with the new build. On a manual/user-level
+   deployment (not `install.sh`), also sync `web/static/` and `assets/`
+   in the unit's `WorkingDirectory` to match — they're not embedded (see
+   "Build" above), and a binary-only update silently leaves the old
+   frontend in place while every API endpoint runs new code.
 4. Start it — migrations run automatically before it starts serving.
-5. Confirm `/healthz` and `/readyz` both answer `ok`.
+5. Confirm `/healthz` and `/readyz` both answer `ok`, and that a changed
+   page (e.g. one with new frontend markup) actually reflects it — a
+   stale `web/static/` won't show up in either health check.
 
 Migrations are additive/forward-only in normal operation
 (`database.Migrate`, `internal/database/database.go`, only ever runs "up").
