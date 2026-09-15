@@ -210,3 +210,16 @@ body {
 .note-editable {
   background-color: white !important;
 }
+
+.session-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: .375rem;
+    padding: 5px;
+    border: 1px solid var(--tblr-border-color);
+    border-bottom: none;
+    border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;
+    background: var(--tblr-bg-surface-secondary);
+    cursor: pointer;
+    min-height: 44px;
+}
