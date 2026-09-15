@@ -1124,6 +1124,21 @@ is the actual visibility switch. Two overlapping Tab implementations
 `tabler.min.js`'s component layer entirely is the natural follow-up if a
 similar `data-bs-toggle` collision is ever hit for another component.
 
+**Update (2026-09-15).** That predicted collision happened: the shared
+topbar's notification bell and account-menu buttons
+(`web/static/js/app.js`, used by every page) carry
+`data-bs-toggle="dropdown"` for pages that only load `tabler.min.js`.
+On `project.html`, real Bootstrap's Dropdown component also matched that
+attribute, so one library's click opened the dropdown and the other's
+same-click listener immediately closed it again — the bell and account
+menu silently stopped opening on this page only. Fixed narrowly rather
+than doing the full migration this ADR flagged above: `project.html` now
+removes `data-bs-toggle` from those two buttons at runtime (after
+`app.js`'s `DOMContentLoaded` handler injects them) and drives
+`bootstrap.Dropdown` directly, the same sidestep already used for
+modals/tabs. Every other page is untouched — they never load
+`bootstrap.bundle.min.js` and keep using tabler's Data API as before.
+
 ## ADR-035 — Cards terminal render mode: client-side regex/idle-timer detection, a single persistent input box, and a permanent full-screen-TUI bail-out
 
 **Decision.** Slice 17 adds a second, opt-in terminal render mode

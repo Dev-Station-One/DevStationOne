@@ -818,6 +818,27 @@
       return tabler.Modal.getOrCreateInstance(document.getElementById(id));
     }
 
+    // ADR-034's predicted "next collision": the shared topbar's notification
+    // bell / account-menu buttons (web/static/js/app.js) carry
+    // data-bs-toggle="dropdown" for pages that only load tabler.min.js. On
+    // this page, real Bootstrap's Dropdown component ALSO registers a
+    // document-delegated listener for that same selector, so one library
+    // opens the dropdown and the other's listener immediately closes it
+    // again. Fix scoped to this page only (registered after app.js's own
+    // DOMContentLoaded handler injects these buttons): drop the attribute so
+    // neither library's Data API matches them, then drive real Bootstrap's
+    // Dropdown directly — the same sidestep already used for modals/tabs
+    // above, not stopPropagation, so outside-click/Escape/keyboard-nav
+    // behavior from the Dropdown instance itself is unaffected.
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('#ds-topbar-actions .dropdown-toggle').forEach(function (el) {
+        el.removeAttribute('data-bs-toggle');
+        el.addEventListener('click', function () {
+          bootstrap.Dropdown.getOrCreateInstance(el).toggle();
+        });
+      });
+    });
+
     function parseEnvironment(text) {
       var env = {};
       text.split('\n').forEach(function (line) {
