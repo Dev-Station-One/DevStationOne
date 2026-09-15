@@ -229,7 +229,7 @@
   }
 
   function remove(c) {
-    DS.confirm('Delete command "' + c.name + '"? Its run history is kept.').done(function (ok) {
+    DS.confirm('Delete command "' + c.name + '"? Its run history is kept.').then(function (ok) {
       if (!ok) return;
       $.ajax({ url: apiBase() + '/commands/' + c.id, method: 'DELETE' }).done(load);
     });
