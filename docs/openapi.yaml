@@ -423,15 +423,15 @@ paths:
           description: The runtime did not respond within the timeout
   /api/v1/projects:
     get:
-      summary: List projects visible to the current user
-      description: Administrators see every project; other users see only projects they created.
+      summary: List all projects on the server
+      description: Every authenticated user sees every project; edit/delete remain restricted to the owning user or an administrator.
       tags: [Projects]
       operationId: listProjects
       security:
         - cookieAuth: []
       responses:
         "200":
-          description: Visible projects
+          description: All projects on the server
           content:
             application/json:
               schema:
@@ -488,7 +488,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
     patch:
       summary: Update a project
       tags: [Projects]
@@ -655,7 +655,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
     post:
       summary: Create a terminal session (starts a real PTY on the project's runtime)
       description: |
@@ -690,7 +690,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -720,7 +720,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
     patch:
       summary: Rename a terminal session
       tags: [Sessions]
@@ -755,7 +755,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
     delete:
       summary: Close a terminal session
       description: Sends session.close to the runtime (best-effort) and marks the session closed, a terminal status.
@@ -775,7 +775,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
   /api/v1/sessions/{sessionID}/attach:
     post:
       summary: Confirm a session can be attached to
@@ -800,7 +800,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
         "409":
           description: Session is exited, failed, or closed
   /api/v1/sessions/{sessionID}/detach:
@@ -823,7 +823,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
   /api/v1/sessions/{sessionID}/resize:
     post:
       summary: Resize a session's PTY
@@ -857,7 +857,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -895,7 +895,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Session not found, or its project is not owned by the current user
+          description: Session not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -926,7 +926,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -963,7 +963,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1007,7 +1007,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1044,7 +1044,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1081,7 +1081,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1118,7 +1118,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1155,7 +1155,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1192,7 +1192,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1233,7 +1233,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1267,7 +1267,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1313,7 +1313,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1350,7 +1350,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1392,7 +1392,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1432,7 +1432,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "413":
@@ -1473,7 +1473,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1512,7 +1512,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1553,7 +1553,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1594,7 +1594,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1635,7 +1635,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1679,7 +1679,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1733,7 +1733,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1766,7 +1766,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1815,7 +1815,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1853,7 +1853,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1891,7 +1891,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1937,7 +1937,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -1977,7 +1977,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
         "409":
           description: The project's runtime is not currently connected
         "502":
@@ -2033,7 +2033,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
     post:
       summary: Create a journal note
       tags: [Journal]
@@ -2064,7 +2064,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
   /api/v1/projects/{projectID}/journal/notes/{noteID}:
     get:
       summary: Get a journal note with its attachments
@@ -2260,7 +2260,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
     get:
       summary: List a project's database connections
       tags: [Databases]
@@ -2285,7 +2285,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found, or not owned by the current user
+          description: Project not found
   /api/v1/projects/{projectID}/databases/{connectionID}:
     get:
       summary: Get one database connection
@@ -2314,7 +2314,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
     patch:
       summary: Update a database connection
       description: Only replaces the stored secret when the request body includes a "secret" object; omitting it leaves the existing password/extra_params untouched.
@@ -2379,7 +2379,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
     delete:
       summary: Delete a database connection
       tags: [Databases]
@@ -2403,7 +2403,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
   /api/v1/projects/{projectID}/databases/{connectionID}/test:
     post:
       summary: Test a database connection
@@ -2439,7 +2439,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2475,7 +2475,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2516,7 +2516,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2561,7 +2561,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2606,7 +2606,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2651,7 +2651,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2696,7 +2696,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2764,7 +2764,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2824,7 +2824,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2875,7 +2875,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2913,7 +2913,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2960,7 +2960,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -2997,7 +2997,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -3051,7 +3051,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -3094,7 +3094,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -3153,7 +3153,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -3213,7 +3213,7 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project or connection not found, or not owned by the current user
+          description: Project or connection not found
         "409":
           description: The project's runtime is not currently connected
         "504":
@@ -3496,6 +3496,9 @@ components:
         shell:
           type: string
           description: Absolute path to the shell binary used for interactive sessions. Must be one of the target runtime's currently-reported capabilities.shells.
+        description:
+          type: string
+          description: Optional human-readable summary of the project, shown in the projects list and searched by its filter box.
         environment:
           type: object
           additionalProperties:
@@ -3506,6 +3509,8 @@ components:
       description: Same properties as ProjectFields; only the fields present in the request are changed. Validation (runtime online, shell allowlist, working_directory containment) re-runs on every patch, even one that only renames the project.
       properties:
         name:
+          type: string
+        description:
           type: string
         runtime_id:
           type: string
@@ -3528,6 +3533,15 @@ components:
             created_by:
               type: string
               description: ID of the user who owns this project.
+            owner_name:
+              type: string
+              description: The owner's display name (email fallback), for the projects list Owner column.
+            last_accessed_at:
+              type:
+                - string
+                - "null"
+              format: date-time
+              description: When a terminal session was last opened on this project; null for projects never opened since the field existed.
             created_at:
               type: string
               format: date-time

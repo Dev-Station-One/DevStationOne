@@ -152,6 +152,20 @@ reason about whether a given Data API attribute is safe to double-register
 there, the same lesson ADR-034 already paid for once with the
 notifications-bell dropdown.
 
+## Projects list
+
+The projects page is a single datatable card listing every project on the
+server (ADR-037) — description, owner, and last-accessed only mean
+something when the list spans users. Filter row: a text search box
+(name/description/working directory) plus owner and runtime selects.
+Headers are click-to-sort (`aria-sort`, CSS chevrons in `app.css`); Name
+cells show the optional description as a muted sub-line. "New project"
+opens a header-button modal shared with row Edit (pre-filled, PATCH);
+owner/admin see the Edit/Delete icon buttons, others see an openable row
+only. The modal class comes from the `vendor/bootstrap/js/modal/` drop
+(ADR-036 pattern — `tabler.min.js` exposes no `window.bootstrap`), opened
+programmatically, not via `data-bs-toggle`.
+
 ## Project Workspace
 
 A Project is the primary UI context. Show:

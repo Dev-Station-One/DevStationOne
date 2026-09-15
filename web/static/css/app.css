@@ -141,6 +141,13 @@ body {
   background: var(--tblr-bg-surface-secondary);
 }
 
+/* Sortable table headers (projects page): click-to-sort with direction
+   chevron. */
+.sort-th { cursor: pointer; user-select: none; white-space: nowrap; }
+.sort-th::after { content: "⇅"; margin-left: .25rem; opacity: .35; }
+.sort-th[aria-sort="ascending"]::after { content: "↑"; opacity: 1; }
+.sort-th[aria-sort="descending"]::after { content: "↓"; opacity: 1; }
+
 /* Ghost text button: terminal key-send buttons keep their text labels but
    lose the outline border (docs/DESIGN_ICON_SYSTEM.md §3). */
 .ghost-btn {

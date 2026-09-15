@@ -210,7 +210,9 @@ func TestGitHTTP_OwnershipEnforced(t *testing.T) {
 	bob := loginAs(t, router, "bob-git@example.com", "password123")
 
 	rec := gitReq(t, router, bob, http.MethodGet, gitURL(projectID, "/status", ""), nil)
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("cross-user status: status = %d, want 404", rec.Code)
+	// Project access is server-wide (ADR-037): bob may use another user's
+	// project.
+	if rec.Code != http.StatusOK {
+		t.Errorf("cross-user status: status = %d, want 200", rec.Code)
 	}
 }

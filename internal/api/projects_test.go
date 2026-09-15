@@ -124,6 +124,17 @@ func TestProjectHTTP_ActiveSessionsCount(t *testing.T) {
 	if p := getProject(); p.ActiveSessions != 0 {
 		t.Fatalf("active_sessions after delete = %d, want 0", p.ActiveSessions)
 	}
+
+	// Opening a session advances last_accessed_at (setup already opened
+	// one, so it starts non-nil).
+	prev := getProject().LastAccessedAt
+	if prev == nil {
+		t.Fatal("last_accessed_at before session open = nil, want set by setup")
+	}
+	createSession(t, router, cookie, projectID, "bash")
+	if now := getProject().LastAccessedAt; now == nil || !now.After(*prev) {
+		t.Fatalf("last_accessed_at did not advance: prev=%v now=%v", prev, now)
+	}
 }
 
 func TestProjectHTTP_CreateListScopedByOwner(t *testing.T) {
@@ -171,7 +182,7 @@ func TestProjectHTTP_CreateListScopedByOwner(t *testing.T) {
 		t.Fatalf("unexpected create response: %+v", created)
 	}
 
-	// Alice sees her own project.
+	// Alice sees her own project, with her name as owner.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
 	req.AddCookie(aliceCookie)
 	rec = httptest.NewRecorder()
@@ -181,34 +192,46 @@ func TestProjectHTTP_CreateListScopedByOwner(t *testing.T) {
 	if len(aliceList) != 1 || aliceList[0].ID != created.ID {
 		t.Fatalf("alice list = %+v, want her own project", aliceList)
 	}
+	if aliceList[0].OwnerName != "alice@example.com" {
+		t.Fatalf("owner_name = %q, want alice@example.com", aliceList[0].OwnerName)
+	}
 
-	// Bob does not see Alice's project.
+	// Bob sees Alice's project too — the list is server-wide.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects", nil)
 	req.AddCookie(bobCookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	var bobList []projectResponse
 	json.NewDecoder(rec.Body).Decode(&bobList)
-	if len(bobList) != 0 {
-		t.Fatalf("bob list = %+v, want no projects", bobList)
+	if len(bobList) != 1 || bobList[0].ID != created.ID {
+		t.Fatalf("bob list = %+v, want alice's project", bobList)
 	}
 
-	// Bob cannot fetch Alice's project directly; it looks not-found, not forbidden.
+	// Bob can fetch Alice's project directly.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+created.ID, nil)
 	req.AddCookie(bobCookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("bob get alice's project: status = %d, want 404", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bob get alice's project: status = %d, want 200", rec.Code)
 	}
 
-	// Bob cannot delete Alice's project either.
+	// Bob cannot delete Alice's project; it looks not-found, not forbidden.
 	req = httptest.NewRequest(http.MethodDelete, "/api/v1/projects/"+created.ID, nil)
 	req.AddCookie(bobCookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("bob delete alice's project: status = %d, want 404", rec.Code)
+	}
+
+	// Bob cannot patch Alice's project either.
+	req = httptest.NewRequest(http.MethodPatch, "/api/v1/projects/"+created.ID, bytes.NewReader([]byte(`{"name":"Hijacked"}`)))
+	req.AddCookie(bobCookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("bob patch alice's project: status = %d, want 404", rec.Code)
 	}
 
 	// The admin sees every project across users.

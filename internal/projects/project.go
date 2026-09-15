@@ -23,6 +23,7 @@ var ErrNotFound = errors.New("not found")
 type Project struct {
 	ID               string
 	Name             string
+	Description      string
 	RuntimeID        string
 	WorkingDirectory string
 	Shell            string
@@ -30,24 +31,36 @@ type Project struct {
 	CreatedBy        string
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
+	// LastAccessedAt is when a session was last opened on this project;
+	// nil for projects never opened since the column existed.
+	LastAccessedAt *time.Time
+	// OwnerName is the creating user's display name (email fallback),
+	// resolved by the ownerSubquery column in every SELECT below.
+	OwnerName string
 }
 
 // Fields groups the user-supplied properties of a Project, used for both
 // creation and updates.
 type Fields struct {
 	Name             string
+	Description      string
 	RuntimeID        string
 	WorkingDirectory string
 	Shell            string
 	Environment      map[string]string
 }
 
-const projectColumns = `id, name, runtime_id, working_directory, shell, environment, created_by, created_at, updated_at`
+// ownerNameExpr resolves a created_by reference to a display name
+// (email fallback); same pattern as internal/journal's creatorNameExpr.
+const ownerNameExpr = `COALESCE(NULLIF(display_name, ''), email)`
+
+const projectColumns = `id, name, description, runtime_id, working_directory, shell, environment, created_by, created_at, updated_at, last_accessed_at, ` +
+	`(SELECT ` + ownerNameExpr + ` FROM users WHERE id = created_by) AS owner_name`
 
 func scanProject(row pgx.Row) (Project, error) {
 	var p Project
 	var env []byte
-	err := row.Scan(&p.ID, &p.Name, &p.RuntimeID, &p.WorkingDirectory, &p.Shell, &env, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.Name, &p.Description, &p.RuntimeID, &p.WorkingDirectory, &p.Shell, &env, &p.CreatedBy, &p.CreatedAt, &p.UpdatedAt, &p.LastAccessedAt, &p.OwnerName)
 	if err != nil {
 		return Project{}, err
 	}
@@ -66,20 +79,15 @@ func Create(ctx context.Context, pool *pgxpool.Pool, f Fields, createdByUserID s
 		return Project{}, err
 	}
 	p, err := scanProject(pool.QueryRow(ctx, `
-		INSERT INTO projects (name, runtime_id, working_directory, shell, environment, created_by)
-		VALUES ($1, $2, $3, $4, $5::jsonb, $6)
+		INSERT INTO projects (name, description, runtime_id, working_directory, shell, environment, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7)
 		RETURNING `+projectColumns,
-		f.Name, f.RuntimeID, f.WorkingDirectory, f.Shell, env, createdByUserID,
+		f.Name, f.Description, f.RuntimeID, f.WorkingDirectory, f.Shell, env, createdByUserID,
 	))
 	if err != nil {
 		return Project{}, err
 	}
 	return p, nil
-}
-
-// ListForUser returns projects owned by userID, most recently created first.
-func ListForUser(ctx context.Context, pool *pgxpool.Pool, userID string) ([]Project, error) {
-	return list(ctx, pool, `WHERE created_by = $1`, userID)
 }
 
 // ListAll returns every project, most recently created first.
@@ -143,14 +151,15 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id string, f Fields) (Proje
 	p, err := scanProject(pool.QueryRow(ctx, `
 		UPDATE projects SET
 			name = $2,
-			runtime_id = $3,
-			working_directory = $4,
-			shell = $5,
-			environment = $6::jsonb,
+			description = $3,
+			runtime_id = $4,
+			working_directory = $5,
+			shell = $6,
+			environment = $7::jsonb,
 			updated_at = now()
 		WHERE id = $1
 		RETURNING `+projectColumns,
-		id, f.Name, f.RuntimeID, f.WorkingDirectory, f.Shell, env,
+		id, f.Name, f.Description, f.RuntimeID, f.WorkingDirectory, f.Shell, env,
 	))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Project{}, ErrNotFound
@@ -168,6 +177,13 @@ func Delete(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
 		return false, err
 	}
 	return tag.RowsAffected() > 0, nil
+}
+
+// TouchAccessed stamps the project's last-accessed time. A failure here is
+// harmless metadata loss, so callers may ignore the error.
+func TouchAccessed(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	_, err := pool.Exec(ctx, `UPDATE projects SET last_accessed_at = now() WHERE id = $1`, id)
+	return err
 }
 
 func marshalEnvironment(env map[string]string) ([]byte, error) {

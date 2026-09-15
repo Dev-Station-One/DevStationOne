@@ -205,8 +205,10 @@ func TestServiceHTTP_OwnershipEnforced(t *testing.T) {
 	req.AddCookie(bobCookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("bob list admin's project services: status = %d, want 404", rec.Code)
+	// Project access is server-wide (ADR-037): bob may use another user's
+	// project's services.
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bob list admin's project services: status = %d, want 200", rec.Code)
 	}
 }
 

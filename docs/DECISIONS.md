@@ -1262,3 +1262,35 @@ search box's filtering; manual Playwright smoke-testing against the
 manual page TOC/search, the tab-aware `project.html` icon across a real
 tab switch, and the global `?` shortcut — all with zero browser console
 errors.
+
+## ADR-037 — Projects list is server-wide: any authenticated user may use any project; only owner/admin may modify its definition
+
+**Decision.** `GET /api/v1/projects` returns every project on the server
+(`projects.ListAll` — `ListForUser` is deleted), and `authorizedProject`
+relaxes to "any authenticated user": any user may fetch a project, open
+terminal sessions in it, and use its workspace (files, databases, services,
+journal). Modifying a project's definition — `PATCH` and `DELETE` — gains a
+new `writableProject` gate: the owner (`created_by`) or an administrator
+only, still answering `404` (never `403`) so the response never confirms
+another user's project. This matches the single-team self-hosted reality
+the product targets (docs/PRD.md): developers share one Control Server, and
+the projects page's Owner column is meaningless when each user's list is
+empty of everyone else's work.
+
+The motivation is also the page's new datatable: description, owner, and
+last-accessed columns (migration 0017 adds `projects.description` and
+`projects.last_accessed_at`; the latter is stamped in
+`createTermSessionHandler` after a successful `session.ready`, an ignored
+error — it is metadata, not state) only earn their place when the list
+actually spans users. `owner_name` is resolved by a scalar subquery
+(`COALESCE(NULLIF(display_name, ''), email)` — the same expression
+`internal/journal` uses) appended to `projectColumns`, so every SELECT and
+INSERT/UPDATE RETURNING path gets it for free.
+
+The UI keeps the same hand-rolled pattern as `activity.html` — a text
+search box plus owner/runtime filter selects plus click-to-sort headers
+(`aria-sort` + CSS chevrons in `web/static/css/app.css`), vanilla JS, no
+DataTables vendor — and moves the create/edit form into one Bootstrap modal
+shared by "New project" (POST) and the row edit button (PATCH, pre-filled,
+runtime/shell/cwd seeded from the stored project so the modal opens even
+when the runtime is offline).

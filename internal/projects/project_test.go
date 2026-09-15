@@ -92,14 +92,14 @@ func TestProjectLifecycle(t *testing.T) {
 		t.Fatalf("create for other user: %v", err)
 	}
 
-	own, err := ListForUser(ctx, pool, userID)
-	if err != nil || len(own) != 1 {
-		t.Fatalf("ListForUser = %v, %v, want 1 project", own, err)
-	}
-
 	all, err := ListAll(ctx, pool)
 	if err != nil || len(all) != 2 {
 		t.Fatalf("ListAll = %v, %v, want 2 projects", all, err)
+	}
+	for _, p := range all {
+		if p.OwnerName == "" {
+			t.Fatalf("OwnerName empty for project %+v", p)
+		}
 	}
 
 	fields.Name = "Renamed"

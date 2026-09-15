@@ -22,6 +22,7 @@ import (
 
 type projectRequest struct {
 	Name             string            `json:"name"`
+	Description      string            `json:"description"`
 	RuntimeID        string            `json:"runtime_id"`
 	WorkingDirectory string            `json:"working_directory"`
 	Shell            string            `json:"shell"`
@@ -32,6 +33,7 @@ type projectRequest struct {
 // PATCH only touches the properties the client actually sent.
 type projectPatchRequest struct {
 	Name             *string            `json:"name"`
+	Description      *string            `json:"description"`
 	RuntimeID        *string            `json:"runtime_id"`
 	WorkingDirectory *string            `json:"working_directory"`
 	Shell            *string            `json:"shell"`
@@ -41,11 +43,14 @@ type projectPatchRequest struct {
 type projectResponse struct {
 	ID               string            `json:"id"`
 	Name             string            `json:"name"`
+	Description      string            `json:"description"`
 	RuntimeID        string            `json:"runtime_id"`
 	WorkingDirectory string            `json:"working_directory"`
 	Shell            string            `json:"shell"`
 	Environment      map[string]string `json:"environment"`
 	CreatedBy        string            `json:"created_by"`
+	OwnerName        string            `json:"owner_name"`
+	LastAccessedAt   *time.Time        `json:"last_accessed_at"`
 	CreatedAt        time.Time         `json:"created_at"`
 	UpdatedAt        time.Time         `json:"updated_at"`
 	ActiveSessions   int               `json:"active_sessions"`
@@ -59,11 +64,14 @@ func toProjectResponse(p projects.Project, activeSessions int) projectResponse {
 	return projectResponse{
 		ID:               p.ID,
 		Name:             p.Name,
+		Description:      p.Description,
 		RuntimeID:        p.RuntimeID,
 		WorkingDirectory: p.WorkingDirectory,
 		Shell:            p.Shell,
 		Environment:      env,
 		CreatedBy:        p.CreatedBy,
+		OwnerName:        p.OwnerName,
+		LastAccessedAt:   p.LastAccessedAt,
 		CreatedAt:        p.CreatedAt,
 		UpdatedAt:        p.UpdatedAt,
 		ActiveSessions:   activeSessions,
@@ -177,6 +185,7 @@ func createProjectHandler(db *database.DB, registry *runtimes.Registry) http.Han
 		}
 		fields := projects.Fields{
 			Name:             req.Name,
+			Description:      req.Description,
 			RuntimeID:        req.RuntimeID,
 			WorkingDirectory: req.WorkingDirectory,
 			Shell:            req.Shell,
@@ -209,17 +218,10 @@ func createProjectHandler(db *database.DB, registry *runtimes.Registry) http.Han
 
 func listProjectsHandler(db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		user, _ := userFromContext(r.Context())
-
-		var (
-			list []projects.Project
-			err  error
-		)
-		if user.IsAdmin {
-			list, err = projects.ListAll(r.Context(), db.Pool)
-		} else {
-			list, err = projects.ListForUser(r.Context(), db.Pool, user.ID)
-		}
+		// Every authenticated user sees every project; edit/delete remain
+		// owner/admin (writableProject). Owner names come from the
+		// projectColumns owner subquery.
+		list, err := projects.ListAll(r.Context(), db.Pool)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list projects"})
 			return
@@ -244,11 +246,11 @@ func listProjectsHandler(db *database.DB) http.HandlerFunc {
 }
 
 // authorizedProject looks up a project and confirms the authenticated user
-// may access it, writing a 404 (never 403, to avoid confirming another
-// user's project exists) if not.
+// may access it. Every authenticated user may access every project (the
+// projects list is server-wide); write access is checked separately by
+// writableProject. Unknown projects still get a 404, never 403, to avoid
+// confirming which IDs exist.
 func authorizedProject(w http.ResponseWriter, r *http.Request, db *database.DB, projectID string) (projects.Project, bool) {
-	user, _ := userFromContext(r.Context())
-
 	p, err := projects.Get(r.Context(), db.Pool, projectID)
 	if errors.Is(err, projects.ErrNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
@@ -258,6 +260,17 @@ func authorizedProject(w http.ResponseWriter, r *http.Request, db *database.DB, 
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up project"})
 		return projects.Project{}, false
 	}
+	return p, true
+}
+
+// writableProject confirms the authenticated user may modify a project's
+// definition: its owner or an admin.
+func writableProject(w http.ResponseWriter, r *http.Request, db *database.DB, projectID string) (projects.Project, bool) {
+	p, ok := authorizedProject(w, r, db, projectID)
+	if !ok {
+		return p, false
+	}
+	user, _ := userFromContext(r.Context())
 	if !user.IsAdmin && p.CreatedBy != user.ID {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
 		return projects.Project{}, false
@@ -282,7 +295,7 @@ func getProjectHandler(db *database.DB) http.HandlerFunc {
 
 func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		existing, ok := authorizedProject(w, r, db, r.PathValue("projectID"))
+		existing, ok := writableProject(w, r, db, r.PathValue("projectID"))
 		if !ok {
 			return
 		}
@@ -295,6 +308,7 @@ func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 
 		fields := projects.Fields{
 			Name:             existing.Name,
+			Description:      existing.Description,
 			RuntimeID:        existing.RuntimeID,
 			WorkingDirectory: existing.WorkingDirectory,
 			Shell:            existing.Shell,
@@ -302,6 +316,9 @@ func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 		}
 		if req.Name != nil {
 			fields.Name = *req.Name
+		}
+		if req.Description != nil {
+			fields.Description = *req.Description
 		}
 		if req.RuntimeID != nil {
 			fields.RuntimeID = *req.RuntimeID
@@ -356,7 +373,7 @@ func patchProjectHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 
 func deleteProjectHandler(db *database.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		existing, ok := authorizedProject(w, r, db, r.PathValue("projectID"))
+		existing, ok := writableProject(w, r, db, r.PathValue("projectID"))
 		if !ok {
 			return
 		}

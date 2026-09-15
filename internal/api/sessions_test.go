@@ -404,19 +404,21 @@ func TestSessionHTTP_OwnershipEnforced(t *testing.T) {
 
 	s := createSession(t, router, adminCookie, projectID, "bash")
 
+	// Project access is server-wide (ADR-037): bob may fetch and list
+	// another user's project's sessions.
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+s.ID, nil)
 	req.AddCookie(bobCookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("bob get admin's session: status = %d, want 404", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("bob get admin's session: status = %d, want 200", rec.Code)
 	}
 
 	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/sessions", nil)
 	listReq.AddCookie(bobCookie)
 	listRec := httptest.NewRecorder()
 	router.ServeHTTP(listRec, listReq)
-	if listRec.Code != http.StatusNotFound {
-		t.Fatalf("bob list sessions for admin's project: status = %d, want 404", listRec.Code)
+	if listRec.Code != http.StatusOK {
+		t.Fatalf("bob list sessions for admin's project: status = %d, want 200", listRec.Code)
 	}
 }

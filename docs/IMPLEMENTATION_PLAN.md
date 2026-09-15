@@ -968,3 +968,38 @@ re-checking first if a similar symptom shows up again for real).
 - additional runtime capabilities
 - optional SaaS distribution
 - advanced collaboration
+
+## Slice 22 — Projects page: datatable + description + owner + last-accessed + modal create/edit
+
+**Goal**: make a shared multi-user project list findable — description
+field, owner column, last-accessed column, search/sort/filter, and the
+create/edit form moved into a modal; project access becomes server-wide
+(ADR-037).
+
+**Design**: migration 0017 adds `projects.description` and
+`projects.last_accessed_at` (stamped in `createTermSessionHandler` after
+`session.ready`; ignored on error). `projectColumns` grows an owner-name
+subquery (`COALESCE(NULLIF(display_name, ''), email)` — journal's
+expression), so every SELECT/RETURNING path returns `owner_name`.
+`projects.ListForUser` is deleted; the list endpoint always calls
+`ListAll`. `authorizedProject` relaxes to "any authenticated user";
+`writableProject` (owner/admin) gates PATCH/DELETE. UI keeps the
+`activity.html` pattern — text search + owner/runtime selects +
+click-to-sort headers (`aria-sort`, CSS chevrons in `app.css`), vanilla JS,
+no DataTables vendor — and one Bootstrap modal shared by New project (POST)
+and row Edit (PATCH). The modal class comes from a new
+`web/static/vendor/bootstrap/js/modal/` drop (backdrop, focustrap,
+scrollbar, component-functions, modal — Bootstrap 5.3.8 dist UMD, same
+jsDelivr source as ADR-036's popover drop) because `tabler.min.js` exposes
+no `window.bootstrap`; the popover chain's globals cover its other deps.
+
+**Tests**: `TestProjectHTTP_CreateListScopedByOwner` rewritten to the
+server-wide model (bob sees alice's project, can GET it, gets 404 on
+PATCH/DELETE; `owner_name` asserted); ownership-enforced tests in
+files/git/sessions/services updated to 200 cross-user; ActiveSessionsCount
+asserts `last_accessed_at` advances on session open. Browser smoke against
+the dev instance: modal create (name/description/runtime/shell/cwd), search
+filter, owner sort, edit modal pre-fill + PATCH, delete — zero console
+errors.
+
+**Status: Complete.**

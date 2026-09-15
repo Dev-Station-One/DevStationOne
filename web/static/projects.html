@@ -67,18 +67,48 @@
               <h2 class="mb-0">
                 <i class="fa-solid fa-cubes" aria-hidden="true"></i> Projects
               </h2>
-              <button type="button" class="icon-btn" data-help="projects" aria-label="Help: Projects" title="Help: Projects"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="icon-btn" data-help="projects" aria-label="Help: Projects" title="Help: Projects"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
+                <button id="new-project-btn" class="btn btn-primary" type="button">
+                  <i class="fa-solid fa-plus" aria-hidden="true"></i> New project
+                </button>
+              </div>
             </div>
 
-            <div class="card mb-4">
+            <div class="card">
+              <div class="card-body py-2 border-bottom">
+                <div class="row g-2 align-items-center">
+                  <div class="col-12 col-md">
+                    <input
+                      id="search-input"
+                      type="search"
+                      class="form-control"
+                      placeholder="Search name, description, directory…"
+                      aria-label="Search projects"
+                    />
+                  </div>
+                  <div class="col-6 col-md-auto">
+                    <select id="filter-owner" class="form-select" aria-label="Filter by owner">
+                      <option value="">All owners</option>
+                    </select>
+                  </div>
+                  <div class="col-6 col-md-auto">
+                    <select id="filter-runtime" class="form-select" aria-label="Filter by runtime">
+                      <option value="">All runtimes</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
               <div class="table-responsive">
                 <table class="table card-table table-vcenter">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Runtime</th>
-                      <th>Working directory</th>
-                      <th>Updated</th>
+                      <th class="sort-th" data-sort="name" role="button">Name</th>
+                      <th class="sort-th" data-sort="runtime" role="button">Runtime</th>
+                      <th class="sort-th" data-sort="working_directory" role="button">Working directory</th>
+                      <th class="sort-th" data-sort="owner" role="button">Owner</th>
+                      <th class="sort-th" data-sort="last_accessed" role="button">Last accessed</th>
+                      <th class="sort-th" data-sort="updated" role="button">Updated</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -89,87 +119,9 @@
                 <div class="empty-icon">
                   <i class="fa-solid fa-cubes" aria-hidden="true"></i>
                 </div>
-                <div class="empty-title">No projects yet</div>
+                <div class="empty-title">No projects found</div>
                 <div class="empty-subtitle text-secondary">
-                  Create a project above to get started.
-                </div>
-              </div>
-            </div>
-
-            <div class="card">
-              <div class="card-body">
-                <h3 class="card-title">New project</h3>
-                <div class="row g-2">
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Name</label>
-                    <input
-                      id="new-name"
-                      type="text"
-                      class="form-control"
-                      placeholder="My Application"
-                    />
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Runtime</label>
-                    <select id="new-runtime" class="form-select">
-                      <option value="">Select a runtime…</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Shell</label>
-                    <select id="new-shell" class="form-select" disabled>
-                      <option value="">Select a runtime first…</option>
-                    </select>
-                  </div>
-                  <div class="col-12 col-md-6">
-                    <label class="form-label">Working directory</label>
-                    <div class="input-group">
-                      <input
-                        id="new-cwd"
-                        type="text"
-                        class="form-control"
-                        readonly
-                        placeholder="Select a runtime, then browse…"
-                      />
-                      <button
-                        id="new-cwd-browse"
-                        class="btn btn-outline-secondary"
-                        type="button"
-                        disabled
-                      >
-                        Browse…
-                      </button>
-                    </div>
-                  </div>
-                  <div class="col-12">
-                    <label class="form-label"
-                      >Environment
-                      <span class="text-secondary"
-                        >(optional, one KEY=VALUE per line)</span
-                      ></label
-                    >
-                    <textarea
-                      id="new-env"
-                      class="form-control"
-                      rows="2"
-                      placeholder="NODE_ENV=development"
-                    ></textarea>
-                  </div>
-                </div>
-                <div
-                  id="create-error"
-                  class="alert alert-danger mt-3"
-                  hidden
-                ></div>
-                <button id="create-btn" class="btn btn-primary mt-3" disabled>
-                  Create project
-                </button>
-                <div
-                  id="create-offline-hint"
-                  class="text-secondary mt-2"
-                  hidden
-                >
-                  Selected runtime is offline.
+                  Create a project to get started, or clear the filters above.
                 </div>
               </div>
             </div>
@@ -177,6 +129,106 @@
         </div>
       </div>
     </div>
+
+    <div class="modal modal-blur fade" id="project-modal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="project-modal-title">New project</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-2">
+              <div class="col-12 col-md-6">
+                <label class="form-label">Name</label>
+                <input
+                  id="new-name"
+                  type="text"
+                  class="form-control"
+                  placeholder="My Application"
+                />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label"
+                  >Description <span class="text-secondary">(optional)</span></label
+                >
+                <input
+                  id="new-description"
+                  type="text"
+                  class="form-control"
+                  placeholder="What this project is for"
+                />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Runtime</label>
+                <select id="new-runtime" class="form-select">
+                  <option value="">Select a runtime…</option>
+                </select>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Shell</label>
+                <select id="new-shell" class="form-select" disabled>
+                  <option value="">Select a runtime first…</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label">Working directory</label>
+                <div class="input-group">
+                  <input
+                    id="new-cwd"
+                    type="text"
+                    class="form-control"
+                    readonly
+                    placeholder="Select a runtime, then browse…"
+                  />
+                  <button
+                    id="new-cwd-browse"
+                    class="btn btn-outline-secondary"
+                    type="button"
+                    disabled
+                  >
+                    Browse…
+                  </button>
+                </div>
+              </div>
+              <div class="col-12">
+                <label class="form-label"
+                  >Environment
+                  <span class="text-secondary"
+                    >(optional, one KEY=VALUE per line)</span
+                  ></label
+                >
+                <textarea
+                  id="new-env"
+                  class="form-control"
+                  rows="2"
+                  placeholder="NODE_ENV=development"
+                ></textarea>
+              </div>
+            </div>
+            <div
+              id="create-error"
+              class="alert alert-danger mt-3"
+              hidden
+            ></div>
+            <div
+              id="create-offline-hint"
+              class="text-secondary mt-2"
+              hidden
+            >
+              Selected runtime is offline.
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+            <button id="create-btn" class="btn btn-primary" disabled>
+              Create project
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="/vendor/jquery/jquery.min.js"></script>
     <script src="/vendor/tabler/js/tabler.min.js"></script>
     <script src="/js/app.js"></script>
@@ -195,6 +247,14 @@
     <script>window['@popperjs/core'] = window.Popper;</script>
     <script src="/vendor/bootstrap/js/popover/tooltip.js"></script>
     <script src="/vendor/bootstrap/js/popover/popover.js"></script>
+    <!-- Bootstrap Modal dependency chain (ADR-036 pattern): tabler.min.js
+         doesn't expose window.bootstrap, so the Modal class and its own
+         deps load individually on top of the globals the popover drop set. -->
+    <script src="/vendor/bootstrap/js/modal/backdrop.js"></script>
+    <script src="/vendor/bootstrap/js/modal/focustrap.js"></script>
+    <script src="/vendor/bootstrap/js/modal/scrollbar.js"></script>
+    <script src="/vendor/bootstrap/js/modal/component-functions.js"></script>
+    <script src="/vendor/bootstrap/js/modal/modal.js"></script>
     <script src="/js/help.js"></script>
     <script>
       function escapeHtml(s) {
@@ -202,6 +262,11 @@
       }
 
       var runtimesById = {};
+      var allProjects = [];
+      var currentUser = null;
+      var sortKey = "updated";
+      var sortDir = -1; // -1 desc, 1 asc
+      var editingId = null; // null = create, otherwise PATCH
 
       function parseEnvironment(text) {
         var env = {};
@@ -215,10 +280,17 @@
         return env;
       }
 
+      function canWrite(p) {
+        return (
+          currentUser &&
+          (currentUser.is_admin || currentUser.id === p.created_by)
+        );
+      }
+
       function loadRuntimes() {
         return $.get("/api/v1/runtimes").done(function (runtimes) {
-          var $select = $("#new-runtime");
           runtimesById = {};
+          var $select = $("#new-runtime");
           runtimes.forEach(function (rt) {
             runtimesById[rt.id] = rt;
             if (rt.status === "revoked") return;
@@ -228,41 +300,165 @@
                 .text(rt.name + " (" + rt.status + ")"),
             );
           });
+          renderRuntimeFilter();
         });
       }
 
       function loadProjects() {
         $.get("/api/v1/projects")
           .done(function (list) {
-            var $body = $("#projects-body").empty();
-            $("#projects-empty").prop("hidden", list.length > 0);
-            list.forEach(function (p) {
-              var rt = runtimesById[p.runtime_id];
-              $body.append(
-                '<tr class="project-row" data-id="' +
-                  p.id +
-                  '" style="cursor:pointer">' +
-                  "<td>" +
-                  escapeHtml(p.name) +
-                  "</td>" +
-                  "<td>" +
-                  escapeHtml(rt ? rt.name : p.runtime_id) +
-                  "</td>" +
-                  "<td>" +
-                  escapeHtml(p.working_directory) +
-                  "</td>" +
-                  "<td>" +
-                  new Date(p.updated_at).toLocaleString() +
-                  "</td>" +
-                  '<td><button class="icon-btn text-danger delete-btn" data-id="' +
-                  p.id +
-                  '" aria-label="Delete project" title="Delete project"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>',
-              );
-            });
+            allProjects = list;
+            renderOwnerFilter();
+            render();
           })
           .fail(function (xhr) {
             if (xhr.status === 401) window.location.href = "/login.html";
           });
+      }
+
+      function renderRuntimeFilter() {
+        var $sel = $("#filter-runtime").empty();
+        $sel.append('<option value="">All runtimes</option>');
+        Object.keys(runtimesById).forEach(function (id) {
+          $sel.append($("<option>").val(id).text(runtimesById[id].name));
+        });
+      }
+
+      function renderOwnerFilter() {
+        var seen = {};
+        var $sel = $("#filter-owner").empty();
+        $sel.append('<option value="">All owners</option>');
+        allProjects.forEach(function (p) {
+          if (seen[p.created_by]) return;
+          seen[p.created_by] = true;
+          $sel.append(
+            $("<option>").val(p.created_by).text(p.owner_name || p.created_by),
+          );
+        });
+      }
+
+      function visibleProjects() {
+        var q = $("#search-input").val().trim().toLowerCase();
+        var owner = $("#filter-owner").val();
+        var runtime = $("#filter-runtime").val();
+        return allProjects
+          .filter(function (p) {
+            if (owner && p.created_by !== owner) return false;
+            if (runtime && p.runtime_id !== runtime) return false;
+            if (!q) return true;
+            return (
+              (p.name || "").toLowerCase().indexOf(q) >= 0 ||
+              (p.description || "").toLowerCase().indexOf(q) >= 0 ||
+              (p.working_directory || "").toLowerCase().indexOf(q) >= 0
+            );
+          })
+          .sort(function (a, b) {
+            var key = sortKey;
+            var av, bv;
+            if (key === "runtime") {
+              av = (runtimesById[a.runtime_id] || {}).name || "";
+              bv = (runtimesById[b.runtime_id] || {}).name || "";
+            } else if (key === "owner") {
+              av = a.owner_name || "";
+              bv = b.owner_name || "";
+            } else if (key === "last_accessed") {
+              av = a.last_accessed_at ? new Date(a.last_accessed_at).getTime() : 0;
+              bv = b.last_accessed_at ? new Date(b.last_accessed_at).getTime() : 0;
+            } else if (key === "updated") {
+              av = new Date(a.updated_at).getTime();
+              bv = new Date(b.updated_at).getTime();
+            } else {
+              av = (a[key] || "").toLowerCase();
+              bv = (b[key] || "").toLowerCase();
+            }
+            return av < bv ? -sortDir : av > bv ? sortDir : 0;
+          });
+      }
+
+      function render() {
+        $(".sort-th").each(function () {
+          var k = $(this).data("sort");
+          this.removeAttribute("aria-sort");
+          if (k === sortKey)
+            this.setAttribute(
+              "aria-sort",
+              sortDir === 1 ? "ascending" : "descending",
+            );
+        });
+        var $body = $("#projects-body").empty();
+        var list = visibleProjects();
+        $("#projects-empty").prop("hidden", list.length > 0);
+        list.forEach(function (p) {
+          var rt = runtimesById[p.runtime_id];
+          var desc = p.description
+            ? '<div class="text-secondary small">' + escapeHtml(p.description) + "</div>"
+            : "";
+          var lastAccessed = p.last_accessed_at
+            ? new Date(p.last_accessed_at).toLocaleString()
+            : "—";
+          var actions = "";
+          if (canWrite(p)) {
+            actions =
+              '<button class="icon-btn edit-btn" data-id="' + p.id + '" aria-label="Edit project" title="Edit project"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> ' +
+              '<button class="icon-btn text-danger delete-btn" data-id="' + p.id + '" aria-label="Delete project" title="Delete project"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
+          }
+          $body.append(
+            '<tr class="project-row" data-id="' + p.id + '" style="cursor:pointer">' +
+              "<td>" + escapeHtml(p.name) + desc + "</td>" +
+              "<td>" + escapeHtml(rt ? rt.name : p.runtime_id) + "</td>" +
+              "<td>" + escapeHtml(p.working_directory) + "</td>" +
+              "<td>" + escapeHtml(p.owner_name || p.created_by) + "</td>" +
+              "<td>" + lastAccessed + "</td>" +
+              "<td>" + new Date(p.updated_at).toLocaleString() + "</td>" +
+              "<td>" + actions + "</td></tr>",
+          );
+        });
+      }
+
+      function openModal(p) {
+        editingId = p ? p.id : null;
+        $("#project-modal-title").text(p ? "Edit project" : "New project");
+        $("#create-btn").text(p ? "Save changes" : "Create project");
+        $("#new-name").val(p ? p.name : "");
+        $("#new-description").val(p ? p.description || "" : "");
+        $("#new-env").val(
+          p
+            ? Object.keys(p.environment || {})
+                .map(function (k) {
+                  return k + "=" + p.environment[k];
+                })
+                .join("\n")
+            : "",
+        );
+        $("#new-cwd").val(p ? p.working_directory : "");
+        $("#create-error").prop("hidden", true);
+        var $runtime = $("#new-runtime");
+        $runtime.val("").trigger("change");
+        if (p) {
+          // Populate runtime/shell/cwd from the stored project without
+          // re-validating them: PATCH only changes what the user edits.
+          $runtime.val(p.runtime_id);
+          var rt = runtimesById[p.runtime_id];
+          var $shell = $("#new-shell");
+          $shell.empty();
+          var shells = (rt && rt.capabilities && rt.capabilities.shells) || [];
+          $shell.append('<option value="">Select a shell…</option>');
+          if (shells.indexOf(p.shell) < 0) {
+            $shell.append($("<option>").val(p.shell).text(p.shell));
+          }
+          shells.forEach(function (s) {
+            $shell.append($("<option>").val(s).text(s));
+          });
+          $shell.val(p.shell);
+          $shell.prop("disabled", !rt || !rt.online);
+          $("#new-cwd-browse").prop("disabled", !rt || !rt.online);
+          $("#create-btn").prop("disabled", false);
+          $("#create-offline-hint").prop(
+            "hidden",
+            !!rt && rt.online,
+          );
+        }
+        new Modal(document.getElementById("project-modal")).show();
       }
 
       // Runtime-dependent controls (shell dropdown, directory browse, create)
@@ -271,7 +467,7 @@
       $("#new-runtime").on("change", function () {
         var rt = runtimesById[$(this).val()];
         var $shell = $("#new-shell").empty();
-        $("#new-cwd").val("");
+        if (!editingId) $("#new-cwd").val("");
 
         if (!rt) {
           $shell
@@ -308,36 +504,54 @@
         $("#new-cwd").val(path === "." ? home : home + "/" + path);
       });
 
+      $("#new-project-btn").on("click", function () {
+        openModal(null);
+      });
+
+      $("#projects-body").on("click", ".edit-btn", function (e) {
+        e.stopPropagation();
+        var id = $(this).data("id");
+        var p = allProjects.find(function (x) {
+          return x.id === id;
+        });
+        if (p) openModal(p);
+      });
+
       $("#create-btn").on("click", function () {
         $("#create-error").prop("hidden", true);
         var body = {
           name: $("#new-name").val().trim(),
+          description: $("#new-description").val().trim(),
           runtime_id: $("#new-runtime").val(),
           working_directory: $("#new-cwd").val().trim(),
           shell: $("#new-shell").val(),
           environment: parseEnvironment($("#new-env").val()),
         };
+        var url = editingId
+          ? "/api/v1/projects/" + editingId
+          : "/api/v1/projects";
         $.ajax({
-          url: "/api/v1/projects",
-          method: "POST",
+          url: url,
+          method: editingId ? "PATCH" : "POST",
           contentType: "application/json",
           data: JSON.stringify(body),
         })
           .done(function () {
-            $("#new-name, #new-cwd, #new-env").val("");
-            $("#new-runtime").val("").trigger("change");
+            Modal.getInstance(
+              document.getElementById("project-modal"),
+            ).hide();
             loadProjects();
           })
           .fail(function (xhr) {
             var msg =
               (xhr.responseJSON && xhr.responseJSON.error) ||
-              "Failed to create project.";
+              (editingId ? "Failed to update project." : "Failed to create project.");
             $("#create-error").text(msg).prop("hidden", false);
           });
       });
 
       $("#projects-body").on("click", ".project-row", function (e) {
-        if ($(e.target).closest(".delete-btn").length) return;
+        if ($(e.target).closest(".edit-btn, .delete-btn").length) return;
         window.location.href = "/project.html?id=" + $(this).data("id");
       });
 
@@ -350,7 +564,29 @@
         );
       });
 
-      loadRuntimes().always(loadProjects);
+      $("#search-input, #filter-owner, #filter-runtime").on(
+        "input change",
+        render,
+      );
+
+      $(".sort-th").on("click", function () {
+        var key = $(this).data("sort");
+        if (sortKey === key) {
+          sortDir = -sortDir;
+        } else {
+          sortKey = key;
+          sortDir = -1;
+        }
+        render();
+      });
+
+      loadRuntimes().always(function () {
+        $.get("/api/v1/auth/session")
+          .done(function (user) {
+            currentUser = user;
+          })
+          .always(loadProjects);
+      });
     </script>
   </body>
 </html>

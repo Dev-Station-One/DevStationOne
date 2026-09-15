@@ -91,12 +91,19 @@ POST   /api/v1/projects/{projectID}/sessions
 ```
 
 CRUD requires an authenticated session; the session sub-resource routes
-above are implemented in Slice 4 (see Sessions below). CRUD is scoped by
-ownership (ADR-013):
-administrators see and manage every project, other users only ones they
-created (`created_by`). A project the caller does not own responds `404`,
-the same as one that does not exist, so the response never confirms another
-user's project.
+above are implemented in Slice 4 (see Sessions below). Access is
+server-wide (ADR-013): every authenticated user sees every project, and may
+open sessions and use the workspace. Modifying a project's definition
+(`PATCH`/`DELETE`) stays restricted to its owner (`created_by`) or an
+administrator; a project the caller may not modify responds `404`, the same
+as one that does not exist, so the response never confirms another user's
+project.
+
+Project responses include `description` (optional human-readable summary),
+`owner_name` (the owner's display name with an email fallback), and
+`last_accessed_at` (stamped when a terminal session is last opened on the
+project; `null` if never). Project fields accept and return a
+`description`.
 
 A Project has no `os_user` field. A runtime always runs as one fixed OS user
 (ADR-014), reported live as `capabilities.os_username` on the runtime
@@ -178,8 +185,9 @@ WSS    /api/v1/sessions/{sessionID}/stream
 A Session is a persistent, real PTY (ADR-006) running on the Project's
 runtime. All routes require an authenticated session and are authorized the
 same way as Projects (`authorizedTermSession` resolves the session's
-Project and applies the same ownership check as `authorizedProject`,
-`404` on mismatch — ADR-013).
+Project through `authorizedProject` — any authenticated user may use any
+project's sessions, `404` on unknown project). Opening a session stamps the
+project's `last_accessed_at`.
 
 `POST /api/v1/projects/{projectID}/sessions` creates the row, then
 synchronously sends `session.open` to the Project's runtime over its

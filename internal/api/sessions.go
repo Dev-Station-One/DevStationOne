@@ -195,6 +195,8 @@ func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 			return
 		}
 		audit.Record(ctx, db.Pool, audit.EventSessionCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "session", final.ID, map[string]any{"project_id": project.ID, "name": final.Name}, clientIP(r))
+		// Metadata nicety only (projects list "Last accessed" column).
+		_ = projects.TouchAccessed(ctx, db.Pool, project.ID)
 		writeJSON(w, http.StatusCreated, toTermSessionResponse(final))
 	}
 }

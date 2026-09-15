@@ -350,13 +350,15 @@ func TestFileHTTP_OwnershipEnforced(t *testing.T) {
 	}
 	bob := loginAs(t, router, "bob@example.com", "password123")
 
+	// Project access is server-wide (ADR-037): bob may list and write in
+	// another user's project; only the project definition is owner/admin.
 	rec := fileReq(t, router, bob, http.MethodGet, fileURL(projectID, "", "path=."), nil)
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("cross-user list: status = %d, want 404", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("cross-user list: status = %d, want 200", rec.Code)
 	}
 	rec = fileReq(t, router, bob, http.MethodPut, fileURL(projectID, "/content", "path=x.txt"), []byte("x"))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("cross-user upload: status = %d, want 404", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("cross-user upload: status = %d, want 200", rec.Code)
 	}
 }
 
