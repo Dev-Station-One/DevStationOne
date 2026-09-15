@@ -149,3 +149,81 @@ func findUser(t *testing.T, router http.Handler, cookie *http.Cookie, email stri
 	t.Fatalf("user %q not in list", email)
 	return ""
 }
+
+func TestUserHTTP_ResourcesAndReassign(t *testing.T) {
+	router, adminCookie, db := usersTestSetup(t)
+
+	// Source user owns a project and a runtime.
+	var source, target auth.User
+	var err error
+	if source, err = auth.CreateUser(t.Context(), db.Pool, "owner@example.com", "password123", false); err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	if target, err = auth.CreateUser(t.Context(), db.Pool, "receiver@example.com", "password123", false); err != nil {
+		t.Fatalf("create receiver: %v", err)
+	}
+	pool := db.Pool
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO runtimes (name, token_hash, created_by) VALUES ('rt1', 'h', $1)`, source.ID); err != nil {
+		t.Fatalf("create runtime: %v", err)
+	}
+	if _, err := pool.Exec(t.Context(),
+		`INSERT INTO projects (name, runtime_id, working_directory, shell, environment, created_by)
+		 SELECT 'p1', r.id, '/', '/bin/bash', '{}', $1 FROM runtimes r WHERE r.created_by = $1`, source.ID); err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	// Resources listing is accurate.
+	rec := adminReq(t, router, adminCookie, http.MethodGet, "/api/v1/users/"+source.ID+"/resources", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("resources: status = %d", rec.Code)
+	}
+	var res userResources
+	json.NewDecoder(rec.Body).Decode(&res)
+	if len(res.Projects) != 1 || len(res.Runtimes) != 1 || res.Projects[0].Name != "p1" || res.Runtimes[0].Name != "rt1" {
+		t.Fatalf("resources = %+v", res)
+	}
+
+	// Guards: missing target, target = source.
+	if rec = adminReq(t, router, adminCookie, http.MethodPost, "/api/v1/users/"+source.ID+"/reassign",
+		[]byte(`{"target_user_id":"00000000-0000-0000-0000-000000000000"}`)); rec.Code != http.StatusNotFound {
+		t.Fatalf("unknown target: status = %d, want 404", rec.Code)
+	}
+	if rec = adminReq(t, router, adminCookie, http.MethodPost, "/api/v1/users/"+source.ID+"/reassign",
+		[]byte(`{"target_user_id":"`+source.ID+`"}`)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("self target: status = %d, want 400", rec.Code)
+	}
+
+	// Per-resource transfer: move just the runtime.
+	if rec = adminReq(t, router, adminCookie, http.MethodPost, "/api/v1/users/"+source.ID+"/reassign",
+		[]byte(`{"target_user_id":"`+target.ID+`","runtime_ids":["`+res.Runtimes[0].ID+`"]}`)); rec.Code != http.StatusOK {
+		t.Fatalf("reassign runtime: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	rec = adminReq(t, router, adminCookie, http.MethodGet, "/api/v1/users/"+source.ID+"/resources", nil)
+	json.NewDecoder(rec.Body).Decode(&res)
+	if len(res.Projects) != 1 || len(res.Runtimes) != 0 {
+		t.Fatalf("after runtime reassign = %+v, want 1 project 0 runtimes", res)
+	}
+
+	// Bulk: move everything else (empty arrays = all of that kind).
+	if rec = adminReq(t, router, adminCookie, http.MethodPost, "/api/v1/users/"+source.ID+"/reassign",
+		[]byte(`{"target_user_id":"`+target.ID+`","project_ids":[],"runtime_ids":[]}`)); rec.Code != http.StatusOK {
+		t.Fatalf("reassign all: status = %d", rec.Code)
+	}
+	rec = adminReq(t, router, adminCookie, http.MethodGet, "/api/v1/users/"+source.ID+"/resources", nil)
+	json.NewDecoder(rec.Body).Decode(&res)
+	if len(res.Projects) != 0 || len(res.Runtimes) != 0 {
+		t.Fatalf("after bulk reassign = %+v, want empty", res)
+	}
+
+	// Ownership cleared: the user is now deletable.
+	if rec = adminReq(t, router, adminCookie, http.MethodDelete, "/api/v1/users/"+source.ID, nil); rec.Code != http.StatusNoContent {
+		t.Fatalf("delete after reassign: status = %d", rec.Code)
+	}
+
+	// Audit trail recorded the transfers.
+	events, _, err := audit.List(t.Context(), pool, audit.Filter{EventType: "ownership.transferred"})
+	if err != nil || len(events) != 2 {
+		t.Fatalf("audit ownership.transferred: %v, %d events, want 2", err, len(events))
+	}
+}

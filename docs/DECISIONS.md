@@ -1332,3 +1332,19 @@ drop for the Modal class — `tabler.min.js` still exposes no
 API enforces the same gate server-side, so a non-admin probing
 `users.html` is redirected by its 403 handling and the data is never
 served.
+
+**Addendum (ownership transfer).** The ownership-block error from the
+delete guard was a dead end without a fix, so the manager gains two more
+admin routes: `GET /api/v1/users/{userID}/resources` (what the user owns,
+for the users page's detail panel) and `POST
+/api/v1/users/{userID}/reassign` (`{target_user_id, project_ids?,
+runtime_ids?}`). The ID lists use a nil-vs-empty contract — absent field
+leaves that kind untouched, empty array moves everything of that kind,
+non-empty moves those IDs — which is what makes per-resource and bulk
+transfers expressible in one endpoint without a second "all" flag. Go's
+unmarshalling maps an absent JSON field to a nil slice, so `*[]string`
+carries the distinction for free. A runtime transfer only changes
+`created_by`: enrollment tokens and the live connection are unaffected
+(ownership of a runtime is otherwise cosmetic). Transfers are audited as
+`ownership.transferred`; the UI's ownership-blocked delete error now opens
+the resources panel directly.

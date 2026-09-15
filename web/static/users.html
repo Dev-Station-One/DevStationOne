@@ -155,6 +155,35 @@
       </div>
     </div>
 
+    <div class="modal modal-blur fade" id="resources-modal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="resources-modal-title">Owned resources</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-2 align-items-center mb-3">
+              <div class="col-12 col-md-auto">
+                <select id="reassign-all-target" class="form-select" aria-label="Reassign everything to"></select>
+              </div>
+              <div class="col-12 col-md-auto">
+                <button id="reassign-all-btn" class="btn btn-primary" type="button">Reassign everything</button>
+              </div>
+              <div class="col-12 col-md text-secondary" id="resources-hint"></div>
+            </div>
+            <h6 class="text-secondary text-uppercase small">Projects</h6>
+            <ul id="owned-projects" class="list-group mb-3"></ul>
+            <h6 class="text-secondary text-uppercase small">Runtimes</h6>
+            <ul id="owned-runtimes" class="list-group"></ul>
+            <div id="resources-empty" class="empty py-3" hidden>
+              <div class="empty-subtitle text-secondary">This user owns nothing — safe to delete.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="/vendor/jquery/jquery.min.js"></script>
     <script src="/vendor/tabler/js/tabler.min.js"></script>
     <script src="/js/app.js"></script>
@@ -253,7 +282,8 @@
               "<td>" + badge + "</td>" +
               "<td>" + lastAccessed + "</td>" +
               "<td>" + new Date(u.created_at).toLocaleDateString() + "</td>" +
-              '<td><button class="icon-btn edit-btn" data-id="' + u.id + '" aria-label="Edit user" title="Edit user"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> ' +
+              '<td><button class="icon-btn resources-btn" data-id="' + u.id + '" aria-label="Owned resources" title="Owned resources"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></button> ' +
+              '<button class="icon-btn edit-btn" data-id="' + u.id + '" aria-label="Edit user" title="Edit user"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> ' +
               '<button class="icon-btn text-danger delete-btn" data-id="' + u.id + '" aria-label="Delete user" title="Delete user"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>',
           );
         });
@@ -288,6 +318,99 @@
         $("#user-error").prop("hidden", true);
         new Modal(document.getElementById("user-modal")).show();
       }
+
+      // ---- Owned resources + reassignment (ADR-038) ----
+
+      var resourcesUserID = null;
+
+      function targetOptionsHTML(excludeID) {
+        return allUsers
+          .filter(function (u) { return u.id !== excludeID; })
+          .map(function (u) {
+            return '<option value="' + u.id + '">' + escapeHtml(u.display_name || u.email) + "</option>";
+          })
+          .join("");
+      }
+
+      function openResources(u) {
+        resourcesUserID = u.id;
+        $("#resources-modal-title").text("Owned resources — " + (u.display_name || u.email));
+        $("#reassign-all-target").empty().html(targetOptionsHTML(u.id));
+        var $btn = $("#reassign-all-btn").prop("disabled", !allUsers.some(function (x) { return x.id !== u.id; }));
+        loadResources();
+        new Modal(document.getElementById("resources-modal")).show();
+      }
+
+      function loadResources() {
+        $.get("/api/v1/users/" + resourcesUserID + "/resources")
+          .done(function (res) {
+            var total = res.projects.length + res.runtimes.length;
+            $("#resources-empty").prop("hidden", total > 0);
+            $("#resources-hint").text(
+              total ? "Reassign to clear the way for deletion." : ""
+            );
+            var $pj = $("#owned-projects").empty();
+            (res.projects || []).forEach(function (p) {
+              $pj.append(
+                '<li class="list-group-item d-flex align-items-center justify-content-between">' +
+                '<span>' + escapeHtml(p.name) + "</span>" +
+                '<span class="d-flex gap-2 align-items-center">' +
+                '<select class="form-select form-select-sm reassign-target" data-kind="projects" data-id="' + p.id + '">' +
+                targetOptionsHTML(resourcesUserID) + "</select>" +
+                '<button class="btn btn-sm reassign-one-btn" data-kind="projects" data-id="' + p.id + '">Reassign</button></span></li>',
+              );
+            });
+            var $rt = $("#owned-runtimes").empty();
+            (res.runtimes || []).forEach(function (rt) {
+              $rt.append(
+                '<li class="list-group-item d-flex align-items-center justify-content-between">' +
+                "<span>" + escapeHtml(rt.name) + "</span>" +
+                '<span class="d-flex gap-2 align-items-center">' +
+                '<select class="form-select form-select-sm reassign-target" data-kind="runtimes" data-id="' + rt.id + '">' +
+                targetOptionsHTML(resourcesUserID) + "</select>" +
+                '<button class="btn btn-sm reassign-one-btn" data-kind="runtimes" data-id="' + rt.id + '">Reassign</button></span></li>',
+              );
+            });
+            $("#reassign-all-btn").prop("disabled", total === 0);
+          });
+      }
+
+      function reassign(kind, ids, targetID) {
+        var body = { target_user_id: targetID };
+        body[kind] = ids;
+        return $.ajax({
+          url: "/api/v1/users/" + resourcesUserID + "/reassign",
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify(body),
+        });
+      }
+
+      $("#users-body").on("click", ".resources-btn", function () {
+        var id = $(this).data("id");
+        var u = allUsers.find(function (x) { return x.id === id; });
+        if (u) openResources(u);
+      });
+
+      $("#reassign-all-btn").on("click", function () {
+        var target = $("#reassign-all-target").val();
+        if (!target) return;
+        reassign("project_ids", [], target);
+        reassign("runtime_ids", [], target).always(function () {
+          loadUsers();
+          loadResources();
+        });
+      });
+
+      $("#resources-modal").on("click", ".reassign-one-btn", function () {
+        var kind = $(this).data("kind");
+        var target = $(this).siblings("select").val();
+        if (!target) return;
+        reassign(kind === "projects" ? "project_ids" : "runtime_ids", [$(this).data("id")], target).always(function () {
+          loadUsers();
+          loadResources();
+        });
+      });
 
       $("#new-user-btn").on("click", function () {
         openModal(null);
@@ -339,6 +462,11 @@
             var msg =
               (xhr.responseJSON && xhr.responseJSON.error) ||
               "Failed to delete user.";
+            if (/still owns resources/.test(msg)) {
+              // Ownership block: send the admin straight to the fix.
+              var u = allUsers.find(function (x) { return x.id === id; });
+              if (u) openResources(u);
+            }
             DS.error(msg);
           })
           .always(loadUsers);

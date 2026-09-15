@@ -1025,3 +1025,23 @@ create/list/duplicate-409, last-accessed set after login, demote-last-admin
 logs in), self-delete 400, delete 204, audit rows recorded.
 
 **Status: Complete.**
+
+## Slice 24 — Ownership visibility + transfer (completes ADR-038)
+
+**Goal**: close the dead end in the user-delete guard — admins can see
+what a user owns and move it to another user, per-resource or in bulk.
+
+**Design**: `GET /api/v1/users/{userID}/resources` (one `json_agg` query)
+and `POST /api/v1/users/{userID}/reassign`, both `requireAdmin`. The ID
+lists are `*[]string`: absent = untouched, empty = all, non-empty = those
+IDs. Runtime transfer only changes `created_by`. Audited
+`ownership.transferred`. UI: fa-boxes-stacked row action on `users.html`
+opens an "Owned resources" modal — per-row reassign with a target-user
+picker plus "Reassign everything"; the ownership-blocked delete error
+opens the panel directly.
+
+**Tests**: `TestUserHTTP_ResourcesAndReassign` — accurate listing,
+unknown/self target guards, per-resource subset transfer, bulk empty-array
+transfer, delete succeeds after transfer, 2 audit events.
+
+**Status: Complete.**

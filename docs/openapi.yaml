@@ -258,6 +258,76 @@ paths:
           description: Administrator access required
         "404":
           description: User not found
+  /api/v1/users/{userID}/resources:
+    get:
+      summary: List the projects and runtimes a user owns (administrator only)
+      tags: [Users]
+      operationId: getUserResources
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The user's owned resources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResources"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: User not found
+  /api/v1/users/{userID}/reassign:
+    post:
+      summary: Reassign owned projects/runtimes to another user (administrator only)
+      description: >
+        A runtime transfer only changes created_by — the enrollment token and
+        live connection are untouched. Absent project_ids/runtime_ids fields
+        leave that kind alone; an empty array moves everything of that kind;
+        a non-empty array moves just those IDs.
+      tags: [Users]
+      operationId: reassignUserResources
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserReassign"
+      responses:
+        "200":
+          description: Ownership transferred; the response reports how many of each kind moved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: integer
+                  runtimes:
+                    type: integer
+        "400":
+          description: target_user_id missing or equal to the source user
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: Source or target user not found
   /api/v1/auth/sessions:
     get:
       summary: List active sessions for the current user
@@ -3490,6 +3560,43 @@ components:
         role:
           type: string
           enum: [user, admin]
+    UserResources:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+        runtimes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+    UserReassign:
+      type: object
+      required: [target_user_id]
+      properties:
+        target_user_id:
+          type: string
+        project_ids:
+          type: array
+          items:
+            type: string
+          description: Absent = leave projects alone; empty array = all; non-empty = those IDs.
+        runtime_ids:
+          type: array
+          items:
+            type: string
+          description: Absent = leave runtimes alone; empty array = all; non-empty = those IDs.
     Error:
       type: object
       required: [code, message]

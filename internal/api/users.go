@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
+
 	"devstationone/internal/audit"
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
@@ -258,5 +260,115 @@ func deleteUserHandler(db *database.DB) http.HandlerFunc {
 
 		audit.Record(r.Context(), db.Pool, audit.EventUserDeleted, audit.Actor{UserID: admin.ID, Email: admin.Email}, "user", id, map[string]any{"email": existing.Email}, clientIP(r))
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+type userResources struct {
+	Projects []ownedResource `json:"projects"`
+	Runtimes []ownedResource `json:"runtimes"`
+}
+
+type ownedResource struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func getUserResourcesHandler(db *database.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if _, err := auth.GetUserByID(r.Context(), db.Pool, r.PathValue("userID")); err == auth.ErrNotFound {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+			return
+		} else if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up user"})
+			return
+		}
+
+		var out userResources
+		if err := db.Pool.QueryRow(r.Context(),
+			`SELECT COALESCE((SELECT json_agg(json_build_object('id', id, 'name', name) ORDER BY name) FROM projects WHERE created_by = $1), '[]'::json),
+			        COALESCE((SELECT json_agg(json_build_object('id', id, 'name', name) ORDER BY name) FROM runtimes  WHERE created_by = $1), '[]'::json)`,
+			r.PathValue("userID"),
+		).Scan(&out.Projects, &out.Runtimes); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up resources"})
+			return
+		}
+		writeJSON(w, http.StatusOK, out)
+	}
+}
+
+type reassignRequest struct {
+	TargetUserID string `json:"target_user_id"`
+	// ProjectIDs/RuntimeIDs: nil (absent) = leave that kind alone; an
+	// empty array = everything of that kind; a non-empty array = those IDs.
+	ProjectIDs *[]string `json:"project_ids"`
+	RuntimeIDs *[]string `json:"runtime_ids"`
+}
+
+// reassignUserResourcesHandler moves ownership of projects/runtimes from
+// one user to another. An omitted or empty ID list means "everything that
+// kind"; a runtime transfer only changes created_by — enrollment and
+// connection are untouched.
+func reassignUserResourcesHandler(db *database.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		admin, _ := userFromContext(r.Context())
+		sourceID := r.PathValue("userID")
+
+		var req reassignRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		if req.TargetUserID == "" || req.TargetUserID == sourceID {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_user_id must name a different user"})
+			return
+		}
+		target, err := auth.GetUserByID(r.Context(), db.Pool, req.TargetUserID)
+		if err == auth.ErrNotFound {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "target user not found"})
+			return
+		}
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up target user"})
+			return
+		}
+
+		transfer := func(table string, ids []string) (int64, error) {
+			var tag pgconn.CommandTag
+			var err error
+			if len(ids) == 0 {
+				tag, err = db.Pool.Exec(r.Context(),
+					`UPDATE `+table+` SET created_by = $1 WHERE created_by = $2`, target.ID, sourceID)
+			} else {
+				tag, err = db.Pool.Exec(r.Context(),
+					`UPDATE `+table+` SET created_by = $1 WHERE created_by = $2 AND id = ANY($3::uuid[])`,
+					target.ID, sourceID, ids)
+			}
+			if err != nil {
+				return 0, err
+			}
+			return tag.RowsAffected(), nil
+		}
+
+		var movedProjects, movedRuntimes int64
+		if req.ProjectIDs != nil {
+			movedProjects, err = transfer("projects", *req.ProjectIDs)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to reassign projects"})
+				return
+			}
+		}
+		if req.RuntimeIDs != nil {
+			movedRuntimes, err = transfer("runtimes", *req.RuntimeIDs)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to reassign runtimes"})
+				return
+			}
+		}
+
+		audit.Record(r.Context(), db.Pool, audit.EventOwnershipTransferred, audit.Actor{UserID: admin.ID, Email: admin.Email},
+			"user", sourceID,
+			map[string]any{"target_user_id": target.ID, "projects": movedProjects, "runtimes": movedRuntimes},
+			clientIP(r))
+		writeJSON(w, http.StatusOK, map[string]int{"projects": int(movedProjects), "runtimes": int(movedRuntimes)})
 	}
 }

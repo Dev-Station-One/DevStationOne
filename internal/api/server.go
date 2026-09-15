@@ -46,6 +46,8 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/users", requireAdmin(db, createUserHandler(db)))
 	mux.HandleFunc("PATCH /api/v1/users/{userID}", requireAdmin(db, patchUserHandler(db)))
 	mux.HandleFunc("DELETE /api/v1/users/{userID}", requireAdmin(db, deleteUserHandler(db)))
+	mux.HandleFunc("GET /api/v1/users/{userID}/resources", requireAdmin(db, getUserResourcesHandler(db)))
+	mux.HandleFunc("POST /api/v1/users/{userID}/reassign", requireAdmin(db, reassignUserResourcesHandler(db)))
 
 	mux.HandleFunc("POST /api/v1/auth/login", rateLimit(loginRateLimit, loginHandler(db)))
 	mux.HandleFunc("POST /api/v1/auth/logout", logoutHandler(db))

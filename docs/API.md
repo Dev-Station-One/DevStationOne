@@ -802,6 +802,22 @@ a user who still owns projects or runtimes cannot be deleted until those
 resources are cleaned up. Every mutation is audited (`user.created`,
 `user.updated`, `user.deleted`).
 
+Ownership lookup and transfer (ADR-038):
+
+```text
+GET  /api/v1/users/{userID}/resources
+POST /api/v1/users/{userID}/reassign
+```
+
+`GET .../resources` returns `{projects: [{id, name}], runtimes: [{id, name}]}`.
+`POST .../reassign` with `{target_user_id, project_ids?, runtime_ids?}`
+moves ownership to the target user: an absent array leaves that kind
+untouched, an empty array moves everything of that kind, a non-empty array
+moves just those IDs. A runtime transfer only changes `created_by` — the
+enrollment token and live connection are untouched. The target must exist
+and differ from the source (400/404 otherwise). Audited as
+`ownership.transferred` with the moved counts.
+
 ## Metrics
 
 ```text

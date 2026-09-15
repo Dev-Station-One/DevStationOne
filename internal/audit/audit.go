@@ -75,6 +75,8 @@ const (
 	EventUserCreated = "user.created"
 	EventUserUpdated = "user.updated"
 	EventUserDeleted = "user.deleted"
+
+	EventOwnershipTransferred = "ownership.transferred"
 )
 
 // Actor identifies who triggered an event. UserID is empty for an
