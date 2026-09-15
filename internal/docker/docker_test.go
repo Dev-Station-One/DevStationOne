@@ -56,6 +56,7 @@ func TestComposeFile_Detection(t *testing.T) {
 // decoys that must never pass.
 func TestInScope(t *testing.T) {
 	projectDir := "/home/dev/myproject"
+	projectName := "myproject"
 
 	tests := []struct {
 		name string
@@ -63,6 +64,7 @@ func TestInScope(t *testing.T) {
 		want bool
 	}{
 		{"compose label match", container.Summary{Labels: map[string]string{"com.docker.compose.project": "myproject"}}, true},
+		{"custom-name label match", container.Summary{Labels: map[string]string{"com.docker.compose.project": "my-custom-stack"}}, false},
 		{"other compose project", container.Summary{Labels: map[string]string{"com.docker.compose.project": "other"}}, false},
 		{"no labels", container.Summary{}, false},
 		{"bind mount project dir itself", container.Summary{Mounts: []container.MountPoint{{Source: projectDir}}}, true},
@@ -73,10 +75,50 @@ func TestInScope(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := inScope(tt.s, projectDir); got != tt.want {
+			if got := inScope(tt.s, projectName, projectDir); got != tt.want {
 				t.Fatalf("inScope = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestComposeProjectName_NameOverride covers reading the top-level `name:`
+// key from the compose file, with the directory basename as fallback.
+func TestComposeProjectName_NameOverride(t *testing.T) {
+	dir := t.TempDir()
+	// No compose file: basename fallback.
+	if got := composeProjectName(dir); got != filepath.Base(dir) {
+		t.Fatalf("no file: %q, want basename %q", got, filepath.Base(dir))
+	}
+	// Custom name wins over the basename.
+	if err := os.WriteFile(filepath.Join(dir, "compose.yaml"),
+		[]byte("name: my-custom-stack\nservices:\n  web:\n    image: busybox\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := composeProjectName(dir); got != "my-custom-stack" {
+		t.Fatalf("name override: %q, want my-custom-stack", got)
+	}
+	// Quoted and commented variants.
+	for _, body := range []string{
+		"name: \"quoted-name\"\n# name: not-this\nservices: {}\n",
+		"version: '3'\nname: 'second-name'\nservices: {}\n",
+	} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "docker-compose.yml"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := composeProjectName(dir); filepath.Base(dir) == got {
+			t.Fatalf("quoted/commented name not picked up: %q", got)
+		}
+	}
+	// Indented name: (a service field, not top-level) is ignored.
+	dir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "compose.yaml"),
+		[]byte("services:\n  web:\n    name: wrong\n    image: busybox\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := composeProjectName(dir); got != filepath.Base(dir) {
+		t.Fatalf("indented name: %q, want basename %q", got, filepath.Base(dir))
 	}
 }
 

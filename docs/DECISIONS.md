@@ -1402,7 +1402,11 @@ server boot.
 prerequisite, not a code concern. The socket path is standard-only (no
 config surface): a socket living elsewhere (podman, `DOCKER_HOST`) simply
 reports not-available, and a runtime config field is the upgrade path if
-that ever bites. A runtime host without Docker reports it
+that ever bites. The compose project name is resolved the way compose
+itself resolves it — the compose file's top-level `name:` key, falling
+back to the directory basename — so `name:` overrides are visible; the
+name scan is a line parser, not a YAML dependency. A runtime host without
+Docker reports it
 via `protocol.Capabilities` (new `docker` field: socket reachable, daemon
 version, compose plugin present) and the tab renders a not-available empty
 state. Compose output arrives only at completion; live progress is the

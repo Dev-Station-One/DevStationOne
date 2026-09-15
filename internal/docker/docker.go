@@ -159,21 +159,43 @@ func ComposeFile(projectDir string) string {
 	return ""
 }
 
-// composeProjectName derives the compose project name for a compose file:
-// compose's default is the directory's basename. Containers created by our
-// own compose actions (and by any `docker compose` run from that directory)
-// carry the matching com.docker.compose.project label, so the label check
-// below stays honest.
-// ponytail: default-name derivation only; a project_name: override in the
-// compose file won't match by label and is found via the bind-mount rule.
+// composeProjectName resolves the compose project name the way compose
+// itself does: the file's top-level `name:` key when present, else the
+// directory's basename. The label check in inScope uses this value, so a
+// `name:` override stays visible instead of silently falling back to the
+// bind-mount rule.
+// ponytail: line scan for one top-level key instead of a YAML dependency;
+// quoted scalars handled, block/multiline values are not (compose treats
+// name as a simple string) — a full YAML parser is the upgrade path if a
+// real project ever needs one.
 func composeProjectName(projectDir string) string {
+	if file := ComposeFile(projectDir); file != "" {
+		if data, err := os.ReadFile(file); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				trimmed := strings.TrimSpace(line)
+				if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+					continue
+				}
+				if !strings.HasPrefix(line, "name:") {
+					continue
+				}
+				v := strings.TrimSpace(strings.TrimPrefix(trimmed, "name:"))
+				v = strings.Trim(v, `"'`)
+				if v != "" {
+					return v
+				}
+			}
+		}
+	}
 	return filepath.Base(projectDir)
 }
 
 // inScope reports whether a container belongs to the project's compose
-// stack or bind-mounts the project directory.
-func inScope(s container.Summary, projectDir string) bool {
-	if s.Labels["com.docker.compose.project"] == composeProjectName(projectDir) {
+// stack or bind-mounts the project directory. projectName is the resolved
+// compose project name (composeProjectName) — resolved once per listing,
+// not per container.
+func inScope(s container.Summary, projectName, projectDir string) bool {
+	if s.Labels["com.docker.compose.project"] == projectName {
 		return true
 	}
 	for _, m := range s.Mounts {
@@ -194,9 +216,10 @@ func List(ctx context.Context, projectDir string) ([]protocol.ContainerInfo, err
 	if err != nil {
 		return nil, err
 	}
+	projectName := composeProjectName(projectDir)
 	out := make([]protocol.ContainerInfo, 0, len(res.Items))
 	for _, s := range res.Items {
-		if !inScope(s, projectDir) {
+		if !inScope(s, projectName, projectDir) {
 			continue
 		}
 		ci := protocol.ContainerInfo{
@@ -323,11 +346,12 @@ func Resources(ctx context.Context, projectDir string) (protocol.DockerResources
 	if err != nil {
 		return protocol.DockerResourcesPayload{}, err
 	}
+	projectName := composeProjectName(projectDir)
 	imageIDs := map[string]bool{}
 	networks := map[string]bool{}
 	volumes := map[string]bool{}
 	for _, s := range res.Items {
-		if !inScope(s, projectDir) {
+		if !inScope(s, projectName, projectDir) {
 			continue
 		}
 		imageIDs[s.ImageID] = true
