@@ -39,7 +39,6 @@
        VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md mobile terminal priority. */
     .app-tabs, .session-tabs {
       flex-wrap: nowrap;
-      overflow-x: auto;
       -webkit-overflow-scrolling: touch;
     }
     .app-tabs .nav-link, .session-tab {
@@ -49,17 +48,7 @@
       display: inline-flex;
       align-items: center;
       gap: .375rem;
-      padding: .375rem .75rem;
-      border: 1px solid var(--tblr-border-color);
-      border-bottom: none;
-      border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;
-      background: var(--tblr-bg-surface-secondary);
-      cursor: pointer;
       min-height: 44px;
-    }
-    .session-tab.active {
-      background: var(--tblr-bg-surface);
-      font-weight: 600;
     }
     .session-tab .status-dot {
       width: .5rem;
@@ -87,9 +76,8 @@
       border: none;
       background: none;
       line-height: 1;
-      padding: 0 .125rem;
-      min-width: 44px;
-      min-height: 44px;
+      padding: .125rem;
+      margin-left: .125rem;
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -256,8 +244,8 @@
             <div class="tab-content" id="app-tab-content">
 
             <div id="terminal-panel" class="tab-pane" role="tabpanel" tabindex="0">
-              <div class="d-flex align-items-end session-tabs mb-0">
-                <div id="session-tabs" class="d-flex align-items-stretch flex-nowrap"></div>
+              <div class="d-flex align-items-end mb-0">
+                <ul id="session-tabs" class="nav nav-tabs session-tabs flex-nowrap mb-0" role="tablist"></ul>
                 <button id="new-session-btn" class="icon-btn ms-2 mb-1" aria-label="New terminal session" title="New terminal session"><i class="fa-solid fa-plus" aria-hidden="true"></i></button>
               </div>
               <div id="terminal-empty" class="card">
@@ -1070,7 +1058,8 @@
       var $tabs = $('#session-tabs').empty();
       Object.keys(termState).forEach(function (id) {
         var st = termState[id];
-        var $tab = $('<div class="session-tab" role="button" tabindex="0">').toggleClass('active', id === activeSessionID);
+        var $li = $('<li class="nav-item" role="presentation">');
+        var $tab = $('<a class="nav-link session-tab" href="#" role="tab">').toggleClass('active', id === activeSessionID);
         $('<span class="status-dot">').addClass('status-' + st.info.status).appendTo($tab);
         $('<span>').text(st.info.name).appendTo($tab);
         // Background output arrived since the tab was last selected (VISUAL
@@ -1081,8 +1070,9 @@
         var $close = $('<button type="button" class="close-btn" title="Close session" aria-label="Close session"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>');
         $close.on('click', function (e) { e.stopPropagation(); closeSession(id); });
         $tab.append($close);
-        $tab.on('click', function () { selectSession(id); });
-        $tabs.append($tab);
+        $tab.on('click', function (e) { e.preventDefault(); selectSession(id); });
+        $li.append($tab);
+        $tabs.append($li);
       });
       var any = Object.keys(termState).length > 0;
       $('#terminal-empty').prop('hidden', any);
