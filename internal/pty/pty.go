@@ -56,11 +56,15 @@ func Start(opts Options) (*Session, error) {
 
 	var cmd *exec.Cmd
 	if opts.Command != "" {
-		// -l -i: source the login chain (profile → bashrc) and run
-		// interactively, so the command sees the same env (nvm, PATH
-		// additions in ~/.bashrc) as a session typed into from term.js
-		// (ADR-045). Non-interactive `shell -c` skips ~/.bashrc entirely.
-		cmd = exec.Command(opts.Shell, "-l", "-i", "-c", opts.Command)
+		// -i, NOT -l: an interactive non-login shell reads ~/.bashrc, which
+		// is where a normal user's PATH additions (nvm, etc.) actually
+		// live — matching a term.js session exactly, which spawns the bare
+		// shell (no -l) under a real PTY and gets the same auto-detected
+		// interactive/non-login treatment. -l would instead read the
+		// login chain (/etc/profile, ~/.profile/.bash_profile) and SKIP
+		// ~/.bashrc entirely — the opposite of "run as if from term.js"
+		// (ADR-045). Plain `shell -c` skips both.
+		cmd = exec.Command(opts.Shell, "-i", "-c", opts.Command)
 	} else {
 		cmd = exec.Command(opts.Shell)
 	}
