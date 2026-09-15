@@ -130,6 +130,21 @@ const (
 	// not a reply) carrying one batch of followed container log lines,
 	// keyed by the StreamID from the docker.command logs_start request.
 	MessageDockerLogs MessageType = "docker.logs"
+
+	// MessageBackupCommand is sent server->runtime to create, inspect,
+	// download, or restore a backup (ADR-041: backup files live on the
+	// runtime host). Like service.command, it uses Envelope.ID for
+	// request/response correlation. "start" replies immediately with a job
+	// ID and runs the dump/archive in the background; completion is learned
+	// by polling "status" (no unsolicited backup event exists — ADR-042).
+	MessageBackupCommand MessageType = "backup.command"
+	// MessageBackupResult is sent runtime->server with a successful
+	// backup.command result, carrying the same Envelope.ID as the request.
+	MessageBackupResult MessageType = "backup.result"
+	// MessageBackupError is sent runtime->server when a backup.command
+	// fails, carrying the same Envelope.ID as the request. Its payload
+	// shape is identical to ServiceErrorPayload, which is reused for it.
+	MessageBackupError MessageType = "backup.error"
 )
 
 // Envelope is the outermost shape of every control-plane message. ID is an
@@ -780,6 +795,67 @@ type DBResultPayload struct {
 // with the other db.* messages.
 type DBErrorPayload struct {
 	Error string `json:"error"`
+}
+
+// BackupInfo describes one stored backup file on a runtime host (ADR-041).
+type BackupInfo struct {
+	// FileName is a path relative to the runtime's backups root
+	// (~/.local/share/devstationone/backups/) — never absolute.
+	FileName string `json:"file_name"`
+	Size     int64  `json:"size"`
+	ModTime  string `json:"mod_time"` // RFC3339
+}
+
+// BackupCommandPayload is the payload of a MessageBackupCommand envelope.
+type BackupCommandPayload struct {
+	// Action is one of:
+	//   start_db      — dump a database connection (Params + BackupID)
+	//   start_project — archive a project directory (SourceDir + BackupID)
+	//   status        — one job's state (JobID)
+	//   list          — list stored backup files (under KindDir)
+	//   delete        — remove a stored backup file (FileName)
+	//   read          — one download chunk (FileName + Offset + Length)
+	//   restore_db    — restore a DB backup into TargetDatabase (FileName + Params + TargetDatabase)
+	//   restore_project — extract a project backup (FileName + RestoreDir, overwrite mode)
+	Action string `json:"action"`
+	// KindDir scopes list/restore/delete to one subtree of the backups
+	// root: "db" or "projects".
+	KindDir string `json:"kind_dir,omitempty"`
+	// Params carries the connection to dump (start_db) or the credentials
+	// the dump/restore runs under (restore_db) — resolved server-side from
+	// a stored, decrypted database_connections row, never from a client
+	// request (same trust model as DBCommandPayload.Connection).
+	Params *DBConnectionParams `json:"params,omitempty"`
+	// BackupID is the caller-assigned backup file base name (a UUID) — the
+	// runtime appends the engine-specific extension.
+	BackupID string `json:"backup_id,omitempty"`
+	// FileName identifies a stored backup (delete/read/restore), relative
+	// to the backups root (KindDir/BackupID.<ext>).
+	FileName string `json:"file_name,omitempty"`
+	// SourceDir is the absolute working directory a start_project request
+	// archives. Resolved server-side from the Project record.
+	SourceDir string `json:"source_dir,omitempty"`
+	// RestoreDir is the absolute directory a restore_project extracts into.
+	RestoreDir string `json:"restore_dir,omitempty"`
+	// TargetDatabase names the database a restore_db writes into.
+	TargetDatabase string `json:"target_database,omitempty"`
+	// JobID scopes a status request; assigned by the runtime for start_*.
+	JobID  string `json:"job_id,omitempty"`
+	Offset int64  `json:"offset,omitempty"`
+	Length int    `json:"length,omitempty"`
+}
+
+// BackupResultPayload is the payload of a MessageBackupResult envelope.
+// Exactly the fields the requested action produces are populated.
+type BackupResultPayload struct {
+	JobID string `json:"job_id,omitempty"`
+	// State is a job's state for status: running, done, or failed.
+	State string       `json:"state,omitempty"`
+	Error string       `json:"error,omitempty"`
+	Size  int64        `json:"size,omitempty"`
+	Files []BackupInfo `json:"files,omitempty"`
+	// Data is one read chunk's bytes (base64-encoded on the wire).
+	Data []byte `json:"data,omitempty"`
 }
 
 // DecodeFrame splits a binary terminal frame produced by EncodeFrame back

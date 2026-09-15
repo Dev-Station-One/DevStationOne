@@ -152,7 +152,7 @@ func TestProjectHTTP_CreateListScopedByOwner(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
@@ -255,7 +255,7 @@ func TestProjectHTTP_UpdateAndDelete(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
@@ -313,7 +313,7 @@ func TestProjectHTTP_ValidatesRuntimeAndFields(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
 
 	// Missing required fields.

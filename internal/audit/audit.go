@@ -83,6 +83,11 @@ const (
 	// compose up/down/stop/restart; the specific action is carried in
 	// Detail["action"] (same pattern as EventServiceAction).
 	EventDockerAction = "docker.action"
+
+	EventBackupCreated   = "backup.created"
+	EventBackupRestored  = "backup.restored"
+	EventBackupDeleted   = "backup.deleted"
+	EventScheduleChanged = "backup_schedule.changed"
 )
 
 // Actor identifies who triggered an event. UserID is empty for an

@@ -1412,3 +1412,84 @@ version, compose plugin present) and the tab renders a not-available empty
 state. Compose output arrives only at completion; live progress is the
 upgrade path if slow builds annoy (`ponytail:` marker). Exec stays out
 until someone actually asks.
+
+## ADR-041 — Backup files live on the runtime host, never on Control Server disk
+
+**Decision.** Database backups (per connection) and project backups (tar.gz
+of the working directory) are created, stored, and read entirely on the
+runtime host, under a fixed root (`~/.local/share/devstationone/backups/`
+with `db/` and `projects/` subtrees) — never staged, cached, or persisted
+on the Control Server. The Control Server stores only metadata rows
+(`backups`, `backup_schedules`: kind, size, trigger, state, timestamps) and
+proxies downloads by issuing a sequence of chunked `read` RPCs to the
+runtime and streaming the bytes straight through to the browser.
+
+**Why.** Dump tools (`pg_dump`, `mysqldump`, `sqlcmd`, `sqlite3`) already run
+on the runtime host, next to the data and credentials; writing the output
+there avoids a second, redundant transfer before the file even exists.
+Keeping multi-gigabyte dump/archive files off the internet-facing Control
+Server avoids adding large-file storage and its backup/retention/disk-
+pressure concerns to the one box every deployment exposes publicly.
+
+**Consequence.** A runtime's disk is the only copy of its own backups — a
+lost runtime host loses its backups too, which is the documented tradeoff
+of this design (users needing off-host durability should download backups
+elsewhere; that's outside this slice's scope). Every backup operation
+requires the runtime to be online; there is no "restore from a backup
+whose runtime was deleted" path. The fixed root has no configuration
+surface yet — a per-runtime override is the upgrade path if disk layout
+ever needs to vary.
+
+## ADR-042 — Backup jobs run asynchronously, polled to completion, not pushed
+
+**Decision.** `start_db`/`start_project` (the `backup.command` actions that
+create a backup) reply immediately with a runtime-assigned job ID; the
+actual dump/archive runs in a goroutine on the runtime. The Control Server
+learns completion by polling `backup.command {action: "status", job_id}`
+(`backups.AwaitJob`), not via an unsolicited push message.
+
+**Why.** A dump or archive can legitimately take minutes — far longer than
+every other RPC's 15–30 s synchronous timeout (`service.command`,
+`db.command`, `file.command`). A push-based `backup.event` was considered
+and dropped: it adds a second delivery path that can be lost across a
+runtime reconnect exactly when it matters most (mid-backup), whereas
+`status` is idempotent and safe to re-poll after any disconnect — the
+Control Server's poller and a browser refresh both just re-ask the same
+question.
+
+**Consequence.** Completion detection has poll latency (the Control
+Server's internal poll interval, a few seconds) rather than being instant;
+this is invisible to a human watching a UI that re-fetches the list every
+couple of seconds. A job whose runtime disconnects mid-backup is recorded
+`failed` rather than left `running` forever — the poller treats a
+`SendCommand` failure as "runtime gone, job unknown" and gives up rather
+than retrying indefinitely.
+
+## ADR-043 — Services move from project-scoped to runtime-level
+
+**Decision.** `systemd --user` service management moves from
+`/api/v1/projects/{projectID}/services/...` to
+`/api/v1/runtimes/{runtimeID}/services/...`. The project workspace's
+Services tab, its sidebar entry, and the old project-scoped routes are
+removed outright — no compatibility shim, no dual-routing period. The
+Runtimes page gains a Services view (per-runtime unit list with the
+existing status/actions/log viewer). The listing shows every user unit on
+the runtime host, with no project filtering or tagging.
+
+**Why.** A `systemd --user` instance belongs to one OS user on one runtime
+host — it never actually depended on any single Project; the original
+project-scoped routing (`runtimeConnForProject`) was a resolution
+convenience from when Services was the only tab, not a reflection of what
+the resource is. Routing every service action through a project's runtime
+lookup added an unnecessary project-authorization hop for a resource the
+Runtimes page already authorizes directly (`resolveRuntime`, the same
+lookup the directory browser uses). This is an internal tool with a small
+user base — a migration shim buys nothing a straight cutover doesn't.
+
+**Consequence.** A user managing services for a runtime with multiple
+projects now does so from one place (Runtimes) instead of once per project
+tab, which is a net UX improvement, not a regression. The
+`service.command`/`service.result`/`service.error` protocol messages and
+the runtime-side `internal/services` implementation are unchanged — only
+the Control Server's resolution and the URL space moved. Audit events for
+service actions now carry `runtime_id` instead of `project_id`.

@@ -43,6 +43,25 @@ can only ever select among containers the scoped list already showed. The
 directory as cwd — no shell interpolation, no client-provided paths or
 project names.
 
+### Runtime → backup files (ADR-041)
+
+Backup files (database dumps and project archives) live only on the
+runtime host, under a fixed root
+(`~/.local/share/devstationone/backups/`) — never on Control Server disk.
+Dump/restore commands (`pg_dump`/`pg_restore`, `mysqldump`/`mysql`,
+`sqlcmd`, `sqlite3`) are invoked with fixed argv, credentials passed via
+environment variables (`PGPASSWORD`/`MYSQL_PWD`) rather than command-line
+arguments where the engine's tooling supports it, and dump output is never
+logged. A compatible client for each database engine the runtime backs up
+must be installed on the runtime host — this is a deployment prerequisite
+(same pattern as the Docker socket above), not something the code
+provisions; in particular, a MySQL server using `caching_sha2_password`
+needs a client build that supports it (a MariaDB-flavored `mysqldump`/
+`mysql` does not). Project-archive extraction re-validates every entry's
+containment (rejects `..`, absolute paths, and symlink targets escaping the
+destination) independently of anything the Control Server already checked,
+the same discipline as `internal/filesystem`.
+
 ## Authorization
 
 Every request must establish:

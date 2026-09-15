@@ -14,6 +14,7 @@ import (
 
 	"devstationone/internal/api"
 	"devstationone/internal/audit"
+	"devstationone/internal/backups"
 	"devstationone/internal/config"
 	"devstationone/internal/database"
 	"devstationone/internal/events"
@@ -64,8 +65,9 @@ func run() error {
 
 	go auditPurgeLoop(ctx, db, logger)
 
-	handler, hub, bus, _ := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
+	handler, hub, bus, _, registry := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey)
 	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
+	go backups.RunScheduler(ctx, db.Pool, registry, cfg.DBEncryptionKey, logger)
 	srv := &http.Server{
 		Addr:         cfg.Addr,
 		Handler:      handler,

@@ -79,7 +79,7 @@ func TestRuntimeWS_ConnectHeartbeatRevoke(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	defer server.Close()
 	wsURL := wsURLFor(server.URL)

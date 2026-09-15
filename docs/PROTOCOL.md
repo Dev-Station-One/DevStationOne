@@ -504,6 +504,82 @@ frames (`{stream_id, lines, end}`) until the browser disconnects or the
 follow ends; disconnect triggers `logs_stop` on the runtime. Slow browsers
 drop batches rather than block the runtime read loop.
 
+## Implementation (Backups/Services relocation): backup commands (ADR-041/042)
+
+Backup files live only on the runtime host — a fixed root
+(`~/.local/share/devstationone/backups/{db,projects}/`) — never on Control
+Server disk. `backup.command` reuses the Slice 5 correlated request/response
+machinery, with one addition: `start_db`/`start_project` reply immediately
+with a runtime-assigned job ID and run the dump/archive in a background
+goroutine, since a large dump can take minutes — far longer than the
+15–30 s timeout every other command uses. Completion is learned by polling
+`status`; there is no unsolicited "job finished" push (`backup.event` was
+considered and dropped for the MVP — status polling is simpler and already
+needed for the reconnect case where a push would be lost anyway).
+
+```text
+backup.command   server -> runtime   {action, kind_dir, params, backup_id,
+                                       file_name, source_dir, restore_dir,
+                                       target_database, job_id, offset, length}
+backup.result     runtime -> server  {job_id, state, error, size, files, data}
+backup.error       runtime -> server {error}
+```
+
+`action` is one of:
+
+- `start_db` — dump a database connection (`params` + assigned `backup_id`).
+  Replies with `{job_id}`; the runtime picks the output file name
+  (`db/<backup_id>.dump`) and dumps with the engine's native tool on the
+  runtime host: `pg_dump -F custom`, `mysqldump`/`mariadb-dump`, `sqlcmd
+  BACKUP DATABASE`, or SQLite's `.backup` (never a plain file copy of a live
+  database).
+- `start_project` — archive a project's working directory (`source_dir` +
+  assigned `backup_id`) as `projects/<backup_id>.tar.gz` plus a sidecar
+  manifest `projects/<backup_id>.json` (format version, source dir, file
+  count) — every file, `.gitignore` is not honored.
+- `status` — a job's current `{state: running|done|failed, error, size}`
+  by `job_id`.
+- `list` — stored backup files under `kind_dir` (`db` or `projects`),
+  returned as `{files: [{file_name, size, mod_time}]}`.
+- `delete` — remove one stored file (and its manifest sidecar, for a
+  project backup) by `file_name`.
+- `read` — one download chunk (`file_name`, `offset`, `length` ≤ 4 MiB);
+  the Control Server's download proxy walks a file's full length with
+  sequential `read` calls and streams the bytes straight to the browser —
+  the existing 24 MB whole-file-in-envelope transfer (`file.command`) is
+  unusable for multi-gigabyte dumps.
+- `restore_db` — restore a stored dump (`file_name`) into `target_database`
+  on the connection described by `params`; the target may be the original
+  database or a new name, existing data is replaced.
+- `restore_project` — extract a stored archive (`file_name`) into
+  `restore_dir`. The runtime validates the sidecar manifest's format
+  version, then extracts with the same containment discipline as
+  `internal/filesystem` (rejects `..`, absolute paths, and symlink targets
+  escaping the destination) independently of anything the Control Server
+  already checked. The Control Server is responsible for everything around
+  the extraction itself — closing the project's open sessions and taking a
+  `pre_restore` safety snapshot (a normal `start_project` job) before ever
+  issuing an overwrite-mode `restore_project`.
+
+`backup.result`/`backup.error` reuse the generic correlated-reply mechanism
+(`runtimes.Conn.SendCommand` / `connection.Sender.SendReply`) unchanged from
+Slice 5; `restore_db`/`restore_project` reply only once the operation itself
+has finished (success or failure), since the Control Server's restore flow
+needs the outcome before doing anything else (e.g. rolling back a
+newly-created Project record on failure).
+
+## Implementation (Backups/Services relocation): services move to the runtime (ADR-043)
+
+Services were originally scoped to a Project (`service.command` resolved by
+project → runtime). They are now scoped directly to a Runtime — the concept
+they actually describe (a `systemd --user` instance on one host) never
+depended on any one Project. The `service.command`/`service.result`/
+`service.error` message shapes and the runtime-side `internal/services`
+implementation are unchanged; only the Control Server's resolution changed,
+from `runtimeConnForProject` (project → runtime) to the same
+`resolveRuntime` helper the Runtimes area's directory browser already uses
+(runtime ID directly, `400` unknown/revoked, `409` offline).
+
 ## Security
 
 Every runtime connection is authenticated.

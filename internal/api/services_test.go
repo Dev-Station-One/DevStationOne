@@ -59,14 +59,31 @@ func testServiceUnit(t *testing.T) string {
 	return name
 }
 
+// testRuntimeID resolves projectID's runtime, since services are
+// runtime-scoped (ADR-043) but the test fixture (sessionsTestSetup) only
+// hands back a project.
+func testRuntimeID(t *testing.T, router http.Handler, cookie *http.Cookie, projectID string) string {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID, nil)
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	var proj projectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&proj); err != nil {
+		t.Fatalf("decode project: %v", err)
+	}
+	return proj.RuntimeID
+}
+
 func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+	runtimeID := testRuntimeID(t, router, cookie, projectID)
 	unit := testServiceUnit(t)
 
 	// list: our unit isn't running yet, so it may or may not appear
 	// (list-units --all still shows loaded-but-inactive units once
 	// daemon-reload has seen the file — either way this call must succeed).
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services", nil)
 	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -75,7 +92,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	}
 
 	// start
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/services/"+unit+"/start", nil)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+runtimeID+"/services/"+unit+"/start", nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -91,7 +108,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	}
 
 	// status
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services/"+unit, nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services/"+unit, nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -104,7 +121,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	}
 
 	// list now includes it, active
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services", nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -124,7 +141,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	}
 
 	// enable / disable
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/services/"+unit+"/enable", nil)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+runtimeID+"/services/"+unit+"/enable", nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -133,7 +150,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 		t.Fatalf("after enable: Enabled = %q, want enabled", info.Enabled)
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/services/"+unit+"/disable", nil)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+runtimeID+"/services/"+unit+"/disable", nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -143,7 +160,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	}
 
 	// logs
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services/"+unit+"/logs?lines=50", nil)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services/"+unit+"/logs?lines=50", nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -156,7 +173,7 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 	}
 
 	// stop
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/services/"+unit+"/stop", nil)
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+runtimeID+"/services/"+unit+"/stop", nil)
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -168,8 +185,9 @@ func TestServiceHTTP_ListStatusStartStopEnableDisableLogs(t *testing.T) {
 
 func TestServiceHTTP_InvalidUnitNameRejected(t *testing.T) {
 	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+	runtimeID := testRuntimeID(t, router, cookie, projectID)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services/not-a-unit", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services/not-a-unit", nil)
 	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -180,11 +198,12 @@ func TestServiceHTTP_InvalidUnitNameRejected(t *testing.T) {
 
 func TestServiceHTTP_UnknownUnitReturnsBadGateway(t *testing.T) {
 	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+	runtimeID := testRuntimeID(t, router, cookie, projectID)
 	if !services.Available(context.Background()) {
 		t.Skip("systemd --user not available; skipping integration test")
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services/devstationone-definitely-not-a-real-unit.service", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services/devstationone-definitely-not-a-real-unit.service", nil)
 	req.AddCookie(cookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
@@ -194,36 +213,30 @@ func TestServiceHTTP_UnknownUnitReturnsBadGateway(t *testing.T) {
 }
 
 func TestServiceHTTP_OwnershipEnforced(t *testing.T) {
-	router, _, _, projectID, db := sessionsTestSetup(t)
+	router, _, cookie, projectID, db := sessionsTestSetup(t)
+	runtimeID := testRuntimeID(t, router, cookie, projectID)
 
 	if _, err := auth.CreateUser(context.Background(), db.Pool, "bob@example.com", "password123", false); err != nil {
 		t.Fatalf("create bob: %v", err)
 	}
 	bobCookie := loginAs(t, router, "bob@example.com", "password123")
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services", nil)
 	req.AddCookie(bobCookie)
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	// Project access is server-wide (ADR-037): bob may use another user's
-	// project's services.
+	// Runtime visibility is server-wide (ADR-037/043): bob may use another
+	// user's runtime's services.
 	if rec.Code != http.StatusOK {
-		t.Fatalf("bob list admin's project services: status = %d, want 200", rec.Code)
+		t.Fatalf("bob list admin's runtime services: status = %d, want 200", rec.Code)
 	}
 }
 
-func TestServiceHTTP_RuntimeOffline(t *testing.T) {
+func TestServiceHTTP_RevokedRuntimeRejected(t *testing.T) {
 	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+	runtimeID := testRuntimeID(t, router, cookie, projectID)
 
-	// Revoke the runtime so its live connection drops, simulating offline.
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID, nil)
-	req.AddCookie(cookie)
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	var proj projectResponse
-	json.NewDecoder(rec.Body).Decode(&proj)
-
-	revokeReq := httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+proj.RuntimeID+"/revoke", nil)
+	revokeReq := httptest.NewRequest(http.MethodPost, "/api/v1/runtimes/"+runtimeID+"/revoke", nil)
 	revokeReq.AddCookie(cookie)
 	revokeRec := httptest.NewRecorder()
 	router.ServeHTTP(revokeRec, revokeReq)
@@ -231,26 +244,14 @@ func TestServiceHTTP_RuntimeOffline(t *testing.T) {
 		t.Fatalf("revoke: status = %d", revokeRec.Code)
 	}
 
-	pollUntil(t, 3*time.Second, func() bool {
-		req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes", nil)
-		req.AddCookie(cookie)
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		var list []runtimeResponse
-		json.NewDecoder(rec.Body).Decode(&list)
-		for _, rt := range list {
-			if rt.ID == proj.RuntimeID {
-				return !rt.Online
-			}
-		}
-		return false
-	})
-
-	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/services", nil)
+	// resolveRuntime (docs/API.md "Services") checks Status before online,
+	// so a revoked runtime is 400, not 409 — distinct from a runtime that
+	// is merely disconnected.
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/runtimes/"+runtimeID+"/services", nil)
 	req.AddCookie(cookie)
-	rec = httptest.NewRecorder()
+	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusConflict {
-		t.Fatalf("list with runtime offline: status = %d, want 409, body = %s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("list on revoked runtime: status = %d, want 400, body = %s", rec.Code, rec.Body.String())
 	}
 }

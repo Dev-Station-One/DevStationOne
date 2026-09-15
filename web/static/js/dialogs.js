@@ -283,4 +283,30 @@
       })).then(function (r) { return r.isConfirmed ? selected : null; });
     }
   };
+
+  // confirmTypedName: an overwrite-restore gate (docs/REQUIREMENTS_BACKUPS_SERVICES.md
+  // FR-PJ-5) — the user must type the resource's current name verbatim, not
+  // just click a checkbox. Resolves the typed name (equal to expectedName)
+  // on confirm, or null on cancel.
+  window.DS.confirmTypedName = function (text, expectedName) {
+    return Swal.fire(base({
+      title: text,
+      html: '<div class="text-start"><input id="ds-confirm-typed-name" class="form-control" autocomplete="off"></div>',
+      showCancelButton: true,
+      confirmButtonColor: 'var(--ds-danger)',
+      confirmButtonText: 'Confirm',
+      didOpen: function () {
+        var $c = $(Swal.getHtmlContainer());
+        $c.find('#ds-confirm-typed-name').attr('placeholder', expectedName).trigger('focus');
+      },
+      preConfirm: function () {
+        var v = $(Swal.getHtmlContainer()).find('#ds-confirm-typed-name').val();
+        if (v !== expectedName) {
+          Swal.showValidationMessage('Must match "' + expectedName + '" exactly.');
+          return false;
+        }
+        return v;
+      }
+    })).then(function (r) { return r.isConfirmed ? r.value : null; });
+  };
 })();

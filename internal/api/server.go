@@ -18,13 +18,13 @@ import (
 )
 
 // NewRouter builds the top-level HTTP handler for the Control Server. It
-// also returns the Hub and Bus it constructed internally so the caller can
-// run background loops that need them (main.go's idle-notification loop,
-// docs/IMPLEMENTATION_PLAN.md Slice 15) without a second, disconnected
-// instance.
+// also returns the Hub, Bus, editor Hub and runtime Registry it constructed
+// internally so the caller can run background loops that need them (main.go's
+// idle-notification loop and the backup scheduler, docs/IMPLEMENTATION_PLAN.md)
+// without a second, disconnected instance.
 // dbEncryptionKey decrypts stored database connection credentials
 // (docs/SECURITY.md) — see internal/dbconnections.
-func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub) {
+func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub, *runtimes.Registry) {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
@@ -67,6 +67,17 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/browse/search", requireSession(db, browseSearchHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/browse/mkdir", requireSession(db, browseMkdirHandler(db, registry)))
 
+	// Runtime-level service management (ADR-043) — services belong to the
+	// runtime host, not to a project.
+	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/services", requireSession(db, listServicesHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/services/{unit}", requireSession(db, getServiceHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/runtimes/{runtimeID}/services/{unit}/logs", requireSession(db, getServiceLogsHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/services/{unit}/start", requireSession(db, serviceActionHandler(db, registry, "start")))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/services/{unit}/stop", requireSession(db, serviceActionHandler(db, registry, "stop")))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/services/{unit}/restart", requireSession(db, serviceActionHandler(db, registry, "restart")))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/services/{unit}/enable", requireSession(db, serviceActionHandler(db, registry, "enable")))
+	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/services/{unit}/disable", requireSession(db, serviceActionHandler(db, registry, "disable")))
+
 	mux.HandleFunc("POST /api/v1/projects", requireSession(db, createProjectHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects", requireSession(db, listProjectsHandler(db)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}", requireSession(db, getProjectHandler(db)))
@@ -95,14 +106,28 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/docker/containers/{containerID}/logs", requireSession(db, dockerLogsStreamHandler(db, registry, dockerLogsHub)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/docker/containers/{containerID}/{dockerAction}", requireSession(db, dockerContainerActionHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/docker/compose/{dockerAction}", requireSession(db, dockerComposeHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/services", requireSession(db, listServicesHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/services/{unit}", requireSession(db, getServiceHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/services/{unit}/logs", requireSession(db, getServiceLogsHandler(db, registry)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/start", requireSession(db, serviceActionHandler(db, registry, "start")))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/stop", requireSession(db, serviceActionHandler(db, registry, "stop")))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/restart", requireSession(db, serviceActionHandler(db, registry, "restart")))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/enable", requireSession(db, serviceActionHandler(db, registry, "enable")))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/services/{unit}/disable", requireSession(db, serviceActionHandler(db, registry, "disable")))
+
+	// Backups (ADR-041/042) and schedules, per database connection.
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups", requireSession(db, listDBBackupsHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/backups", requireSession(db, createDBBackupHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireSession(db, getDBBackupScheduleHandler(db)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireSession(db, putDBBackupScheduleHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireSession(db, deleteDBBackupScheduleHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}", requireSession(db, getDBBackupHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}", requireSession(db, deleteDBBackupHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/download", requireSession(db, downloadDBBackupHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/restore", requireSession(db, restoreDBBackupHandler(db, registry, dbEncryptionKey)))
+
+	// Project backups.
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/backups", requireSession(db, listProjectBackupsHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/backups", requireSession(db, createProjectBackupHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/backups/schedule", requireSession(db, getProjectBackupScheduleHandler(db)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/backups/schedule", requireSession(db, putProjectBackupScheduleHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/backups/schedule", requireSession(db, deleteProjectBackupScheduleHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/backups/{backupID}", requireSession(db, getProjectBackupHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/backups/{backupID}", requireSession(db, deleteProjectBackupHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/backups/{backupID}/download", requireSession(db, downloadProjectBackupHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/backups/{backupID}/restore", requireSession(db, restoreProjectBackupHandler(db, registry)))
 
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/files", requireSession(db, listFilesHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/search", requireSession(db, searchFilesHandler(db, registry)))
@@ -199,5 +224,5 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	handler = csrfProtect(handler)
 	handler = securityHeaders(handler)
 	handler = withRequestLogging(logger, handler)
-	return handler, hub, bus, editorHub
+	return handler, hub, bus, editorHub, registry
 }

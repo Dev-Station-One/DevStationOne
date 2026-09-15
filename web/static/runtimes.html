@@ -115,6 +115,9 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
           var actionBtn = rt.status === 'revoked'
             ? '<button class="icon-btn reactivate-btn" data-id="' + rt.id + '" aria-label="Re-enable runtime" title="Re-enable runtime"><i class="fa-solid fa-rotate-right" aria-hidden="true"></i></button>'
             : '<button class="icon-btn text-danger revoke-btn" data-id="' + rt.id + '" aria-label="Revoke runtime" title="Revoke runtime"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>';
+          if (rt.online) {
+            actionBtn = '<button class="icon-btn services-btn" data-id="' + rt.id + '" data-name="' + escapeHtml(rt.name) + '" aria-label="Services" title="Services"><i class="fa-solid fa-gears" aria-hidden="true"></i></button> ' + actionBtn;
+          }
           actionBtn += ' <button class="icon-btn text-danger delete-btn" data-id="' + rt.id + '" data-online="' + (rt.online ? '1' : '0') + '" aria-label="Delete runtime" title="Delete runtime"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>';
           $body.append(
             '<tr><td>' + escapeHtml(rt.name) + '</td>' +
@@ -186,6 +189,87 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
     });
 
     loadRuntimes();
+
+    // --- Services (ADR-043: runtime-level, not project-scoped) ---
+
+    function activeStateBadgeClass(state) {
+      if (state === 'active') return 'bg-success';
+      if (state === 'failed') return 'bg-danger';
+      if (state === 'activating' || state === 'deactivating' || state === 'reloading') return 'bg-info';
+      return 'bg-secondary';
+    }
+
+    function enabledBadgeClass(state) {
+      if (state === 'enabled') return 'bg-success';
+      if (state === 'disabled') return 'bg-secondary';
+      return 'bg-azure-lt';
+    }
+
+    function servicesRow(runtimeId, svc, reload) {
+      var $row = $('<div class="d-flex align-items-center gap-2 py-2 border-bottom flex-wrap">');
+      $row.append(
+        $('<span class="fw-bold text-truncate" style="max-width:180px" title="' + escapeHtml(svc.unit) + '">').text(svc.unit),
+        $('<span class="badge ' + activeStateBadgeClass(svc.active_state) + '">').text(svc.active_state + ' (' + svc.sub_state + ')'),
+        $('<span class="badge ' + enabledBadgeClass(svc.enabled) + '">').text(svc.enabled)
+      );
+      var $actions = $('<span class="ms-auto d-flex gap-1">').appendTo($row);
+      var running = svc.active_state === 'active' || svc.active_state === 'activating';
+      function actionBtn(action, icon, label, disabled) {
+        return $('<button type="button" class="icon-btn" aria-label="' + label + '" title="' + label + '">')
+          .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>')
+          .prop('disabled', !!disabled)
+          .on('click', function () {
+            $.ajax({ url: '/api/v1/runtimes/' + runtimeId + '/services/' + encodeURIComponent(svc.unit) + '/' + action, method: 'POST' })
+              .fail(function (xhr) { DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + '.')); })
+              .always(reload);
+          }).appendTo($actions);
+      }
+      actionBtn('start', 'play', 'Start', running);
+      actionBtn('stop', 'stop', 'Stop', svc.active_state === 'inactive');
+      actionBtn('restart', 'rotate', 'Restart');
+      if (svc.enabled !== 'static') {
+        actionBtn('enable', 'toggle-on', 'Enable', svc.enabled === 'enabled');
+        actionBtn('disable', 'toggle-off', 'Disable', svc.enabled !== 'enabled');
+      }
+      $('<button type="button" class="icon-btn" aria-label="Logs" title="Logs">').append('<i class="fa-solid fa-file-lines" aria-hidden="true"></i>')
+        .on('click', function () {
+          var $existing = $row.next('.ds-service-logs');
+          if ($existing.length) { $existing.remove(); return; }
+          var $logs = $('<pre class="ds-service-logs mb-0 small bg-dark-subtle p-2" style="max-height:200px;overflow-y:auto">Loading…</pre>').insertAfter($row);
+          $.get('/api/v1/runtimes/' + runtimeId + '/services/' + encodeURIComponent(svc.unit) + '/logs?lines=200')
+            .done(function (lines) { $logs.text(lines.length ? lines.join('\n') : 'No log entries.'); })
+            .fail(function (xhr) { $logs.text('Failed to load logs: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText)); });
+        }).appendTo($actions);
+      return $row;
+    }
+
+    function showServices(runtimeId, runtimeName) {
+      function load() {
+        var $body = $(Swal.getHtmlContainer());
+        if (!$body.length) return;
+        $body.empty().append($('<div class="text-secondary small">').text('Loading…'));
+        $.get('/api/v1/runtimes/' + runtimeId + '/services').done(function (list) {
+          $body.empty();
+          if (!list.length) { $body.append($('<div class="text-secondary small">').text('No systemd --user services found on this runtime.')); return; }
+          list.forEach(function (svc) { $body.append(servicesRow(runtimeId, svc, load)); });
+        }).fail(function (xhr) {
+          $body.empty().append($('<div class="text-danger small">').text((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load services.'));
+        });
+      }
+      var dark = document.documentElement.getAttribute('data-bs-theme') !== 'light';
+      Swal.fire({
+        theme: dark ? 'dark' : 'light',
+        title: 'Services — ' + runtimeName,
+        html: '<div class="text-start"></div>',
+        width: 640,
+        confirmButtonText: 'Close',
+        didOpen: load
+      });
+    }
+
+    $('#runtimes-body').on('click', '.services-btn', function () {
+      showServices($(this).data('id'), $(this).data('name'));
+    });
   </script>
 </body>
 </html>

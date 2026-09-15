@@ -20,7 +20,7 @@ func usersTestSetup(t *testing.T) (http.Handler, *http.Cookie, *database.DB) {
 	t.Helper()
 	db := testDB(t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	if _, err := auth.CreateUser(t.Context(), db.Pool, "admin@example.com", "password123", true); err != nil {
 		t.Fatalf("create admin: %v", err)
 	}

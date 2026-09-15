@@ -1285,16 +1285,16 @@ paths:
         "502":
           description: The compose run failed (no compose file, CLI failure, timeout)
 
-  /api/v1/projects/{projectID}/services:
+  /api/v1/runtimes/{runtimeID}/services:
     get:
-      summary: List systemd --user services on the project's runtime
+      summary: List systemd --user services on the runtime
       description: Not a stored resource — every call is a live RPC to the runtime. See docs/API.md "Services".
       tags: [Services]
       operationId: listServices
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1311,14 +1311,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: The runtime failed to run systemctl
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}:
+  /api/v1/runtimes/{runtimeID}/services/{unit}:
     get:
       summary: Get one service's current status
       tags: [Services]
@@ -1326,7 +1326,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1348,14 +1348,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: The runtime reported the unit not found, or systemctl failed
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}/logs:
+  /api/v1/runtimes/{runtimeID}/services/{unit}/logs:
     get:
       summary: Get a service's recent journal lines
       tags: [Services]
@@ -1363,7 +1363,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1392,14 +1392,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: journalctl failed on the runtime
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}/start:
+  /api/v1/runtimes/{runtimeID}/services/{unit}/start:
     post:
       summary: Start a service
       tags: [Services]
@@ -1407,7 +1407,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1429,14 +1429,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: systemctl failed on the runtime
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}/stop:
+  /api/v1/runtimes/{runtimeID}/services/{unit}/stop:
     post:
       summary: Stop a service
       tags: [Services]
@@ -1444,7 +1444,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1466,14 +1466,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: systemctl failed on the runtime
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}/restart:
+  /api/v1/runtimes/{runtimeID}/services/{unit}/restart:
     post:
       summary: Restart a service
       tags: [Services]
@@ -1481,7 +1481,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1503,14 +1503,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: systemctl failed on the runtime
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}/enable:
+  /api/v1/runtimes/{runtimeID}/services/{unit}/enable:
     post:
       summary: Enable a service to start at login
       tags: [Services]
@@ -1518,7 +1518,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1540,14 +1540,14 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: systemctl failed on the runtime (e.g. the unit has no [Install] section)
         "504":
           description: The runtime did not respond within the timeout
-  /api/v1/projects/{projectID}/services/{unit}/disable:
+  /api/v1/runtimes/{runtimeID}/services/{unit}/disable:
     post:
       summary: Disable a service
       tags: [Services]
@@ -1555,7 +1555,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: projectID
+        - name: runtimeID
           in: path
           required: true
           schema:
@@ -1577,9 +1577,9 @@ paths:
         "401":
           description: Not authenticated
         "404":
-          description: Project not found
+          description: Runtime not found
         "409":
-          description: The project's runtime is not currently connected
+          description: The runtime is not currently connected
         "502":
           description: systemctl failed on the runtime
         "504":
@@ -3603,6 +3603,585 @@ paths:
           description: The project's runtime is not currently connected
         "504":
           description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/backups:
+    get:
+      summary: List a database connection's backups
+      tags: [Backups]
+      operationId: listDatabaseBackups
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Backups, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Backup"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found
+    post:
+      summary: Start a manual backup on the runtime
+      description: The dump runs on the runtime host (pg_dump/mysqldump/sqlcmd/sqlite3 .backup — ADR-041) and completes asynchronously; the returned row's state is "running" until polled to "done" or "failed".
+      tags: [Backups]
+      operationId: createDatabaseBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Backup started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime rejected the backup request
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule:
+    get:
+      summary: Get the connection's backup schedule
+      tags: [Backups]
+      operationId: getDatabaseBackupSchedule
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The current schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSchedule"
+        "401":
+          description: Not authenticated
+        "404":
+          description: No schedule configured
+    put:
+      summary: Create or replace the connection's backup schedule
+      tags: [Backups]
+      operationId: putDatabaseBackupSchedule
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupScheduleRequest"
+      responses:
+        "200":
+          description: The saved schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSchedule"
+        "400":
+          description: Invalid cadence or retention
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project or connection not found
+    delete:
+      summary: Remove the connection's backup schedule
+      tags: [Backups]
+      operationId: deleteDatabaseBackupSchedule
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Not authenticated
+        "404":
+          description: No schedule configured
+  /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}:
+    get:
+      summary: Get one backup's metadata
+      tags: [Backups]
+      operationId: getDatabaseBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The backup's metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+    delete:
+      summary: Delete a backup
+      description: Removes the file on the runtime host first, then the metadata row.
+      tags: [Backups]
+      operationId: deleteDatabaseBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+        "409":
+          description: The runtime is offline; the file cannot be removed
+  /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/download:
+    get:
+      summary: Download a backup file
+      description: Streamed through the Control Server in chunks read live from the runtime host — never staged on Control Server disk (ADR-041).
+      tags: [Backups]
+      operationId: downloadDatabaseBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The backup file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+        "409":
+          description: Backup is not complete, or the runtime is offline
+  /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/restore:
+    post:
+      summary: Restore a backup into a database on the same connection
+      description: Server-side confirm gate (confirm must be true) — restoring into an existing database replaces its data.
+      tags: [Backups]
+      operationId: restoreDatabaseBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: connectionID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_database, confirm]
+              properties:
+                target_database:
+                  type: string
+                confirm:
+                  type: boolean
+      responses:
+        "200":
+          description: Restored
+        "400":
+          description: target_database missing, or confirm is not true
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+        "409":
+          description: Backup is not complete, or the runtime is offline
+        "502":
+          description: The runtime's restore command failed
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/backups:
+    get:
+      summary: List a project's backups
+      tags: [Backups]
+      operationId: listProjectBackups
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Backups, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Backup"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+    post:
+      summary: Start a manual archive of the project's working directory
+      description: The archive (tar.gz + sidecar manifest — every file, .gitignore is not honored) is built on the runtime host and completes asynchronously.
+      tags: [Backups]
+      operationId: createProjectBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Backup started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/backups/schedule:
+    get:
+      summary: Get the project's backup schedule
+      tags: [Backups]
+      operationId: getProjectBackupSchedule
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The current schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSchedule"
+        "401":
+          description: Not authenticated
+        "404":
+          description: No schedule configured
+    put:
+      summary: Create or replace the project's backup schedule
+      tags: [Backups]
+      operationId: putProjectBackupSchedule
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BackupScheduleRequest"
+      responses:
+        "200":
+          description: The saved schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupSchedule"
+        "400":
+          description: Invalid cadence or retention
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+    delete:
+      summary: Remove the project's backup schedule
+      tags: [Backups]
+      operationId: deleteProjectBackupSchedule
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "401":
+          description: Not authenticated
+        "404":
+          description: No schedule configured
+  /api/v1/projects/{projectID}/backups/{backupID}:
+    get:
+      summary: Get one project backup's metadata
+      tags: [Backups]
+      operationId: getProjectBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The backup's metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Backup"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+    delete:
+      summary: Delete a project backup
+      description: Removes the file on the runtime host first, then the metadata row.
+      tags: [Backups]
+      operationId: deleteProjectBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+        "409":
+          description: The runtime is offline; the file cannot be removed
+  /api/v1/projects/{projectID}/backups/{backupID}/download:
+    get:
+      summary: Download a project backup archive
+      description: Streamed through the Control Server in chunks read live from the runtime host — never staged on Control Server disk (ADR-041).
+      tags: [Backups]
+      operationId: downloadProjectBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The backup archive
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+        "409":
+          description: Backup is not complete, or the runtime is offline
+  /api/v1/projects/{projectID}/backups/{backupID}/restore:
+    post:
+      summary: Restore a project backup, as a new project or over this one
+      description: |
+        mode "new" creates a new Project record and extracts into a fresh
+        working directory derived from the runtime's home directory and the
+        sanitized project name (collision-suffixed). mode "overwrite"
+        requires confirm_name to match the project's current name exactly
+        (FR-PJ-5); it closes open sessions, takes an automatic pre_restore
+        safety snapshot, then wipes and replaces the working directory.
+      tags: [Backups]
+      operationId: restoreProjectBackup
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: backupID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  type: string
+                  enum: [new, overwrite]
+                confirm_name:
+                  type: string
+                  description: Required, and must equal the project's current name, when mode is "overwrite".
+      responses:
+        "200":
+          description: Restored (new project's id/name/working_directory, or overwrite status and the pre-restore snapshot's backup id)
+        "400":
+          description: Invalid mode, or confirm_name does not match
+        "401":
+          description: Not authenticated
+        "404":
+          description: Backup not found
+        "409":
+          description: Backup is not complete, or the runtime is offline
+        "502":
+          description: The runtime's restore command failed
   /api/v1/audit:
     get:
       summary: List recorded audit events
@@ -3721,6 +4300,87 @@ components:
       in: cookie
       name: devstationone_session
   schemas:
+    Backup:
+      type: object
+      required: [id, kind, runtime_id, file_name, size_bytes, trigger, state, created_by, created_at]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [db, project]
+        connection_id:
+          type:
+            - string
+            - "null"
+        project_id:
+          type:
+            - string
+            - "null"
+        runtime_id:
+          type: string
+        file_name:
+          type: string
+          description: Path relative to the runtime's backups root (db/<id>.<ext> or projects/<id>.tar.gz) — never exposed as an absolute path.
+        size_bytes:
+          type: integer
+        trigger:
+          type: string
+          enum: [manual, schedule, pre_restore]
+        state:
+          type: string
+          enum: [running, done, failed]
+        error:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    BackupScheduleRequest:
+      type: object
+      required: [cadence, retention]
+      properties:
+        cadence:
+          type: string
+          enum: [hourly, daily, weekly]
+        retention:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: How many schedule-triggered backups to keep; older ones are deleted as new ones complete. Manual backups are never auto-deleted.
+    BackupSchedule:
+      type: object
+      required: [id, kind, cadence, retention, next_run_at, last_result, last_error, created_by, created_at]
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum: [db, project]
+        cadence:
+          type: string
+          enum: [hourly, daily, weekly]
+        retention:
+          type: integer
+        next_run_at:
+          type: string
+          format: date-time
+        last_run_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        last_result:
+          type: string
+          enum: ["", success, failed, skipped_offline]
+        last_error:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
     AdminUser:
       type: object
       required: [id, email, display_name, role, created_at, last_accessed_at]

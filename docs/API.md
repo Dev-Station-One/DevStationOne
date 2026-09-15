@@ -610,24 +610,25 @@ The canonical request/response shapes are `docs/openapi.yaml` (tag
 ## Services
 
 ```text
-GET  /api/v1/projects/{projectID}/services
-GET  /api/v1/projects/{projectID}/services/{unit}
-GET  /api/v1/projects/{projectID}/services/{unit}/logs
-POST /api/v1/projects/{projectID}/services/{unit}/start
-POST /api/v1/projects/{projectID}/services/{unit}/stop
-POST /api/v1/projects/{projectID}/services/{unit}/restart
-POST /api/v1/projects/{projectID}/services/{unit}/enable
-POST /api/v1/projects/{projectID}/services/{unit}/disable
+GET  /api/v1/runtimes/{runtimeID}/services
+GET  /api/v1/runtimes/{runtimeID}/services/{unit}
+GET  /api/v1/runtimes/{runtimeID}/services/{unit}/logs
+POST /api/v1/runtimes/{runtimeID}/services/{unit}/start
+POST /api/v1/runtimes/{runtimeID}/services/{unit}/stop
+POST /api/v1/runtimes/{runtimeID}/services/{unit}/restart
+POST /api/v1/runtimes/{runtimeID}/services/{unit}/enable
+POST /api/v1/runtimes/{runtimeID}/services/{unit}/disable
 ```
 
-Services are `systemd --user` units on the Project's runtime (PRD §7). They
-are not a stored resource — every request is a live RPC to the runtime
-(`internal/services`, real `systemctl`/`journalctl` invocations, no root)
-over its existing control-plane connection (see `docs/PROTOCOL.md`
-"Implementation: service commands"), so there is no service table or
-create/delete route. Authorization reuses `authorizedProject` (ADR-013):
-`404` on a project the caller does not own, `409` if the Project's runtime
-is not currently connected.
+Services are `systemd --user` units on a runtime host (PRD §7) — runtime-level
+resources (ADR-043), not scoped to any one Project. They are not a stored
+resource — every request is a live RPC to the runtime (`internal/services`,
+real `systemctl`/`journalctl` invocations, no root) over its existing
+control-plane connection (see `docs/PROTOCOL.md` "Implementation: service
+commands"), so there is no service table or create/delete route.
+Authorization reuses `resolveRuntime` (the same lookup the Runtimes area and
+the directory browser use): `400` on an unknown or revoked runtime, `409` if
+it is not currently connected.
 
 `{unit}` must match `^[A-Za-z0-9:_.@-]+\.service$` (`services.ValidUnitName`)
 — checked server-side before ever dispatching to the runtime; `400` if it
@@ -664,6 +665,85 @@ Response shape for every unit-returning endpoint:
 ```
 `enabled` is `"enabled"`, `"disabled"`, `"static"` (has no `[Install]`
 section — enable/disable are meaningless for it), or `"unknown"`.
+
+## Backups
+
+Database backups (per connection):
+```text
+GET    /api/v1/projects/{projectID}/databases/{connectionID}/backups
+POST   /api/v1/projects/{projectID}/databases/{connectionID}/backups
+GET    /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule
+PUT    /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule
+DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule
+GET    /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}
+DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}
+GET    /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/download
+POST   /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/restore
+```
+
+Project backups:
+```text
+GET    /api/v1/projects/{projectID}/backups
+POST   /api/v1/projects/{projectID}/backups
+GET    /api/v1/projects/{projectID}/backups/schedule
+PUT    /api/v1/projects/{projectID}/backups/schedule
+DELETE /api/v1/projects/{projectID}/backups/schedule
+GET    /api/v1/projects/{projectID}/backups/{backupID}
+DELETE /api/v1/projects/{projectID}/backups/{backupID}
+GET    /api/v1/projects/{projectID}/backups/{backupID}/download
+POST   /api/v1/projects/{projectID}/backups/{backupID}/restore
+```
+
+Backup files live only on the runtime host, under a fixed root
+(`~/.local/share/devstationone/backups/{db,projects}/`) — never on Control
+Server disk (ADR-041). The Control Server stores metadata rows (Postgres
+`backups`/`backup_schedules`) and proxies downloads by issuing chunked
+`read` RPCs to the runtime and streaming the bytes straight to the browser.
+
+`POST .../backups` (both kinds) starts the dump/archive on the runtime and
+returns immediately with the row in `state: "running"` and a runtime-side
+job ID; the runtime completes it in the background and the row transitions
+to `"done"` or `"failed"` once the Control Server's poller observes the
+job's completion (`ADR-042`). Clients re-fetch the list to see the update —
+there is no push notification for this yet.
+
+Database restore (`POST .../backups/{backupID}/restore`) takes
+`{"target_database": "...", "confirm": true}`: it restores into any database
+on the same connection, including the original; `confirm` must be `true` —
+a server-side gate independent of the UI, since restoring into an existing
+database replaces its data.
+
+Project restore (`POST .../backups/{backupID}/restore`) takes
+`{"mode": "new" | "overwrite", "confirm_name": "..."}`:
+- `"new"` creates a new Project record and extracts the archive into a
+  fresh working directory derived from the runtime's home directory and the
+  sanitized project name (collision-suffixed `-2`, `-3`, ...).
+- `"overwrite"` requires `confirm_name` to equal the project's current name
+  exactly (FR-PJ-5) — typed confirmation, not a checkbox. It then closes
+  every open terminal session of the project, takes an automatic
+  `pre_restore` safety snapshot of the current directory (itself a normal
+  backup row, restorable the same way), and only then wipes the directory
+  and extracts the backup.
+
+A project archive is a `tar.gz` plus a sidecar JSON manifest
+(`<id>.json` next to `<id>.tar.gz`) recording the format version, source
+directory, and file count; every entry in the archive is every file in the
+working directory — `.gitignore` is not honored, nothing is excluded. The
+runtime validates the manifest and re-checks every archive entry's
+containment (rejects `..`, absolute paths, and out-of-root symlinks)
+independently of anything the Control Server already checked.
+
+Schedules (`PUT .../backups/schedule`, body `{"cadence": "hourly"|"daily"|
+"weekly", "retention": 1-100}`) are one per connection or per project. A
+background scheduler on the Control Server fires due schedules; if the
+target runtime is offline at fire time, that run is recorded
+`last_result: "skipped_offline"` and not queued. After each successful
+scheduled backup, the oldest schedule-triggered backups beyond `retention`
+are deleted automatically; manual and `pre_restore` backups are never
+auto-deleted.
+
+The canonical request/response shapes are `docs/openapi.yaml` (tag
+`Backups`).
 
 ## Docker
 

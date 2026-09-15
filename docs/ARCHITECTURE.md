@@ -285,12 +285,12 @@ and `docs/SECURITY.md`).
 Use systemd user APIs/commands where supported.
 
 ```text
-Control Server  -- REST (internal/api/services.go) resolves the Project's
-      |             runtime connection, dispatches one service.command RPC
-      | service      per request (runtimes.Conn.SendCommand, correlated by
-      | command      Envelope.ID — Slice 5's first user of that field),
-      | (RPC)        and waits for the matching service.result/error.
-      v
+Control Server  -- REST (internal/api/services.go) resolves the runtime
+      |             connection directly (resolveRuntime — a runtime-level
+      | service      resource, ADR-043), dispatches one service.command RPC
+      | command      per request (runtimes.Conn.SendCommand, correlated by
+      | (RPC)        Envelope.ID — Slice 5's first user of that field),
+      v              and waits for the matching service.result/error.
 Development Runtime  -- internal/services runs real systemctl --user /
       |                 journalctl --user commands (os/exec, no shell,
       v                 never root — SECURITY.md).
@@ -300,7 +300,57 @@ systemd --user
 Services are not a stored resource: there is no database table, and every
 request reflects the runtime's live state at call time (see
 `docs/API.md` "Services" and `docs/PROTOCOL.md` "Implementation: service
-commands").
+commands"). They are runtime-level, not project-scoped — the Runtimes page
+lists every unit on a runtime's `systemd --user` instance, with no project
+filtering (ADR-043; this replaced the original project-scoped tab, which
+required routing every service action through a project's runtime lookup
+for a concept that never actually depended on any one project).
+
+## Backups
+
+```text
+Control Server  -- REST (internal/api/backups.go) does CRUD against the
+      |             backups/backup_schedules tables (internal/backups),
+      | backup       resolving credentials/working directory the same way
+      | command      db.command/file.command already do — never from a
+      | (RPC)        client request; dispatches start_db/start_project
+      v              (async job, polled via status), list/delete/read
+Development Runtime  (chunked download), restore_db/restore_project.
+      |            -- internal/agent/backup_manager.go runs the engine's
+      |              native dump tool (pg_dump/mysqldump/sqlcmd/sqlite3
+      v              .backup) or tars+gzips a project directory, writing
+Backup files         into a fixed root on the runtime's own disk:
+(runtime host only)  ~/.local/share/devstationone/backups/{db,projects}/
+```
+
+Backup files never touch Control Server disk (ADR-041) — only metadata
+(created/size/state/trigger) is stored in Postgres, and downloads stream
+through the Control Server as a sequence of chunked `read` RPCs to the
+runtime. A dump or archive job can take minutes, far longer than every
+other RPC's synchronous timeout, so `start_db`/`start_project` reply
+immediately with a job ID and the job itself runs on the runtime in the
+background (ADR-042); a Control Server-side poller (`backups.AwaitJob`)
+watches it to completion and updates the metadata row.
+
+A background scheduler goroutine (`backups.RunScheduler`, started
+alongside the HTTP server) fires due per-connection/per-project schedules
+on a fixed cadence (hourly/daily/weekly), using `FOR UPDATE SKIP LOCKED` so
+only one Control Server process ever claims a given tick; an offline
+runtime causes that run to be skipped and recorded, not queued. Retention
+(oldest schedule-triggered backups beyond a configured count) is enforced
+after each successful scheduled backup.
+
+Project restore in overwrite mode is deliberately layered: the Control
+Server closes the project's open terminal sessions, then issues a normal
+`start_project` job as a `pre_restore` safety snapshot and waits for it to
+finish, and only then issues `restore_project` — so a failed snapshot never
+risks the directory being wiped, and the snapshot itself is an ordinary,
+downloadable/restorable backup row. Restore-as-new-project instead creates
+a fresh Project record with a working directory derived from the runtime's
+home directory and the sanitized source project's name.
+
+See `docs/API.md` "Backups" and `docs/PROTOCOL.md` "Implementation: backup
+commands" for the request/response shapes.
 
 ## Persistence
 
@@ -315,6 +365,8 @@ PostgreSQL stores:
 - database connections (`database_connections`, credentials encrypted —
   see ADR-021)
 - database connection metadata
+- backups and backup schedules (`backups`, `backup_schedules` — metadata
+  only; the files themselves live on the runtime host, ADR-041)
 - journal notes (`journal_notes`) and their attachments
   (`journal_attachments`, content in `bytea`) — `internal/journal`
 - audit events

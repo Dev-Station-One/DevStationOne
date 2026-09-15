@@ -241,7 +241,7 @@
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="code" data-bs-target="#code-panel" role="tab" aria-controls="code-panel" aria-selected="false"><i class="fa-solid fa-code" aria-hidden="true"></i> Code</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="databases" data-bs-target="#databases-panel" role="tab" aria-controls="databases-panel" aria-selected="false"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="services" data-bs-target="#services-panel" role="tab" aria-controls="services-panel" aria-selected="false"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="backups" data-bs-target="#backups-panel" role="tab" aria-controls="backups-panel" aria-selected="false"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Backups</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="docker" data-bs-target="#docker-panel" role="tab" aria-controls="docker-panel" aria-selected="false"><i class="fa-brands fa-docker" aria-hidden="true"></i> Docker</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="journal" data-bs-target="#journal-panel" role="tab" aria-controls="journal-panel" aria-selected="false"><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</a></li>
               </ul>
@@ -282,18 +282,7 @@
               </div>
             </div>
 
-            <div id="services-panel" class="tab-pane" role="tabpanel" tabindex="0">
-              <div class="d-flex justify-content-between align-items-center mb-3">
-                <div id="services-summary" class="text-secondary">—</div>
-                <button id="services-refresh-btn" class="icon-btn" aria-label="Refresh services" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
-              </div>
-              <div id="services-loading" class="text-secondary">Loading services…</div>
-              <div id="services-error" class="alert alert-danger" hidden></div>
-              <div id="services-empty" class="card" hidden>
-                <div class="card-body text-secondary"><i class="fa-solid fa-gears me-1" aria-hidden="true"></i>No systemd --user services found on this runtime.</div>
-              </div>
-              <div id="services-list" class="row row-cards"></div>
-            </div>
+            <div id="backups-panel" class="tab-pane" role="tabpanel" tabindex="0"></div>
 
             <div id="docker-panel" class="tab-pane" role="tabpanel" tabindex="0">
               <div class="d-flex justify-content-between align-items-center mb-3 gap-2 flex-wrap">
@@ -370,6 +359,7 @@
                   <div class="d-flex gap-2">
                     <button id="db-users-toggle-btn" class="btn btn-sm btn-outline-secondary" type="button">Users</button>
                     <button id="db-sql-editor-toggle-btn" class="btn btn-sm btn-outline-secondary" type="button">SQL Editor</button>
+                    <button id="db-backups-toggle-btn" class="btn btn-sm btn-outline-secondary" type="button">Backups</button>
                     <button id="databases-browser-close-btn" class="icon-btn" type="button" aria-label="Close browser" title="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
                   </div>
                 </div>
@@ -384,6 +374,7 @@
                     <div id="db-sql-results" class="mt-3"></div>
                   </div>
                   <div id="db-users" hidden></div>
+                  <div id="db-backups" hidden></div>
                 </div>
               </div>
             </div>
@@ -534,10 +525,10 @@
                   </div>
                 </div>
                 <div class="col-6 col-lg-3">
-                  <div class="card card-sm overview-stat" data-goto-tab="services" role="button" tabindex="0" style="cursor:pointer">
+                  <div class="card card-sm overview-stat" data-goto-tab="backups" role="button" tabindex="0" style="cursor:pointer">
                     <div class="card-body">
-                      <div class="text-secondary small"><i class="fa-solid fa-gears me-1" aria-hidden="true"></i>Services</div>
-                      <div class="h2 mb-0" id="stat-services">—</div>
+                      <div class="text-secondary small"><i class="fa-solid fa-box-archive me-1" aria-hidden="true"></i>Backups</div>
+                      <div class="h2 mb-0" id="stat-backups">—</div>
                     </div>
                   </div>
                 </div>
@@ -822,6 +813,7 @@
   <script src="/js/app.js"></script>
   <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
   <script src="/js/dialogs.js"></script>
+  <script src="/js/backups.js"></script>
   <script src="/vendor/xterm/xterm.js"></script>
   <script src="/vendor/xterm/addon-fit.js"></script>
   <script src="/vendor/codemirror/codemirror.min.js"></script>
@@ -915,6 +907,9 @@
       $('#view-shell').text(project.shell);
       $('#view-cwd').text(project.working_directory);
       $('#stat-sessions').text(project.active_sessions || 0);
+      $.get('/api/v1/projects/' + projectID + '/backups').done(function (list) {
+        $('#stat-backups').text(list.length || 'None');
+      }).fail(function () { $('#stat-backups').text('—'); });
     }
 
     // Populates the edit form's shell dropdown from the given runtime's live
@@ -1026,6 +1021,7 @@
     var termState = {}; // sessionID -> { info, term, fit, pane, ws, reconnectAttempts, reconnectTimer }
     var activeSessionID = null;
     var sessionsLoaded = false;
+    var projectBackupsLoaded = false;
 
     // --- Terminal font preference (docs/REQUIREMENTS_NERD_FONT.md) ---
 
@@ -1315,114 +1311,6 @@
         termState[activeSessionID].fit.fit();
       }
     });
-
-    // --- Services (docs/PRD.md §7, docs/WEB_UI_DESIGN.md Services: systemd --user) ---
-
-    var openLogsUnit = null; // unit name whose logs card is currently expanded, or null
-
-    function activeStateBadgeClass(state) {
-      if (state === 'active') return 'bg-success';
-      if (state === 'failed') return 'bg-danger';
-      if (state === 'activating' || state === 'deactivating' || state === 'reloading') return 'bg-info';
-      return 'bg-secondary';
-    }
-
-    function enabledBadgeClass(state) {
-      if (state === 'enabled') return 'bg-success';
-      if (state === 'disabled') return 'bg-secondary';
-      return 'bg-azure-lt';
-    }
-
-    function serviceCard(svc) {
-      var $col = $('<div class="col-12 col-md-6 col-xl-4 mb-3">');
-      var $card = $('<div class="card h-100">').appendTo($col);
-      var $body = $('<div class="card-body">').appendTo($card);
-
-      $('<div class="d-flex justify-content-between align-items-start mb-1">').appendTo($body).append(
-        $('<div class="fw-bold text-truncate" style="max-width: 70%;">').text(svc.unit).attr('title', svc.unit),
-        $('<span class="badge ' + activeStateBadgeClass(svc.active_state) + '">').text(svc.active_state + ' (' + svc.sub_state + ')')
-      );
-      $('<div class="text-secondary small mb-2 text-truncate">').text(svc.description || '—').appendTo($body);
-      $('<span class="badge ' + enabledBadgeClass(svc.enabled) + ' mb-2">').text(svc.enabled).appendTo($body);
-
-      var $actions = $('<div class="btn-list mt-2">').appendTo($body);
-      var running = svc.active_state === 'active' || svc.active_state === 'activating';
-      function iconBtn(action, icon, label, extraCls) {
-        return $('<button type="button" class="icon-btn' + (extraCls ? ' ' + extraCls : '') + '" data-action="' + action + '" aria-label="' + label + '" title="' + label + '">')
-          .append('<i class="fa-solid fa-' + icon + '" aria-hidden="true"></i>');
-      }
-      iconBtn('start', 'play', 'Start').prop('disabled', running).appendTo($actions);
-      iconBtn('stop', 'stop', 'Stop').prop('disabled', svc.active_state === 'inactive').appendTo($actions);
-      iconBtn('restart', 'rotate', 'Restart').appendTo($actions);
-      if (svc.enabled !== 'static') {
-        iconBtn('enable', 'toggle-on', 'Enable').prop('disabled', svc.enabled === 'enabled').appendTo($actions);
-        iconBtn('disable', 'toggle-off', 'Disable').prop('disabled', svc.enabled !== 'enabled').appendTo($actions);
-      }
-      iconBtn('logs', 'file-lines', 'Logs').appendTo($actions);
-
-      $actions.find('button').on('click', function () {
-        runServiceAction(svc.unit, $(this).data('action'), $col);
-      });
-
-      if (openLogsUnit === svc.unit) {
-        var $logs = $('<pre class="mt-2 mb-0 small bg-dark-subtle p-2" style="max-height: 240px; overflow-y: auto;">Loading…</pre>').appendTo($body);
-        $.get('/api/v1/projects/' + projectID + '/services/' + encodeURIComponent(svc.unit) + '/logs?lines=200')
-          .done(function (lines) {
-            $logs.text(lines.length ? lines.join('\n') : 'No log entries.');
-          })
-          .fail(function (xhr) {
-            $logs.text('Failed to load logs: ' + ((xhr.responseJSON && xhr.responseJSON.error) || xhr.statusText));
-          });
-      }
-
-      return $col;
-    }
-
-    function runServiceAction(unit, action, $col) {
-      if (action === 'logs') {
-        openLogsUnit = (openLogsUnit === unit) ? null : unit;
-        loadServices();
-        return;
-      }
-      $col.find('button').prop('disabled', true);
-      $.ajax({
-        url: '/api/v1/projects/' + projectID + '/services/' + encodeURIComponent(unit) + '/' + action,
-        method: 'POST'
-      }).done(function () {
-        loadServices();
-      }).fail(function (xhr) {
-        DS.error((xhr.responseJSON && xhr.responseJSON.error) || ('Failed to ' + action + ' ' + unit + '.'));
-        loadServices();
-      });
-    }
-
-    function loadServices() {
-      $('#services-error').prop('hidden', true);
-      $('#services-loading').prop('hidden', false);
-      $('#services-empty').prop('hidden', true);
-      $.get('/api/v1/projects/' + projectID + '/services')
-        .done(function (list) {
-          $('#services-loading').prop('hidden', true);
-          $('#services-summary').text(list.length + ' service' + (list.length === 1 ? '' : 's'));
-          var running = list.filter(function (s) { return s.active_state === 'active' || s.active_state === 'activating'; }).length;
-          $('#stat-services').text(list.length ? (running + '/' + list.length + ' running') : 'None');
-          var $list = $('#services-list').empty();
-          if (!list.length) {
-            $('#services-empty').prop('hidden', false);
-            return;
-          }
-          list.forEach(function (svc) { $list.append(serviceCard(svc)); });
-        })
-        .fail(function (xhr) {
-          $('#services-loading').prop('hidden', true);
-          $('#stat-services').text(xhr.status === 409 ? 'Offline' : '—');
-          var msg = (xhr.responseJSON && xhr.responseJSON.error) ||
-            (xhr.status === 409 ? 'Runtime is offline.' : 'Failed to load services.');
-          $('#services-error').text(msg).prop('hidden', false);
-        });
-    }
-
-    $('#services-refresh-btn').on('click', loadServices);
 
     // --- Docker (ADR-040, docs/REQUIREMENTS_DOCKER_TAB.md: project-scoped
     // --- containers + compose, streamed logs, no built-in exec) ---
@@ -1869,9 +1757,11 @@
       dbSqlEditorOnConnChange();
       $('#db-sql-editor').prop('hidden', true);
       $('#db-users').prop('hidden', true).empty();
+      $('#db-backups').prop('hidden', true).empty();
       $('#db-tree').prop('hidden', false);
       $('#db-sql-editor-toggle-btn').text('SQL Editor');
       $('#db-users-toggle-btn').text('Users').prop('hidden', conn.engine === 'sqlite');
+      $('#db-backups-toggle-btn').text('Backups');
       var $tree = $('#db-tree').empty().append($('<div class="text-secondary small">').text('Loading…'));
       if (conn.engine === 'sqlite') {
         // SQLite has no schema concept — tables sit directly under the
@@ -2327,11 +2217,13 @@
     }
 
     $('#db-sql-editor-toggle-btn').on('click', function () {
-      var toEditor = $('#db-tree').is(':visible') || $('#db-users').is(':visible');
+      var toEditor = !$('#db-sql-editor').is(':visible');
       $('#db-tree').prop('hidden', toEditor);
       $('#db-users').prop('hidden', true);
+      $('#db-backups').prop('hidden', true);
       $('#db-sql-editor').prop('hidden', !toEditor);
       $('#db-users-toggle-btn').text('Users');
+      $('#db-backups-toggle-btn').text('Backups');
       $(this).text(toEditor ? 'Back to tree' : 'SQL Editor');
       if (toEditor) { dbSqlEditorInit(); setTimeout(function () { dbSqlEditorCM.focus(); }, 0); }
     });
@@ -2340,10 +2232,24 @@
       var toUsers = !$('#db-users').is(':visible');
       $('#db-tree').prop('hidden', toUsers);
       $('#db-sql-editor').prop('hidden', true);
+      $('#db-backups').prop('hidden', true);
       $('#db-sql-editor-toggle-btn').text('SQL Editor');
+      $('#db-backups-toggle-btn').text('Backups');
       $('#db-users').prop('hidden', !toUsers);
       $(this).text(toUsers ? 'Back to tree' : 'Users');
       if (toUsers) { dbUsersLoad(dbSqlEditorConn); }
+    });
+
+    $('#db-backups-toggle-btn').on('click', function () {
+      var toBackups = !$('#db-backups').is(':visible');
+      $('#db-tree').prop('hidden', toBackups);
+      $('#db-sql-editor').prop('hidden', true);
+      $('#db-users').prop('hidden', true);
+      $('#db-sql-editor-toggle-btn').text('SQL Editor');
+      $('#db-users-toggle-btn').text('Users');
+      $('#db-backups').prop('hidden', !toBackups);
+      $(this).text(toBackups ? 'Back to tree' : 'Backups');
+      if (toBackups) { DSBackups.render($('#db-backups'), { apiBase: dbAPI(dbSqlEditorConn.id, ''), kind: 'db' }); }
     });
 
     $('#db-sql-run-btn').on('click', function () {
@@ -3491,7 +3397,7 @@
     var HELP_TOPIC_BY_TAB = {
       overview: 'project-overview', terminal: 'terminal', files: 'files',
       code: 'code', git: 'source-control', databases: 'databases',
-      services: 'services', docker: 'docker', journal: 'journal'
+      backups: 'backups', docker: 'docker', journal: 'journal'
     };
     if (window.DSHelp) window.DSHelp.ensureTopics(Object.keys(HELP_TOPIC_BY_TAB).map(function (k) { return HELP_TOPIC_BY_TAB[k]; }));
 
@@ -3515,8 +3421,11 @@
           setTimeout(function () { termState[activeSessionID].fit.fit(); }, 0);
         }
       }
-      if (tab === 'services') {
-        loadServices();
+      if (tab === 'backups') {
+        if (!projectBackupsLoaded) {
+          projectBackupsLoaded = true;
+          DSBackups.render($('#backups-panel'), { apiBase: '/api/v1/projects/' + projectID, kind: 'project', projectName: project.name });
+        }
       }
       if (tab === 'docker') {
         loadDocker();

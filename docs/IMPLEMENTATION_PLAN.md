@@ -1102,3 +1102,74 @@ for list/lifecycle/logs.
 stop stack.
 
 **Status: Complete.**
+
+## Slice 27 — Backup/restore (DB + project) and runtime-level Services (ADR-041/042/043)
+
+**Goal**: back up and restore database connections and project working
+directories, with manual triggers and per-connection/per-project schedules;
+relocate Services from project-scoped to runtime-level.
+
+**Design**: see `docs/REQUIREMENTS_BACKUPS_SERVICES.md` and
+`docs/DESIGN_BACKUPS_SERVICES.md` for the full requirements/design pass.
+
+- *Protocol*: new `backup.command`/`backup.result`/`backup.error` message
+  types (`docs/PROTOCOL.md` "Implementation: backup commands"). `start_db`/
+  `start_project` reply with a job ID immediately and run in the
+  background; `status`/`list`/`delete`/`read`/`restore_db`/
+  `restore_project` complete the rest of the surface.
+- *Runtime*: `internal/agent/backup_manager.go` — per-engine dump
+  (`pg_dump`, `mysqldump`/`mariadb-dump`, `sqlcmd BACKUP DATABASE`,
+  `sqlite3 .backup`) and restore, tar.gz+manifest project archive/extract
+  with full containment re-validation on extraction, chunked file reads for
+  download, fixed backups root on the runtime's own disk (ADR-041).
+- *Control Server*: `internal/backups` (metadata tables + scheduler
+  goroutine, `FOR UPDATE SKIP LOCKED`, retention trimming) and
+  `internal/api/backups.go` (CRUD, download proxy, restore orchestration —
+  session close + pre_restore snapshot before an overwrite-restore).
+  Migration `0018_backups`. New audit events
+  (`backup.created/restored/deleted`, `backup_schedule.changed`).
+- *Services*: routes moved from `/api/v1/projects/{projectID}/services/...`
+  to `/api/v1/runtimes/{runtimeID}/services/...` (`internal/api/services.go`
+  rewritten to resolve by runtime, not project); project workspace's
+  Services tab removed; Runtimes page gains a per-runtime Services modal
+  reusing the same unit-card actions.
+- *UI*: Databases tab gains a "Backups" toggle per connection (alongside
+  Users/SQL Editor); project workspace gains a "Backups" tab; both share
+  `web/static/js/backups.js`'s list/backup-now/restore/schedule renderer.
+  Runtimes page gains a services icon-button/modal per online runtime.
+- *OpenAPI*: `Backups` tag added; `Services` tag's paths moved to
+  `/api/v1/runtimes/{runtimeID}/...`.
+
+**Tests**: `internal/agent/backup_manager_test.go` (containment: path
+traversal/symlink escape/absolute entries rejected, manifest format
+validation, archive/extract round trip, list/read/delete); `internal/backups`
+(schedule CRUD, `DueSchedules`/`AdvanceSchedule`, retention trimming, the
+`kind` CHECK constraint) against the real test Postgres; `internal/api`
+(`backups_test.go`, `services_test.go`) — full HTTP round trips against a
+real fake runtime running the real dispatcher: PostgreSQL backup/restore via
+real `pg_dump`/`pg_restore`, SQLite backup/restore via real `sqlite3`,
+project backup/restore-as-new/overwrite-restore (real tar archive/extract,
+real session close, real pre_restore snapshot) via a real working directory,
+and runtime-scoped services against a real `systemd --user` unit.
+
+**Smoke**: covered by the automated integration tests above (real dump/
+restore/archive/extract tools, no mocks) — MySQL/MariaDB and SQL Server
+backup/restore are implemented (native `mysqldump`/`mysql` and `sqlcmd
+BACKUP`/`RESTORE DATABASE`) but **not exercised by a passing automated test
+in this environment**: the dev machine's `mysqldump`/`mysql` binaries are
+MariaDB's client, incompatible with the test MySQL 8 server's
+`caching_sha2_password` auth plugin (a client/server tooling mismatch, not a
+code defect — confirmed by the same failure from the bare `mysql` CLI
+outside any DevStationOne code), and no local `sqlcmd`/MSSQL client was
+available to test against the SQL Server test container. A runtime host
+running its own real MySQL/MSSQL client tooling remains the deployment
+prerequisite for those two engines' backups, same pattern as ADR-040's
+Docker socket prerequisite; this is not yet independently verified. A live
+browser click-through against the dev instance is also outstanding.
+
+**Status: Implementation complete; PostgreSQL, SQLite, and project backup/
+restore are verified end-to-end by real (non-mocked) automated tests, as is
+the runtime-services relocation. MySQL/MariaDB and SQL Server backup/restore
+code paths exist but are unverified in this environment (see Smoke note) —
+a real deployment should confirm compatible client tooling before relying
+on them. Browser smoke test not yet performed.**

@@ -22,9 +22,9 @@ const serviceRPCTimeout = 15 * time.Second
 // maxLogLines caps the ?lines= query parameter on the logs endpoint.
 const maxLogLines = 2000
 
-// runtimeConnForProject resolves projectID's runtime connection, writing a
-// response and returning ok=false if the caller isn't authorized, the
-// project doesn't exist, or the runtime isn't currently connected.
+// runtimeConnForProject resolves projectID's runtime connection for
+// project-scoped operations (files, docker, editor streams) — distinct from
+// runtime-level services, which resolve by runtime ID directly (ADR-043).
 func runtimeConnForProject(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry, projectID string) (runtimes.Conn, projects.Project, bool) {
 	project, ok := authorizedProject(w, r, db, projectID)
 	if !ok {
@@ -38,8 +38,10 @@ func runtimeConnForProject(w http.ResponseWriter, r *http.Request, db *database.
 	return conn, project, true
 }
 
-// serviceCommand issues a service.command RPC to the project's runtime and
-// decodes its result, writing an appropriate error response on failure.
+// serviceCommand issues a service.command RPC to a runtime and decodes its
+// result, writing an appropriate error response on failure. Services are
+// runtime-host resources (ADR-043): they resolve by runtime ID directly, not
+// through a project.
 func serviceCommand(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, cmd protocol.ServiceCommandPayload) (protocol.ServiceResultPayload, bool) {
 	ctx, cancel := context.WithTimeout(r.Context(), serviceRPCTimeout)
 	defer cancel()
@@ -64,7 +66,7 @@ func serviceCommand(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, 
 
 func listServicesHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, _, ok := runtimeConnForProject(w, r, db, registry, r.PathValue("projectID"))
+		_, conn, ok := resolveRuntime(w, r, db, registry, r.PathValue("runtimeID"))
 		if !ok {
 			return
 		}
@@ -79,11 +81,11 @@ func listServicesHandler(db *database.DB, registry *runtimes.Registry) http.Hand
 	}
 }
 
-// authorizedUnit resolves the project's runtime connection and validates
-// the {unit} path value, writing an error response and returning ok=false
-// on failure.
+// authorizedUnit resolves the {runtimeID} path value and validates the
+// {unit} path value, writing an error response and returning ok=false on
+// failure.
 func authorizedUnit(w http.ResponseWriter, r *http.Request, db *database.DB, registry *runtimes.Registry) (runtimes.Conn, string, bool) {
-	conn, _, ok := runtimeConnForProject(w, r, db, registry, r.PathValue("projectID"))
+	_, conn, ok := resolveRuntime(w, r, db, registry, r.PathValue("runtimeID"))
 	if !ok {
 		return nil, "", false
 	}
@@ -131,7 +133,7 @@ func serviceActionHandler(db *database.DB, registry *runtimes.Registry, action s
 			return
 		}
 		user, _ := userFromContext(r.Context())
-		audit.Record(r.Context(), db.Pool, audit.EventServiceAction, audit.Actor{UserID: user.ID, Email: user.Email}, "service", unit, map[string]any{"action": action, "project_id": r.PathValue("projectID")}, clientIP(r))
+		audit.Record(r.Context(), db.Pool, audit.EventServiceAction, audit.Actor{UserID: user.ID, Email: user.Email}, "service", unit, map[string]any{"action": action, "runtime_id": r.PathValue("runtimeID")}, clientIP(r))
 		writeJSON(w, http.StatusOK, result.Service)
 	}
 }

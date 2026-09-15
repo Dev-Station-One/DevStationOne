@@ -10,9 +10,9 @@ import (
 // dispatcher implements connection.Manager by routing each control-plane
 // message to whichever capability handles it: service.command to
 // serviceManager, file.command to fileManager, db.command to dbManager,
-// git.command to gitManager, code.command to editManager, everything else
-// (session.*, revoked) to sessionManager. Terminal frames always belong to
-// a session.
+// git.command to gitManager, code.command to editManager, backup.command to
+// backupManager, everything else (session.*, revoked) to sessionManager.
+// Terminal frames always belong to a session.
 type dispatcher struct {
 	session *sessionManager
 	service *serviceManager
@@ -21,6 +21,7 @@ type dispatcher struct {
 	git     *gitManager
 	edit    *editManager
 	docker  *dockerManager
+	backup  *backupManager
 }
 
 // NewManager builds the runtime's top-level connection.Manager, driving
@@ -40,6 +41,7 @@ func NewManager(logger *slog.Logger) connection.Manager {
 		git:     newGitManager(logger),
 		edit:    newEditManager(logger),
 		docker:  newDockerManager(logger),
+		backup:  newBackupManager(logger),
 	}
 }
 
@@ -51,6 +53,7 @@ func (d *dispatcher) SetSender(s connection.Sender) {
 	d.git.SetSender(s)
 	d.edit.SetSender(s)
 	d.docker.SetSender(s)
+	d.backup.SetSender(s)
 }
 
 func (d *dispatcher) HandleEnvelope(env protocol.Envelope) {
@@ -76,6 +79,10 @@ func (d *dispatcher) HandleEnvelope(env protocol.Envelope) {
 	}
 	if env.Type == protocol.MessageDockerCommand {
 		d.docker.HandleEnvelope(env)
+		return
+	}
+	if env.Type == protocol.MessageBackupCommand {
+		d.backup.HandleEnvelope(env)
 		return
 	}
 	d.session.HandleEnvelope(env)

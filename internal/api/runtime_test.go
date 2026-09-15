@@ -44,7 +44,7 @@ func TestRuntimeHTTP_RequiresAdmin(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 
 	userCookie := loginAs(t, router, "user@example.com", "password123")
 
@@ -77,7 +77,7 @@ func TestRuntimeHTTP_CreateListRevoke(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
 
 	body, _ := json.Marshal(map[string]string{"name": "dev01"})
@@ -176,7 +176,7 @@ func TestRuntimeHTTP_ReactivateRequiresAdmin(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
 	userCookie := loginAs(t, router, "user@example.com", "password123")
 
@@ -209,7 +209,7 @@ func TestRuntimeHTTP_Delete(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
@@ -307,7 +307,7 @@ func TestRuntimeHTTP_DeleteDropsLiveConnection(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey)
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 	adminCookie := loginAs(t, router, "admin@example.com", "password123")
