@@ -103,6 +103,8 @@ DEVSTATIONONE_SERVER_ADDR=:8080        # default
 DEVSTATIONONE_ENV=production
 DEVSTATIONONE_LOG_LEVEL=info           # default
 DEVSTATIONONE_DB_ENCRYPTION_KEY=...    # generated for you
+# DEVSTATIONONE_TURNSTILE_SITE_KEY=...   # optional login bot-check, see Configuration reference
+# DEVSTATIONONE_TURNSTILE_SECRET_KEY=...
 ```
 
 Seed the initial administrator with the `devstationone-admin` CLI. It reads `DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY` the same as the server, so source `server.env` first (as root, since it's `600`):
@@ -227,6 +229,8 @@ Also revoke the runtime on the server (**Runtimes → revoke**) so its credentia
 | `DEVSTATIONONE_SERVER_ADDR` | `:8080` | Listen address |
 | `DEVSTATIONONE_ENV` | `development` | Set to `production` on real deployments |
 | `DEVSTATIONONE_LOG_LEVEL` | `info` | `debug` · `info` · `warn` · `error` |
+| `DEVSTATIONONE_TURNSTILE_SITE_KEY` | *(unset — disabled)* | Cloudflare Turnstile bot-check on login (docs/DECISIONS.md ADR-044). From the Cloudflare dashboard: Turnstile → Add widget → domain of this server → copy the Site Key and Secret Key. Must be set together with `..._SECRET_KEY` below, or not at all. |
+| `DEVSTATIONONE_TURNSTILE_SECRET_KEY` | *(unset — disabled)* | Paired secret key for the site key above. Keep this one out of version control same as `DB_ENCRYPTION_KEY`. |
 
 Administrator accounts are seeded with the `devstationone-admin` CLI (same `DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY`), not with server env vars:
 
