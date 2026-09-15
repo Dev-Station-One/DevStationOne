@@ -928,6 +928,38 @@ console errors throughout.
 
 **Status: Complete.**
 
+## Slice 21 — About modal
+
+**Goal**: an "About" link in the sidebar's bottom cluster opening a modal
+with the app name, one-line description, license/copyright, and a link
+into the help manual. Pure static content, no DB/API/protocol change.
+
+**Design**: `renderAboutModal()` in `web/static/js/app.js` injects a
+single shared `#about-modal` into `<body>` on first open (one definition
+for all pages, matching `renderSidebar()`/`renderBell()`); opened via
+`tabler.Modal.getOrCreateInstance(...).show()` from the new "About"
+nav-link, closed via a plain click handler rather than the
+`data-bs-dismiss` Data API — `project.html` also loads the real
+`bootstrap.bundle.min.js` for `Tab`, and avoiding the Data API for
+anything shared-sidebar-rendered sidesteps ever needing to re-litigate the
+ADR-034 dropdown-collision question for a new attribute.
+
+**Tests**: `TestE2E_AboutModal` (`internal/api/e2e_test.go`, chromedp) —
+opens a real project on `project.html` (the dual-Bootstrap page), expands
+the mobile-collapsed sidebar, opens the modal, asserts its heading, closes
+it. Debugging this test surfaced a pure test-timing gotcha worth recording
+for next time: `chromedp.WaitVisible`/`WaitNotVisible` are satisfied the
+instant an element's box model/visibility matches, which can be *mid*
+CSS-transition (Bootstrap's Collapse expand, or a Modal's fade) rather
+than settled — a click issued immediately after can land while the target
+is still animating. Fixed with short explicit `chromedp.Sleep` settles,
+not a product bug (this looked, at first, exactly like the kind of
+Collapse-vs-Collapse double-fire ADR-034 predicts for `data-bs-toggle`
+attributes elsewhere in the shared sidebar — it wasn't, but is worth
+re-checking first if a similar symptom shows up again for real).
+
+**Status: Complete.**
+
 ## Future, explicitly not MVP
 
 - Android client

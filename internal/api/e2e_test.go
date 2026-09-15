@@ -13,6 +13,8 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"devstationone/internal/auth"
+	"devstationone/internal/projects"
+	"devstationone/internal/runtimes"
 )
 
 // findChromium locates a real Chrome/Chromium binary for the browser E2E
@@ -226,5 +228,111 @@ func TestE2E_HelpSystem(t *testing.T) {
 	}
 	if strings.Contains(servicesStyle, "display: none") {
 		t.Fatalf("help search for \"systemd\" should keep the Services topic visible, style = %q", servicesStyle)
+	}
+}
+
+// TestE2E_AboutModal drives a real headless browser through the sidebar's
+// "About" link (web/static/js/app.js's renderAboutModal/#about-btn),
+// proving the modal opens via tabler.Modal and closes cleanly — this is
+// exactly the kind of thing a dual-Bootstrap page (project.html loads the
+// real bootstrap.bundle.min.js for Tab, alongside tabler.min.js) can
+// silently break, per the notifications-bell dropdown collision recorded
+// in ADR-034, so the assertion runs against project.html specifically.
+func TestE2E_AboutModal(t *testing.T) {
+	chromiumPath := findChromium(t)
+	db := testDB(t)
+	ctx0 := context.Background()
+
+	user, err := auth.CreateUser(ctx0, db.Pool, "e2e-about@example.com", "password123", true)
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
+
+	rt, _, err := runtimes.Create(ctx0, db.Pool, "e2e-about-runtime", user.ID)
+	if err != nil {
+		t.Fatalf("create runtime: %v", err)
+	}
+	proj, err := projects.Create(ctx0, db.Pool, projects.Fields{
+		Name:             "e2e-about-project",
+		RuntimeID:        rt.ID,
+		WorkingDirectory: "/tmp",
+		Shell:            "/bin/bash",
+	}, user.ID)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.ExecPath(chromiumPath),
+			chromedp.NoSandbox,
+			chromedp.DisableGPU,
+		)...,
+	)
+	defer cancelAlloc()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelTimeout()
+
+	err = chromedp.Run(ctx,
+		chromedp.Navigate(server.URL+"/login.html"),
+		chromedp.WaitVisible(`#email`, chromedp.ByID),
+		chromedp.SendKeys(`#email`, "e2e-about@example.com", chromedp.ByID),
+		chromedp.SendKeys(`#password`, "password123", chromedp.ByID),
+		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
+		chromedp.Navigate(server.URL+"/project.html?id="+proj.ID),
+		chromedp.WaitVisible(`#app-help-btn`, chromedp.ByQuery),
+		// #about-btn lives inside #sidebar-menu, which the headless
+		// browser's default (narrow) viewport collapses behind the mobile
+		// navbar toggler — same reason TestE2E_LoginAndActivityPage clicks
+		// this before touching any other sidebar content. The expand is a
+		// CSS-transitioned Bootstrap Collapse, not instant: WaitVisible
+		// alone passes mid-transition (box model already computable), so a
+		// click right after lands while #about-btn is still moving unless
+		// given time to settle into a stable .show first.
+		chromedp.Click(`button[aria-label="Toggle navigation"]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#about-btn`, chromedp.ByQuery),
+		chromedp.Sleep(400*time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("login + open project: %v", err)
+	}
+
+	var modalHeading string
+	err = chromedp.Run(ctx,
+		chromedp.Click(`#about-btn`, chromedp.ByID),
+		chromedp.WaitVisible(`#about-modal.show`, chromedp.ByQuery),
+		chromedp.Text(`#about-modal h3`, &modalHeading, chromedp.ByQuery),
+	)
+	if err != nil {
+		t.Fatalf("open about modal: %v", err)
+	}
+	if modalHeading != "DevStationOne" {
+		t.Fatalf("about modal heading = %q, want DevStationOne", modalHeading)
+	}
+
+	// Same settle reasoning as the sidebar expand above: WaitVisible passed
+	// as soon as .show was added, but Bootstrap's modal fade-in transition
+	// is still moving the dialog into place at that instant. And unlike the
+	// open check, wait on the stable #about-modal id rather than a
+	// compound `.show` selector: Bootstrap's hide() keeps the same element
+	// in the DOM and just removes .show/display — it never stops matching
+	// a plain `#about-modal.show` selector by disappearing, so waiting on
+	// the id is both correct and the more standard WaitNotVisible usage.
+	err = chromedp.Run(ctx,
+		chromedp.Sleep(400*time.Millisecond),
+		chromedp.Click(`#about-modal-close`, chromedp.ByID),
+		chromedp.WaitNotVisible(`#about-modal`, chromedp.ByID),
+	)
+	if err != nil {
+		t.Fatalf("close about modal: %v", err)
 	}
 }

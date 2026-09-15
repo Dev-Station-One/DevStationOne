@@ -134,6 +134,23 @@ Sidebar bottom cluster:
 - notifications bell (`.dropend` flyout panel)
 - account (link to `/account.html`)
 - log out
+- about (opens the About modal — see below)
+
+## About modal
+
+A single shared modal (`#about-modal`), injected into `<body>` on first
+open by `renderAboutModal()` in `web/static/js/app.js` — one definition
+instead of seven copies in each page's static HTML, matching
+`renderSidebar()`/`renderBell()` above. Content: app name, one-line
+description, MIT license/copyright, a link into the help manual. Opened
+via `tabler.Modal.getOrCreateInstance(...).show()` from the bottom
+cluster's "About" nav-link, closed via a plain click handler calling
+`.hide()` — deliberately not `data-bs-toggle="modal"` /
+`data-bs-dismiss="modal"`, since `project.html` also loads the real
+`bootstrap.bundle.min.js` (for `Tab`) and this sidesteps ever needing to
+reason about whether a given Data API attribute is safe to double-register
+there, the same lesson ADR-034 already paid for once with the
+notifications-bell dropdown.
 
 ## Project Workspace
 

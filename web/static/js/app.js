@@ -112,6 +112,9 @@
       + '<li class="nav-item">'
       + '<button id="logout-btn" class="nav-link" type="button"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> <span class="nav-link-title">Log out</span></button>'
       + '</li>'
+      + '<li class="nav-item">'
+      + '<button id="about-btn" class="nav-link" type="button"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> <span class="nav-link-title">About</span></button>'
+      + '</li>'
       + '</ul>'
       + '</div></div>';
     document.getElementById('logout-btn').addEventListener('click', function () {
@@ -120,6 +123,17 @@
       xhr.onload = function () { window.location.href = '/login.html'; };
       xhr.onerror = function () { window.location.href = '/login.html'; };
       xhr.send();
+    });
+    document.getElementById('about-btn').addEventListener('click', function () {
+      renderAboutModal();
+      // tabler.min.js is a UMD bundle that exports onto window.tabler, not
+      // window.bootstrap (its factory target is (globalThis).tabler = {}) —
+      // same reasoning as project.html's own modalInstance() helper. Driven
+      // by a direct .show() call rather than data-bs-toggle="modal" so a
+      // page that also loads the real bootstrap.bundle.min.js (project.html,
+      // for Tab) can never double-fire this the way the notifications-bell
+      // dropdown did (ADR-034) — Modal's data-api is never touched at all.
+      tabler.Modal.getOrCreateInstance(document.getElementById('about-modal')).show();
     });
     // Reflect current fold state on load - Tabler's own sidebar-folded click
     // handler only sets aria-pressed at click time, so a fresh page load
@@ -130,6 +144,35 @@
     if (pinBtn) {
       pinBtn.setAttribute('aria-pressed', String(document.documentElement.getAttribute('data-bs-sidebar') === 'folded-hover'));
     }
+  }
+
+  // About modal: injected once into <body> on first open rather than
+  // shipped in every page's static HTML, matching renderSidebar/renderBell
+  // above — one shared definition instead of seven copies to keep in sync.
+  function renderAboutModal() {
+    if (document.getElementById('about-modal')) return;
+    var el = document.createElement('div');
+    el.innerHTML =
+      '<div class="modal fade" id="about-modal" tabindex="-1" aria-hidden="true">'
+      + '<div class="modal-dialog modal-dialog-centered">'
+      + '<div class="modal-content">'
+      + '<div class="modal-body text-center py-4">'
+      + '<button type="button" id="about-modal-close" class="icon-btn float-end" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>'
+      + '<img src="/assets/logo/favicon-128.png" alt="" width="64" height="64" class="mb-3">'
+      + '<h3 class="mb-1">DevStationOne</h3>'
+      + '<p class="text-secondary mb-3">A self-hosted remote development environment platform.</p>'
+      + '<p class="mb-3">Open the Control Server in a browser and operate Development Runtimes — terminals, files, databases, and services — on your own machines from anywhere.</p>'
+      + '<p class="text-secondary small mb-0">MIT License &middot; &copy; 2026 Brian Tafoya</p>'
+      + '<a href="/help.html" class="small">Help</a>'
+      + '</div></div></div></div>';
+    document.body.appendChild(el.firstElementChild);
+    // Plain JS close handler rather than data-bs-dismiss="modal" — the
+    // Data API is deliberately avoided everywhere a page might also load
+    // the real bootstrap.bundle.min.js (project.html, for Tab), per the
+    // dropdown double-firing lesson in ADR-034.
+    document.getElementById('about-modal-close').addEventListener('click', function () {
+      tabler.Modal.getOrCreateInstance(document.getElementById('about-modal')).hide();
+    });
   }
 
   // Shared live-events connection (docs/IMPLEMENTATION_PLAN.md Slice 14):
