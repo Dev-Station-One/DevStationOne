@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
   <link rel="stylesheet" href="/vendor/summernote/summernote-lite.min.css">
   <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
-  <script>try { if (window.localStorage.getItem('tabler-sidebar') === 'folded-hover') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { /* private mode: fine */ }</script>
+  <script>try { if (window.localStorage.getItem('tabler-sidebar') !== 'default') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); }</script>
   <link rel="stylesheet" href="/vendor/xterm/css/xterm.css">
   <link rel="stylesheet" href="/vendor/codemirror/codemirror.min.css">
   <link rel="stylesheet" href="/vendor/codemirror/addon/dialog/dialog.min.css">
@@ -223,12 +223,6 @@
   <div class="page">
     <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark" id="ds-sidebar" data-active="projects"></aside>
     <div class="page-wrapper">
-      <header class="navbar navbar-expand-md navbar-light d-print-none">
-        <div class="container-fluid d-flex justify-content-between align-items-center">
-          <button class="icon-btn" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar" title="Fold sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
-          <div class="d-flex align-items-center gap-2" id="ds-topbar-actions"></div>
-        </div>
-      </header>
       <div class="page-body">
         <div class="container-fluid">
           <div id="load-error" class="alert alert-danger" hidden></div>
@@ -818,7 +812,7 @@
       return tabler.Modal.getOrCreateInstance(document.getElementById(id));
     }
 
-    // ADR-034's predicted "next collision": the shared topbar's notification
+    // ADR-034's predicted "next collision": the shared sidebar's notification
     // bell / account-menu buttons (web/static/js/app.js) carry
     // data-bs-toggle="dropdown" for pages that only load tabler.min.js. On
     // this page, real Bootstrap's Dropdown component ALSO registers a
@@ -831,7 +825,7 @@
     // above, not stopPropagation, so outside-click/Escape/keyboard-nav
     // behavior from the Dropdown instance itself is unaffected.
     document.addEventListener('DOMContentLoaded', function () {
-      document.querySelectorAll('#ds-topbar-actions .dropdown-toggle').forEach(function (el) {
+      document.querySelectorAll('#ds-sidebar .dropdown-toggle').forEach(function (el) {
         el.removeAttribute('data-bs-toggle');
         el.addEventListener('click', function () {
           bootstrap.Dropdown.getOrCreateInstance(el).toggle();

@@ -175,6 +175,49 @@ body {
 [data-bs-theme="light"] #theme-toggle .fa-sun { display: inline-block; }
 [data-bs-theme="light"] #theme-toggle .fa-moon { display: none; }
 
+/* Sidebar pin toggle: icon itself reflects state (same swap pattern as the
+   sun/moon theme toggle above) - slash = not pinned, plain pin = pinned -
+   plus Tabler's own active-nav-item tint so it reads as "on" at a glance.
+   Tabler sets aria-pressed="true" when folding IS engaged (collapsed), so
+   the "pinned" visuals key off aria-pressed="false", not "true". */
+.navbar-vertical [data-bs-toggle="sidebar-folded"] .fa-thumbtack { display: none; }
+.navbar-vertical [data-bs-toggle="sidebar-folded"][aria-pressed="false"] .fa-thumbtack { display: inline-block; }
+.navbar-vertical [data-bs-toggle="sidebar-folded"][aria-pressed="false"] .fa-thumbtack-slash { display: none; }
+.navbar-vertical [data-bs-toggle="sidebar-folded"][aria-pressed="false"] {
+  background: var(--tblr-navbar-active-bg);
+  color: var(--tblr-navbar-active-color);
+}
+
+/* Notifications flyout: always opens to the right of the bell instead of
+   Bootstrap's default up/down auto-flip fighting the narrow rail. Sized for
+   a panel, not a generic menu.
+   #sidebar-menu scrolls internally (overflow:auto, for a long nav list),
+   which clips anything absolutely-positioned trying to escape the rail -
+   the same reason Tabler forces .navbar-vertical.navbar-expand-lg
+   .navbar-collapse .dropdown-menu{position:static} for vertical sidebars
+   in the first place (designed for in-place accordion submenus, not
+   flyouts - it also strips all popover chrome for the same reason). So
+   this panel uses position:fixed with top/left computed in app.js from the
+   bell's real screen position (positionPanel()) - the only way out of that
+   clip - and restores popover chrome from Tabler's own dropdown tokens so
+   it still matches the app's light/dark theme instead of hardcoded colors.
+   The #id selector outranks Tabler's 4-class override outright. */
+#notifications-nav-item .dropdown-menu {
+  position: fixed;
+  background-color: var(--tblr-dropdown-bg);
+  border: var(--tblr-dropdown-border-width) solid var(--tblr-dropdown-border-color);
+  border-radius: var(--tblr-dropdown-border-radius);
+  box-shadow: var(--tblr-dropdown-box-shadow);
+  min-width: var(--tblr-dropdown-min-width);
+  color: var(--tblr-dropdown-color);
+}
+.ds-notifications-panel {
+  width: 22rem;
+  max-height: 26rem;
+  overflow-y: auto;
+  padding: 0;
+}
+
 /* Full stacked brand lockup (docs/BRAND_ASSETS.md): sidebar header + login. */
 .ds-logo-full {
   height: 68px;

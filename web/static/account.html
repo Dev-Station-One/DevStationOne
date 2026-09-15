@@ -15,18 +15,12 @@
   <link rel="stylesheet" href="/css/fonts.css">
   <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css">
   <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
-  <script>try { if (window.localStorage.getItem('tabler-sidebar') === 'folded-hover') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { /* private mode: fine */ }</script>
+  <script>try { if (window.localStorage.getItem('tabler-sidebar') !== 'default') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); }</script>
 </head>
 <body>
   <div class="page">
     <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark" id="ds-sidebar" data-active=""></aside>
     <div class="page-wrapper">
-      <header class="navbar navbar-expand-md navbar-light d-print-none">
-        <div class="container-fluid d-flex justify-content-between align-items-center">
-          <button class="icon-btn" type="button" data-bs-toggle="sidebar-folded" aria-label="Fold sidebar" title="Fold sidebar"><i class="fa-solid fa-bars" aria-hidden="true"></i></button>
-          <div class="d-flex align-items-center gap-2" id="ds-topbar-actions"></div>
-        </div>
-      </header>
       <div class="page-body">
         <div class="container-fluid">
           <h2 class="mb-3"><i class="fa-solid fa-user" aria-hidden="true"></i> Account</h2>

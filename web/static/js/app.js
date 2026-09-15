@@ -52,31 +52,6 @@
   // navbar classes in static HTML so Tabler's sibling selectors (e.g.
   // .navbar-vertical ~ .page-wrapper) apply before and after JS runs.
   // Labels use .nav-link-title so Tabler's folded-sidebar CSS can hide them.
-  // Shared top bar: every authenticated page carries
-  // <div class="d-flex align-items-center gap-2" id="ds-topbar-actions"></div>
-  // inside its header; this fills it (theme, notifications bell, account
-  // menu) so the top bar is owned by this file the same way the sidebar is.
-  function renderTopbar() {
-    var host = document.getElementById('ds-topbar-actions');
-    if (!host || host.dataset.rendered) return;
-    host.dataset.rendered = '1';
-    host.innerHTML =
-      '<button id="theme-toggle" class="icon-btn" type="button" aria-label="Switch theme" title="Switch theme"><i class="fa-solid fa-sun" aria-hidden="true"></i><i class="fa-solid fa-moon" aria-hidden="true"></i></button>'
-      + '<div class="dropdown">'
-      + '<button class="icon-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Account menu" title="Account"><i class="fa-solid fa-user" aria-hidden="true"></i></button>'
-      + '<div class="dropdown-menu dropdown-menu-end">'
-      + '<a class="dropdown-item" href="/account.html"><i class="fa-solid fa-user-gear" aria-hidden="true"></i> Account</a>'
-      + '<button class="dropdown-item" type="button" id="logout-btn"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> Log out</button>'
-      + '</div></div>';
-    document.getElementById('logout-btn').addEventListener('click', function () {
-      var xhr = new XMLHttpRequest();
-      xhr.open('POST', '/api/v1/auth/logout');
-      xhr.onload = function () { window.location.href = '/login.html'; };
-      xhr.onerror = function () { window.location.href = '/login.html'; };
-      xhr.send();
-    });
-  }
-
   function renderSidebar() {
     var host = document.getElementById('ds-sidebar');
     if (!host) return;
@@ -112,7 +87,48 @@
       + links
       + '<li class="nav-item"><div class="ds-nav-title text-uppercase text-secondary small fw-bold px-3 pt-3 pb-1">System</div></li>'
       + systemLinks
-      + '</ul></div></div>';
+      + '</ul>'
+      // Account/theme/notifications cluster, pinned to the rail bottom (former
+      // top bar). Rendered as real nav-links (not bare icon buttons) so they
+      // share the same hover-expand label treatment as Dashboard/Projects
+      // above instead of looking like a bolted-on toolbar. Lives inside
+      // #sidebar-menu so the mobile navbar toggler reveals it too, and inside
+      // .navbar-vertical so Tabler's folded-hover CSS collapses/reveals it
+      // with the rest of the sidebar.
+      + '<ul class="navbar-nav mt-auto">'
+      + '<li class="nav-item">'
+      + '<button class="nav-link" type="button" data-bs-toggle="sidebar-folded" aria-label="Pin sidebar open" title="Pin sidebar open">'
+      + '<i class="fa-solid fa-thumbtack" aria-hidden="true"></i><i class="fa-solid fa-thumbtack-slash" aria-hidden="true"></i> <span class="nav-link-title">Pin sidebar</span>'
+      + '</button></li>'
+      + '<li class="nav-item">'
+      + '<button id="theme-toggle" class="nav-link" type="button" aria-label="Switch theme" title="Switch theme">'
+      + '<i class="fa-solid fa-sun" aria-hidden="true"></i><i class="fa-solid fa-moon" aria-hidden="true"></i> <span class="nav-link-title">Theme</span>'
+      + '</button></li>'
+      + '<li class="nav-item dropend" id="notifications-nav-item"></li>'
+      + '<li class="nav-item">'
+      + '<a class="nav-link" href="/account.html"><i class="fa-solid fa-user-gear" aria-hidden="true"></i> <span class="nav-link-title">Account</span></a>'
+      + '</li>'
+      + '<li class="nav-item">'
+      + '<button id="logout-btn" class="nav-link" type="button"><i class="fa-solid fa-right-from-bracket" aria-hidden="true"></i> <span class="nav-link-title">Log out</span></button>'
+      + '</li>'
+      + '</ul>'
+      + '</div></div>';
+    document.getElementById('logout-btn').addEventListener('click', function () {
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/v1/auth/logout');
+      xhr.onload = function () { window.location.href = '/login.html'; };
+      xhr.onerror = function () { window.location.href = '/login.html'; };
+      xhr.send();
+    });
+    // Reflect current fold state on load - Tabler's own sidebar-folded click
+    // handler only sets aria-pressed at click time, so a fresh page load
+    // needs it set explicitly or the pin icon is wrong until the next click.
+    // Tabler's own convention: aria-pressed="true" means folding IS engaged
+    // (collapsed), not "pinned" - matched here, and in the CSS below.
+    var pinBtn = host.querySelector('[data-bs-toggle="sidebar-folded"]');
+    if (pinBtn) {
+      pinBtn.setAttribute('aria-pressed', String(document.documentElement.getAttribute('data-bs-sidebar') === 'folded-hover'));
+    }
   }
 
   // Shared live-events connection (docs/IMPLEMENTATION_PLAN.md Slice 14):
@@ -140,34 +156,51 @@
     return d.innerHTML;
   }
 
-  // Notifications bell (docs/IMPLEMENTATION_PLAN.md Slice 15): injected next
-  // to the theme toggle so every authenticated page gets it from this one
-  // file, the same reasoning as the centralized sidebar above.
+  // Notifications bell (docs/IMPLEMENTATION_PLAN.md Slice 15): renders into
+  // the sidebar's #notifications-nav-item placeholder (see renderSidebar
+  // above). .dropend (native Bootstrap) forces the panel to always open to
+  // the right of the rail instead of Bootstrap's default up/down auto-flip,
+  // which read as broken this close to the viewport edge. List rows reuse
+  // this app's existing .list-group pattern (project.html git status /
+  // journal attachments) instead of bare dropdown-item-text rows.
   function renderBell() {
-    var toggle = document.getElementById('theme-toggle');
-    if (!toggle || document.getElementById('notifications-bell')) return;
-
-    var wrap = document.createElement('div');
-    wrap.className = 'dropdown';
-    wrap.innerHTML =
-      '<button id="notifications-bell" class="icon-btn dropdown-toggle position-relative" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications" title="Notifications">'
-      + '<i class="fa-solid fa-bell" aria-hidden="true"></i>'
+    var host = document.getElementById('notifications-nav-item');
+    if (!host || host.dataset.rendered) return;
+    host.dataset.rendered = '1';
+    host.innerHTML =
+      '<button id="notifications-bell" class="nav-link dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Notifications" title="Notifications">'
+      + '<i class="fa-solid fa-bell" aria-hidden="true"></i> <span class="nav-link-title">Notifications</span>'
       + '<span id="notifications-badge" class="badge bg-red position-absolute top-0 start-100 translate-middle rounded-pill" hidden></span>'
       + '</button>'
-      + '<div class="dropdown-menu dropdown-menu-end" style="width: 320px; max-height: 400px; overflow-y: auto;">'
+      + '<div class="dropdown-menu ds-notifications-panel">'
       + '<div class="d-flex align-items-center justify-content-between px-3 py-2">'
       + '<span class="fw-bold">Notifications</span>'
       + '<button id="notifications-mark-all" class="btn btn-link btn-sm p-0" type="button">Mark all read</button>'
       + '</div>'
-      + '<div id="notifications-list"></div>'
-      + '<div id="notifications-empty" class="text-secondary text-center py-3 small" hidden>No notifications</div>'
+      + '<div id="notifications-list" class="list-group list-group-flush"></div>'
+      + '<div id="notifications-empty" class="text-secondary text-center py-4 small" hidden>No notifications</div>'
       + '</div>';
-    toggle.insertAdjacentElement('afterend', wrap);
 
-    var bellToggle = wrap.querySelector('.dropdown-toggle');
-    var badge = wrap.querySelector('#notifications-badge');
-    var listEl = wrap.querySelector('#notifications-list');
-    var emptyEl = wrap.querySelector('#notifications-empty');
+    var bellToggle = host.querySelector('.dropdown-toggle');
+    var panel = host.querySelector('.dropdown-menu');
+    var badge = host.querySelector('#notifications-badge');
+    var listEl = host.querySelector('#notifications-list');
+    var emptyEl = host.querySelector('#notifications-empty');
+
+    // #sidebar-menu scrolls internally (overflow:auto, for a long nav list)
+    // and clips anything absolutely-positioned trying to escape the rail -
+    // the same reason Tabler forces vertical-nav dropdown-menus to
+    // position:static in the first place. position:fixed placed from the
+    // button's real screen position is the only way out of that clip.
+    function positionPanel() {
+      var r = bellToggle.getBoundingClientRect();
+      // panel is display:none pre-show, so offsetWidth reads 0 - the
+      // stylesheet's width is still resolvable via computed style though.
+      var panelWidth = parseFloat(getComputedStyle(panel).width) || 352;
+      var left = Math.min(r.right + 8, window.innerWidth - panelWidth - 8);
+      panel.style.top = r.top + 'px';
+      panel.style.left = Math.max(8, left) + 'px';
+    }
 
     function timeAgo(iso) {
       var diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -207,9 +240,9 @@
       listEl.innerHTML = '';
       emptyEl.hidden = items.length > 0;
       items.forEach(function (n) {
-        var item = document.createElement('div');
-        item.className = 'dropdown-item-text px-3 py-2 border-bottom' + (n.read_at ? '' : ' bg-body-tertiary');
-        item.style.cursor = n.read_at ? 'default' : 'pointer';
+        var item = document.createElement(n.read_at ? 'div' : 'button');
+        if (!n.read_at) item.type = 'button';
+        item.className = 'list-group-item py-2' + (n.read_at ? '' : ' list-group-item-action bg-body-tertiary');
         item.innerHTML =
           '<div class="fw-semibold small">' + escapeText(n.title) + '</div>'
           + (n.body ? '<div class="text-secondary small">' + escapeText(n.body) + '</div>' : '')
@@ -231,7 +264,7 @@
       xhr.send();
     }
 
-    wrap.querySelector('#notifications-mark-all').addEventListener('click', function (e) {
+    host.querySelector('#notifications-mark-all').addEventListener('click', function (e) {
       e.stopPropagation();
       var xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/v1/notifications/read-all');
@@ -239,7 +272,7 @@
       xhr.send();
     });
 
-    bellToggle.addEventListener('click', loadList);
+    bellToggle.addEventListener('click', function () { positionPanel(); loadList(); });
 
     document.addEventListener('ds-ws-event', function (evt) {
       if (!evt.detail || evt.detail.type !== 'notification.created') return;
@@ -252,7 +285,6 @@
 
   document.addEventListener('DOMContentLoaded', function () {
     renderSidebar();
-    renderTopbar();
     var btn = document.getElementById('theme-toggle');
     if (btn) {
       btn.addEventListener('click', function () {

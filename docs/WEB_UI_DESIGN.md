@@ -50,23 +50,58 @@ with the navbar scaffold classes. Collapsed (folded) sidebar swaps the
 stacked brand lockup for the square favicon mark (`favicon-32.png`) and
 hides nav labels via Tabler's `.nav-link-title` folded behavior.
 
-The top bar is shared the same way: each authenticated page carries an
-empty `<div id="ds-topbar-actions">` inside its header, and `app.js`
-renders the theme toggle, notifications bell, and account menu
-(Logout wired centrally — pages do not duplicate the markup or handler).
-The top bar must never load a second Bootstrap copy: Tabler bundles its
+**Deviation from earlier design**: there is no separate top bar. The fold
+toggle, theme toggle, notifications bell, and account/logout links (wired
+centrally — pages do not duplicate the markup or handler) are rendered by
+the same `renderSidebar()` template in `web/static/js/app.js`, as a
+bottom-pinned `<ul class="navbar-nav mt-auto">` inside `#sidebar-menu` (so
+the mobile navbar toggler reveals it, and Tabler's folded-hover CSS
+collapses/reveals it with the rest of the rail). No page carries a
+`<header>` element. Global search and a help entry were part of the
+original top-navbar concept but were never implemented; they remain
+unimplemented, not top-bar casualties.
+
+Every item in that bottom cluster is a real `.nav-link` (icon +
+`.nav-link-title`), styled identically to Dashboard/Projects/Runtimes above
+it — not a bare icon-button toolbar — so it gets the same hover-expand
+label and matches the rest of the sidebar instead of reading as a bolted-on
+row of icons. The fold/pin toggle uses `fa-thumbtack`/`fa-thumbtack-slash`
+(not `fa-bars`, which collides with the unrelated mobile navbar-toggler
+hamburger elsewhere on the page) — the icon itself swaps to reflect
+pinned vs. unpinned state via `[aria-pressed="true"]`, same pattern as the
+sun/moon theme toggle, plus Tabler's own active-nav-item tint — when the
+sidebar is pinned open.
+
+Account and Log out are two independent nav-links, not a dropdown menu —
+one less interactive layer for two of the most-used actions. Notifications
+is the only dropdown left, and the only one that needs real positioning:
+`#sidebar-menu` scrolls internally (`overflow:auto`, for a long nav list),
+which clips anything absolutely-positioned trying to escape the rail —
+the same reason Tabler forces vertical-sidebar dropdown-menus to
+`position:static` (and strips their chrome) in the first place, since
+they're designed as in-place accordion submenus, not flyouts. The panel
+opts out of that: `app.js`'s `positionPanel()` sets `position:fixed` with
+`top`/`left` computed from the bell's real screen position (clamped to the
+viewport width for narrow screens) each time it opens, and its chrome
+(background/border/shadow) is restored from Tabler's own dropdown design
+tokens in `app.css`. Its rows reuse this app's existing `.list-group`
+pattern (see `project.html`'s git-status and journal-attachment lists)
+rather than bare `dropdown-item-text` rows.
+
+The sidebar must never load a second Bootstrap copy: Tabler bundles its
 own, and a second copy's data-api closes every dropdown the moment the
 first opens (Summernote therefore uses the jQuery-only `lite` build,
-not the Bootstrap-5 build).
+not the Bootstrap-5 build; `project.html` additionally loads real
+Bootstrap for modals/tabs and works around the same collision for its
+sidebar dropdown-toggle button (notifications) specifically, per ADR-034).
 
-Top navbar:
+Sidebar bottom cluster:
 
-- sidebar toggle
-- DevStationOne branding
-- global search
-- notifications
-- help
-- user menu
+- fold/pin toggle (`data-bs-toggle="sidebar-folded"`, `fa-thumbtack`)
+- theme toggle
+- notifications bell (`.dropend` flyout panel)
+- account (link to `/account.html`)
+- log out
 
 ## Project Workspace
 
