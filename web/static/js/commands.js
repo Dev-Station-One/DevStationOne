@@ -128,7 +128,7 @@
       res.runs.forEach(function (run) {
         var ok = run.exit_code === 0;
         var $item = $('<div class="d-flex align-items-center gap-2 py-1 border-top small">');
-        var badge = run.exit_code == null ? '<span class="badge bg-warning-lt">running</span>'
+        var badge = run.exit_code == null ? (run.finished_at ? '<span class="badge bg-secondary-lt">no exit</span>' : '<span class="badge bg-warning-lt">running</span>')
           : '<span class="badge ' + (run.exit_code === 0 ? 'bg-success-lt' : 'bg-red-lt') + '">exit ' + esc(run.exit_code) + '</span>';
         $item.append(badge);
         $item.append('<span class="text-secondary" style="min-width: 5.5em;">' + esc(timeAgo(run.started_at)) + '</span>');

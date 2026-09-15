@@ -1292,3 +1292,13 @@ ordinary terminals capture nothing, Discard clears), `internal/pty`
 the interactive shell).
 
 **Status: Complete** (2026-09-15).
+
+**Addendum (same slice, post-smoke)**: recovery sweep for stuck "running"
+history rows — a runtime that dies mid-run sends no session.exit, so
+`internal/commandruns.RecoverLoop` (30s tick in `cmd/devstationone-server`)
+finalizes still-running rows from recorded state: terminal session → adopt
+its exit code/error; runtime offline/revoked longer than 2 minutes →
+"runtime went offline while running" (blips under the window are left alone
+— the runtime keeps PTY sessions alive across reconnect). The Hub's
+in-memory capture buffer is flushed into the tail while still reachable.
+UI: a finalized-with-no-exit row shows a "no exit" badge plus the error.

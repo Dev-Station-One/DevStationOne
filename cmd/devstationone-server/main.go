@@ -15,6 +15,7 @@ import (
 	"devstationone/internal/api"
 	"devstationone/internal/audit"
 	"devstationone/internal/backups"
+	"devstationone/internal/commandruns"
 	"devstationone/internal/config"
 	"devstationone/internal/database"
 	"devstationone/internal/events"
@@ -67,6 +68,7 @@ func run() error {
 
 	handler, hub, bus, _, registry := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey, cfg.TurnstileSiteKey, cfg.TurnstileSecretKey)
 	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
+	go commandruns.RecoverLoop(ctx, db.Pool, hub, logger)
 	go backups.RunScheduler(ctx, db.Pool, registry, cfg.DBEncryptionKey, logger)
 	srv := &http.Server{
 		Addr:         cfg.Addr,
@@ -159,3 +161,11 @@ func idleNotifyLoop(ctx context.Context, hub *sessions.Hub, db *database.DB, bus
 		}
 	}
 }
+
+// recoverLoop finalizes Quick Command run rows stuck in their running
+// state (ADR-045): a runtime that dies mid-run sends no session.exit, so
+// the sweep finalizes them from the recorded session/runtime state. Runs
+// whose runtime only blipped offline (under RecoverOfflineFor) are left
+// alone — the runtime keeps its PTY sessions alive across a reconnect.
+// The loop itself lives in internal/commandruns, next to the capture
+// logic it serves.

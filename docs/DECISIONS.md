@@ -1572,3 +1572,20 @@ over the terminal stream — capped, pruned, and never logged server-side.
 A run whose runtime dies mid-run with no further messages stays `running`
 in the history until the session row is deleted (FK SET NULL), because
 there is no message to finalize from and ADR-012 forbids a command queue.
+
+### ADR-045 addendum — recovery sweep for stuck "running" history rows
+
+A runtime that dies mid-run sends no `session.exit`, so its `command_runs`
+rows would stay `finished_at`-NULL forever. Rather than finalizing runs at
+the offline transition (a seconds-scale reconnect blip keeps the runtime's
+PTY sessions alive, so that would falsely fail live builds), a sweep
+(`internal/commandruns.RecoverLoop`, 30s tick, wired in
+`cmd/devstationone-server/main.go` like the other background loops)
+finalizes still-running rows whose session is terminal (adopting the
+session's own exit code/error — covering close/exit races) or whose runtime
+has been offline/revoked longer than 2 minutes ("runtime went offline while
+running", exit code unknown — the Hub's in-memory output capture for that
+session is flushed into the tail while it is still reachable). Sweeps are
+idempotent against the `finished_at IS NULL` guard. Known edge: a run whose
+runtime row is deleted entirely is invisible to the join and stays
+`running`, bounded by the 100-per-project prune.
