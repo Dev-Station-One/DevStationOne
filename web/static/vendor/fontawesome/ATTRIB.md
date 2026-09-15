@@ -1,7 +1,9 @@
 # Attribution
 
-This directory vendors **Font Awesome Free 7.3.1** (solid style, webfont build),
-© Fonticons, Inc., used by DevStationOne's web UI.
+This directory vendors **Font Awesome Free 7.3.1** (solid + brands styles,
+webfont build), © Fonticons, Inc., used by DevStationOne's web UI. Brands
+(`brands.min.css`, `fa-brands-400.woff2`) backs the Docker tab icon
+(`fa-brands fa-docker`).
 
 - Fonts: SIL OFL 1.1 — see `LICENSE.txt`.
 - CSS/JS code: MIT — see `LICENSE.txt`.

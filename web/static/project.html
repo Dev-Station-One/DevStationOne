@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
   <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
   <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/brands.min.css">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
@@ -209,6 +210,18 @@
     @media (max-width: 767px) {
       .files-table th, .files-table td { font-size: .875rem; }
       #file-editor-cm .CodeMirror, #file-editor-preview { height: 60vh; max-height: none; }
+      /* Icon-only workspace tabs on mobile — label text stays for screen
+         readers (visually-hidden, not display:none) and reappears above
+         the breakpoint. */
+      .app-tab-label {
+        position: absolute;
+        width: 1px; height: 1px;
+        padding: 0; margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
     }
   </style>
 </head>
@@ -237,16 +250,16 @@
 
             <div class="d-flex align-items-center justify-content-between mb-3">
               <ul class="nav nav-tabs app-tabs flex-wrap" id="app-tabs" role="tablist">
-                <li class="nav-item" role="presentation"><a class="nav-link active" href="#" data-app-tab="overview" data-bs-target="#overview-panel" role="tab" aria-controls="overview-panel" aria-selected="true"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="terminal" data-bs-target="#terminal-panel" role="tab" aria-controls="terminal-panel" aria-selected="false"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="commands" data-bs-target="#commands-panel" role="tab" aria-controls="commands-panel" aria-selected="false"><i class="fa-solid fa-bolt" aria-hidden="true"></i> Commands</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="files" data-bs-target="#files-panel" role="tab" aria-controls="files-panel" aria-selected="false"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="code" data-bs-target="#code-panel" role="tab" aria-controls="code-panel" aria-selected="false"><i class="fa-solid fa-code" aria-hidden="true"></i> Code</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="databases" data-bs-target="#databases-panel" role="tab" aria-controls="databases-panel" aria-selected="false"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="backups" data-bs-target="#backups-panel" role="tab" aria-controls="backups-panel" aria-selected="false"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> Backups</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="docker" data-bs-target="#docker-panel" role="tab" aria-controls="docker-panel" aria-selected="false"><i class="fa-brands fa-docker" aria-hidden="true"></i> Docker</a></li>
-                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="journal" data-bs-target="#journal-panel" role="tab" aria-controls="journal-panel" aria-selected="false"><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link active" href="#" data-app-tab="overview" data-bs-target="#overview-panel" role="tab" aria-controls="overview-panel" aria-selected="true"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> <span class="app-tab-label">Overview</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="terminal" data-bs-target="#terminal-panel" role="tab" aria-controls="terminal-panel" aria-selected="false"><i class="fa-solid fa-terminal" aria-hidden="true"></i> <span class="app-tab-label">Terminal</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="commands" data-bs-target="#commands-panel" role="tab" aria-controls="commands-panel" aria-selected="false"><i class="fa-solid fa-bolt" aria-hidden="true"></i> <span class="app-tab-label">Commands</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="files" data-bs-target="#files-panel" role="tab" aria-controls="files-panel" aria-selected="false"><i class="fa-solid fa-folder" aria-hidden="true"></i> <span class="app-tab-label">Files</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="code" data-bs-target="#code-panel" role="tab" aria-controls="code-panel" aria-selected="false"><i class="fa-solid fa-code" aria-hidden="true"></i> <span class="app-tab-label">Code</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> <span class="app-tab-label">Source Control</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="databases" data-bs-target="#databases-panel" role="tab" aria-controls="databases-panel" aria-selected="false"><i class="fa-solid fa-database" aria-hidden="true"></i> <span class="app-tab-label">Databases</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="backups" data-bs-target="#backups-panel" role="tab" aria-controls="backups-panel" aria-selected="false"><i class="fa-solid fa-box-archive" aria-hidden="true"></i> <span class="app-tab-label">Backups</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="docker" data-bs-target="#docker-panel" role="tab" aria-controls="docker-panel" aria-selected="false"><i class="fa-brands fa-docker" aria-hidden="true"></i> <span class="app-tab-label">Docker</span></a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="journal" data-bs-target="#journal-panel" role="tab" aria-controls="journal-panel" aria-selected="false"><i class="fa-solid fa-book" aria-hidden="true"></i> <span class="app-tab-label">Journal</span></a></li>
               </ul>
               <button type="button" id="app-help-btn" class="icon-btn ms-2 flex-shrink-0" data-help="project-overview" aria-label="Help: Project overview" title="Help: Project overview"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
             </div>
