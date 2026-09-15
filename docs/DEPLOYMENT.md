@@ -185,6 +185,12 @@ dashboard.
    page (e.g. one with new frontend markup) actually reflects it — a
    stale `web/static/` won't show up in either health check.
 
+Static-only changes (HTML/CSS/JS/JSON under `web/static/` or `assets/`, no
+Go code touched) skip steps 1–4 entirely: `rsync`/`scp` the changed files
+into the unit's `WorkingDirectory` and they're live immediately — both are
+served straight from disk via `http.FileServer`, not embedded in the
+binary, and the running process needs no restart to pick them up.
+
 Migrations are additive/forward-only in normal operation
 (`database.Migrate`, `internal/database/database.go`, only ever runs "up").
 A `*.down.sql` exists per migration (`migrations/`) for manual rollback if
