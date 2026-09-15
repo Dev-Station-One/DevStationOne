@@ -2768,7 +2768,7 @@ paths:
         "404":
           description: Command not found (or belongs to another project)
     delete:
-      summary: Delete a Quick Command (its run history is kept)
+      summary: Delete a Quick Command (also deletes its run history)
       tags: [QuickCommands]
       operationId: deleteCommand
       security:
@@ -5052,15 +5052,15 @@ components:
         stripped and forced to valid UTF-8; empty while still running. It
         is the one deliberate exception to ADR-007's never-persist rule,
         scoped to command-run sessions only.
-      required: [id, project_id, name, command, run_by, run_by_name, started_at]
+      required: [id, project_id, command_id, name, command, run_by, run_by_name, started_at]
       properties:
         id:
           type: string
         project_id:
           type: string
         command_id:
-          type: [string, "null"]
-          description: Null once the command row is deleted; history keeps the snapshot.
+          type: string
+          description: The command this run belongs to. Deleting the command deletes its runs too (ON DELETE CASCADE).
         name:
           type: string
         command:

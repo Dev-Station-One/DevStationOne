@@ -95,8 +95,8 @@ func Update(ctx context.Context, pool *pgxpool.Pool, id string, f Fields) (Comma
 	))
 }
 
-// Delete removes a command. Its run history survives (the FK is ON DELETE
-// SET NULL) — history rows snapshot name/command text themselves.
+// Delete removes a command and its run history (command_runs.command_id is
+// ON DELETE CASCADE) — a command's history has no reason to outlive it.
 func Delete(ctx context.Context, pool *pgxpool.Pool, id string) error {
 	_, err := pool.Exec(ctx, `DELETE FROM project_commands WHERE id = $1`, id)
 	return err

@@ -1602,3 +1602,15 @@ on the stored row and the Hub's in-memory buffer uses), because a
 "response" that silently drops all but the last 64 KiB is not an auditable
 record. A display-only 1 MiB clamp applies in the output modal, with the
 full row still available via the API.
+
+### ADR-045 addendum — deleting a command deletes its history
+
+Revised from the original design: `command_id` was nullable
+(`ON DELETE SET NULL`), so a deleted command's runs survived as orphaned
+rows — but nothing in the UI could reach them once their command's row (and
+its History expander) was gone; they were only fetchable via the API. That
+doesn't serve the self-audit purpose history exists for, so migration
+`0020_command_runs_cascade_delete` tightens the FK to `NOT NULL ON DELETE
+CASCADE` (and removes any orphaned rows already created under the old
+behavior). Deleting a command is now the same "gone, history and all"
+model as deleting a project.

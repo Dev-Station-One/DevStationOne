@@ -1042,8 +1042,9 @@ creating sessions.
   400. Returns `201` + the command.
 - `PATCH .../commands/{commandID}` — same body; `404` if the command is not
   found or belongs to another project.
-- `DELETE .../commands/{commandID}` — `204`. The run history survives
-  (history rows snapshot name/command text; `command_id` goes NULL).
+- `DELETE .../commands/{commandID}` — `204`. Deletes its run history too
+  (`command_runs.command_id` is `ON DELETE CASCADE`) — a command's history
+  has no reason to outlive it.
 - `POST .../commands/{commandID}/run` — opens a **real PTY session** running
   `shell -c <command>` in the project's working directory and returns the
   same `TerminalSession` object as `POST .../sessions` (errors and status

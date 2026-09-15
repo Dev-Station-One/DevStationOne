@@ -1302,3 +1302,10 @@ its exit code/error; runtime offline/revoked longer than 2 minutes →
 — the runtime keeps PTY sessions alive across reconnect). The Hub's
 in-memory capture buffer is flushed into the tail while still reachable.
 UI: a finalized-with-no-exit row shows a "no exit" badge plus the error.
+
+**Addendum (same slice)**: deleting a command now deletes its run history
+too — migration `0020_command_runs_cascade_delete` changes
+`command_runs.command_id` from nullable `ON DELETE SET NULL` to `NOT NULL
+ON DELETE CASCADE` (and cleans up any pre-existing orphaned rows). Orphaned
+history with no UI path back to it (the History expander lives on the
+command row) didn't serve the self-audit purpose it was kept for.

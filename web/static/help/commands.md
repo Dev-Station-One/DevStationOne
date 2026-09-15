@@ -15,8 +15,8 @@ behaves like any terminal session: you can watch, interact, and close it.
 
 - **New command**: a name (button label, e.g. "Build") and the command
   string (e.g. `make build`). Both required.
-- Pencil edits, trash deletes (history of the command is kept even after
-  deletion).
+- Pencil edits, trash deletes — deleting a command also deletes its run
+  history.
 
 ### Import
 

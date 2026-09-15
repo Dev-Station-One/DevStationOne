@@ -29,14 +29,15 @@ const tailLimit = 100 * 1024 * 1024
 const runsPerPage = 100
 
 // Run is one recorded Quick Command run. Name and CommandText snapshot the
-// command at run time — the command row itself can change or be deleted
-// (command_id goes NULL, history stays).
+// command at run time — the command row itself can still change after the
+// run. Deleting the command deletes its runs too (ON DELETE CASCADE): a
+// command's history has no reason to outlive the command itself.
 type Run struct {
-	ID          string  `json:"id"`
-	ProjectID   string  `json:"project_id"`
-	CommandID   *string `json:"command_id,omitempty"`
-	Name        string  `json:"name"`
-	CommandText string  `json:"command"`
+	ID          string `json:"id"`
+	ProjectID   string `json:"project_id"`
+	CommandID   string `json:"command_id"`
+	Name        string `json:"name"`
+	CommandText string `json:"command"`
 	// SessionID is NULL until the run handler opens the run's PTY session
 	// (and back to NULL if the session row is ever deleted).
 	SessionID  *string    `json:"session_id,omitempty"`

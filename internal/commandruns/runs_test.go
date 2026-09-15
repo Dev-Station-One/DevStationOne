@@ -204,3 +204,33 @@ func TestPruneKeepsNewestHundred(t *testing.T) {
 		t.Fatalf("total = %d, want pruned to %d", total, runsPerPage)
 	}
 }
+
+// TestDeletingCommandDeletesItsRuns is the regression test for the cascade
+// delete change: deleting a command must remove its run history too, not
+// orphan it (there is no UI path back to a run once its command's History
+// expander is gone).
+func TestDeletingCommandDeletesItsRuns(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	projectID, commandID, userID := seedFixtures(t, pool)
+
+	run, err := Start(ctx, pool, projectID, commandID, "Build", "make build", userID)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	if err := commands.Delete(ctx, pool, commandID); err != nil {
+		t.Fatalf("Delete command: %v", err)
+	}
+
+	if _, err := GetForProject(ctx, pool, projectID, run.ID); err != ErrNotFound {
+		t.Fatalf("GetForProject after command delete = %v, want ErrNotFound", err)
+	}
+	_, total, err := ListForProject(ctx, pool, projectID, "", 25, 0)
+	if err != nil {
+		t.Fatalf("ListForProject: %v", err)
+	}
+	if total != 0 {
+		t.Fatalf("total = %d, want 0 — run should have been deleted with its command", total)
+	}
+}
