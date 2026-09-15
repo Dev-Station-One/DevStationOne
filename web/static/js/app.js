@@ -158,11 +158,11 @@
       + '<div class="modal-content">'
       + '<div class="modal-body text-center py-4">'
       + '<button type="button" id="about-modal-close" class="icon-btn float-end" aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>'
-      + '<img src="/assets/logo/favicon-128.png" alt="" width="64" height="64" class="mb-3">'
+      + '<img src="/assets/devstationone-github-logo.png" alt="" class="mb-3">'
       + '<h3 class="mb-1">DevStationOne</h3>'
       + '<p class="text-secondary mb-3">A self-hosted remote development environment platform.</p>'
       + '<p class="mb-3">Open the Control Server in a browser and operate Development Runtimes — terminals, files, databases, and services — on your own machines from anywhere.</p>'
-      + '<p class="text-secondary small mb-0">MIT License &middot; &copy; 2026 Brian Tafoya</p>'
+      + '<p class="text-secondary small mb-0">MIT License &middot; &copy; 2026 <a href="https://briantafoya.com" target="_blank" class="small">Brian Tafoya</a></p>'
       + '<a href="/help.html" class="small">Help</a>'
       + '</div></div></div></div>';
     document.body.appendChild(el.firstElementChild);
