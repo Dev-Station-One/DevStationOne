@@ -56,7 +56,11 @@ func Start(opts Options) (*Session, error) {
 
 	var cmd *exec.Cmd
 	if opts.Command != "" {
-		cmd = exec.Command(opts.Shell, "-c", opts.Command)
+		// -l -i: source the login chain (profile → bashrc) and run
+		// interactively, so the command sees the same env (nvm, PATH
+		// additions in ~/.bashrc) as a session typed into from term.js
+		// (ADR-045). Non-interactive `shell -c` skips ~/.bashrc entirely.
+		cmd = exec.Command(opts.Shell, "-l", "-i", "-c", opts.Command)
 	} else {
 		cmd = exec.Command(opts.Shell)
 	}

@@ -1,6 +1,7 @@
 package pty
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -9,16 +10,25 @@ import (
 // arrives, the process exits on its own with the command's exit code, and
 // the empty-Command path is unchanged (covered by pty_test.go above).
 func TestStart_WithCommand(t *testing.T) {
-	s, err := Start(Options{Shell: "/bin/sh", Command: "echo cmd-ran-quick; exit 7", Cols: 80, Rows: 24})
+	// -l -i: 'i' shows up in $- (interactive → ~/.bashrc sourced, where
+	// user PATH additions like nvm live); the login chain itself is
+	// proven by `shopt -q login_shell` — login state is not in $-.
+	s, err := Start(Options{Shell: "/bin/bash", Command: "echo flags:$-; shopt -q login_shell && echo LOGIN-OK; exit 0", Cols: 80, Rows: 24})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer s.Close()
 
-	readUntil(t, s, "cmd-ran-quick", 5*time.Second)
+	got := readUntil(t, s, "flags:", 5*time.Second)
 
-	if code := s.Wait(); code != 7 {
-		t.Fatalf("exit code = %d, want 7", code)
+	if code := s.Wait(); code != 0 {
+		t.Fatalf("exit code = %d, want 0", code)
+	}
+	if !strings.Contains(got, "i") || !strings.Contains(got, "flags:") {
+		t.Fatalf("output %q: shell is not interactive (-i missing)", got)
+	}
+	if !strings.Contains(got, "LOGIN-OK") {
+		t.Fatalf("output %q: shell is not a login shell (-l missing)", got)
 	}
 }
 
