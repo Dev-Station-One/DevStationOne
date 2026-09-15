@@ -211,7 +211,7 @@ rm -r ~/.config/devstationone
 
 # Server
 sudo systemctl disable --now devstationone-server
-sudo rm -r /etc/devstationone /usr/local/bin/devstationone-server /usr/local/bin/devstationone-admin
+sudo rm -r /etc/devstationone /usr/local/bin/devstationone-server /usr/local/bin/devstationone-admin /usr/local/share/devstationone
 sudo userdel devstationone
 # drop the PostgreSQL database when you're done
 ```

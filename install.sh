@@ -67,10 +67,12 @@ else
   info "checksum verified"
 fi
 
-mkdir -p "$WORK/bin"
-tar -xzf "$WORK/bundle.tar.gz" -C "$WORK/bin"
-[ -x "$WORK/bin/devstationone-server" ] && [ -x "$WORK/bin/devstationone-runtime" ] && [ -x "$WORK/bin/devstationone-admin" ] ||
+mkdir -p "$WORK/pkg"
+tar -xzf "$WORK/bundle.tar.gz" -C "$WORK/pkg"
+[ -x "$WORK/pkg/devstationone-server" ] && [ -x "$WORK/pkg/devstationone-runtime" ] && [ -x "$WORK/pkg/devstationone-admin" ] ||
   die "downloaded tarball does not contain all binaries"
+[ -d "$WORK/pkg/web/static" ] && [ -d "$WORK/pkg/assets" ] ||
+  die "downloaded tarball does not contain web/static or assets (static assets are not embedded in the binary)"
 
 install_server() {
   if [ -z "$INSTALL_ROOT" ] && [ "$(id -u)" -ne 0 ]; then
@@ -78,8 +80,19 @@ install_server() {
   fi
   command -v openssl >/dev/null 2>&1 || die "openssl is required (to generate DEVSTATIONONE_DB_ENCRYPTION_KEY)"
 
-  install -Dm755 "$WORK/bin/devstationone-server" "$INSTALL_ROOT/usr/local/bin/devstationone-server"
-  install -Dm755 "$WORK/bin/devstationone-admin" "$INSTALL_ROOT/usr/local/bin/devstationone-admin"
+  install -Dm755 "$WORK/pkg/devstationone-server" "$INSTALL_ROOT/usr/local/bin/devstationone-server"
+  install -Dm755 "$WORK/pkg/devstationone-admin" "$INSTALL_ROOT/usr/local/bin/devstationone-admin"
+
+  # Static assets are served from disk at request time (http.Dir), not
+  # embedded in the binary — they must live where the unit's
+  # WorkingDirectory below points. Replaced wholesale on every
+  # install/upgrade so a file removed upstream doesn't linger.
+  local share_dir="$INSTALL_ROOT/usr/local/share/devstationone"
+  rm -rf "$share_dir/web" "$share_dir/assets"
+  mkdir -p "$share_dir"
+  cp -r "$WORK/pkg/web" "$share_dir/web"
+  cp -r "$WORK/pkg/assets" "$share_dir/assets"
+  chmod -R a+rX "$share_dir"
 
   # Run as a dedicated, unprivileged system account rather than root
   # (docs/SECURITY.md "least privilege"/"defense in depth" — the same
@@ -127,6 +140,7 @@ After=network-online.target
 [Service]
 User=devstationone
 Group=devstationone
+WorkingDirectory=/usr/local/share/devstationone
 EnvironmentFile=/etc/devstationone/server.env
 ExecStart=/usr/local/bin/devstationone-server
 Restart=on-failure
@@ -152,7 +166,7 @@ EOF
 
 install_runtime() {
   local bin="$INSTALL_ROOT$HOME/.local/bin/devstationone-runtime"
-  install -Dm755 "$WORK/bin/devstationone-runtime" "$bin"
+  install -Dm755 "$WORK/pkg/devstationone-runtime" "$bin"
   case ":$PATH:" in
     *":${INSTALL_ROOT}${HOME}/.local/bin:"*) ;;
     *) info "note: ${INSTALL_ROOT}${HOME}/.local/bin is not on your PATH" ;;

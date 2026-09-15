@@ -71,16 +71,13 @@ Two supported paths:
   `devstationone` system account (`useradd --system --no-create-home`) and
   auto-generates `DEVSTATIONONE_DB_ENCRYPTION_KEY` on first install. See
   README.md "Installing the Control Server" — the recommended path for a
-  real deployment. **Known issue:** the release tarball
-  (`.github/workflows/release.yml`) contains only the three binaries, and
-  the unit `install.sh` writes has no `WorkingDirectory=`
-  (systemd defaults it to `/`). Since static assets are served from disk relative
-  to the working directory (see above), a stock `install.sh --server`
-  install has nowhere to find `web/static/`/`assets/` and the web UI
-  404s. Not yet fixed; a real deployment needs `web/static/`/`assets/`
-  copied to a location the unit's `WorkingDirectory` (or an absolute-path
-  fix to the two `http.Dir` calls in `internal/api/server.go`) can reach,
-  until the packaging itself is fixed to include them.
+  real deployment. The release tarball
+  (`.github/workflows/release.yml`) bundles `web/static/`/`assets/`
+  alongside the three binaries; `install.sh` places them at
+  `/usr/local/share/devstationone/` (replacing them wholesale on every
+  reinstall/upgrade, so a file removed upstream doesn't linger) and the
+  unit sets `WorkingDirectory=/usr/local/share/devstationone` so the
+  `http.Dir` calls above resolve there.
 - **Manual, user-level (below)** — for building from source and running
   under your own account (e.g. a personal homelab instance), no root
   required at all:
