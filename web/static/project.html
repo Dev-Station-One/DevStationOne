@@ -222,6 +222,11 @@
         white-space: nowrap;
         border: 0;
       }
+      /* Working-directory path is noise on a narrow header — name/runtime
+         stay, full path is still in the title tooltip on long-press/hover. */
+      .project-header-path {
+        display: none;
+      }
     }
   </style>
 </head>
@@ -238,7 +243,7 @@
               <div class="row align-items-center">
                 <div class="col">
                   <div class="page-pretitle text-truncate" id="project-header-line" title="">
-                    <a href="/projects.html">&larr; Projects</a> - <span id="project-header-text">—</span>
+                    <a href="/projects.html">&larr; Projects</a> - <span id="project-header-text">—</span><span id="project-header-path" class="project-header-path"></span>
                   </div>
                 </div>
                 <div class="col-auto" id="overview-actions">
@@ -918,9 +923,10 @@
     var runtimesById = {};
 
     function render() {
-      var headerText = project.name + ' · ' + (runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id) +
-        ' · ' + project.working_directory;
-      $('#project-header-text').text(headerText);
+      var summary = project.name + ' · ' + (runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id);
+      var headerText = summary + ' · ' + project.working_directory;
+      $('#project-header-text').text(summary);
+      $('#project-header-path').text(' · ' + project.working_directory);
       $('#project-header-line').attr('title', headerText);
       $('#view-runtime').text(runtimesById[project.runtime_id] ? runtimesById[project.runtime_id].name : project.runtime_id);
       $('#view-shell').text(project.shell);
