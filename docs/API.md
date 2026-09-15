@@ -773,6 +773,35 @@ Recorded notification types (`notifications.Type*` in
 Recording is best-effort, like `internal/audit.Record`: a write failure is
 logged and never blocks the action it describes.
 
+## Users (user manager)
+
+```text
+GET    /api/v1/users
+POST   /api/v1/users
+PATCH  /api/v1/users/{userID}
+DELETE /api/v1/users/{userID}
+```
+
+Administrator-only (ADR-038; `requireAdmin`, like Metrics). List returns
+every account with `id`, `email`, `display_name`, `role` (`user`/`admin`),
+`created_at`, and `last_accessed_at` — the account's last authenticated
+request, derived live from `max(sessions.last_seen_at)` (null until first
+sign-in). Password material is never in a response.
+
+`POST` creates an account: unique `email` (409 when taken), `password`
+(at least 8 characters), optional `display_name`, `role`. `PATCH` changes
+only the fields present: `display_name`, `role`, and `password` (admin
+password reset — the user's current password is not required; absent
+password keeps the existing one). `DELETE` removes the account and, with
+it, its auth sessions (FK cascade) — audit history is kept via
+`actor_user_id ... ON DELETE SET NULL`.
+
+Guard rails (400 with a message): you cannot demote or delete your own
+account; the last remaining administrator cannot be demoted or deleted;
+a user who still owns projects or runtimes cannot be deleted until those
+resources are cleaned up. Every mutation is audited (`user.created`,
+`user.updated`, `user.deleted`).
+
 ## Metrics
 
 ```text

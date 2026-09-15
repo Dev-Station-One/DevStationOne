@@ -245,3 +245,104 @@ func SetTheme(ctx context.Context, pool *pgxpool.Pool, userID, theme string) err
 	}
 	return nil
 }
+
+// AdminUser is an account as the user-manager sees it: profile plus the
+// live last-activity timestamp derived from the user's auth sessions.
+type AdminUser struct {
+	ID             string
+	Email          string
+	DisplayName    string
+	IsAdmin        bool
+	CreatedAt      time.Time
+	LastAccessedAt *time.Time
+}
+
+// ListAdminUsers returns every account with its last activity
+// (max sessions.last_seen_at; null when the user has no auth sessions).
+func ListAdminUsers(ctx context.Context, pool *pgxpool.Pool) ([]AdminUser, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT u.id, u.email, u.display_name, u.is_admin, u.created_at,
+		       MAX(s.last_seen_at)
+		FROM users u
+		LEFT JOIN sessions s ON s.user_id = u.id
+		GROUP BY u.id
+		ORDER BY u.created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []AdminUser
+	for rows.Next() {
+		var u AdminUser
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.IsAdmin, &u.CreatedAt, &u.LastAccessedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// AdminUpdate applies a partial administrative update to a user account:
+// only the non-nil fields change. Password, when given, is plaintext and
+// bcrypt-hashed here.
+func AdminUpdate(ctx context.Context, pool *pgxpool.Pool, id string, displayName, password *string, isAdmin *bool) (User, error) {
+	var hash *string
+	if password != nil {
+		h, err := HashPassword(*password)
+		if err != nil {
+			return User{}, err
+		}
+		hash = &h
+	}
+
+	var u User
+	err := pool.QueryRow(ctx, `
+		UPDATE users SET
+			display_name  = COALESCE($2, display_name),
+			password_hash = COALESCE($3, password_hash),
+			is_admin      = COALESCE($4, is_admin)
+		WHERE id = $1
+		RETURNING id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, enabled_languages`,
+		id, displayName, hash, isAdmin,
+	).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &u.EnabledLanguages)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	return u, err
+}
+
+// CountAdmins returns how many administrator accounts exist.
+func CountAdmins(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	var n int
+	err := pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE is_admin`).Scan(&n)
+	return n, err
+}
+
+// DeleteUser removes a user account; auth sessions and per-user preference
+// rows cascade, while ownership-blocked resources (projects, runtimes) are
+// checked by the caller first.
+func DeleteUser(ctx context.Context, pool *pgxpool.Pool, id string) (bool, error) {
+	tag, err := pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+// GetUserByID looks a user up by ID regardless of authentication; callers
+// are responsible for authorizing what they do with the result.
+func GetUserByID(ctx context.Context, pool *pgxpool.Pool, id string) (User, error) {
+	var u User
+	err := pool.QueryRow(ctx, `
+		SELECT id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, enabled_languages FROM users WHERE id = $1
+	`, id).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &u.EnabledLanguages)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, err
+	}
+	return u, nil
+}

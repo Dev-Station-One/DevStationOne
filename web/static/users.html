@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Users · DevStationOne</title>
+    <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css" />
+    <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/assets/logo/favicon-32.png"
+    />
+    <link rel="apple-touch-icon" href="/assets/logo/favicon-256.png" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="stylesheet" href="/vendor/sweetalert2/sweetalert2.min.css" />
+    <script>
+      document.documentElement.setAttribute(
+        "data-bs-theme",
+        (function () {
+          try {
+            return window.localStorage.getItem("ds-theme") === "light"
+              ? "light"
+              : "dark";
+          } catch (e) {
+            return "dark";
+          }
+        })(),
+      );
+    </script>
+    <script>
+      try {
+        if (window.localStorage.getItem("tabler-sidebar") !== "default")
+          document.documentElement.setAttribute(
+            "data-bs-sidebar",
+            "folded-hover",
+          );
+      } catch (e) {
+        document.documentElement.setAttribute(
+          "data-bs-sidebar",
+          "folded-hover",
+        );
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page">
+      <aside
+        class="navbar navbar-vertical navbar-expand-lg"
+        data-bs-theme="dark"
+        id="ds-sidebar"
+        data-active="users"
+      ></aside>
+      <div class="page-wrapper">
+        <div class="page-body">
+          <div class="container-fluid">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <h2 class="mb-0">
+                <i class="fa-solid fa-users-gear" aria-hidden="true"></i> Users
+              </h2>
+              <div class="d-flex align-items-center gap-2">
+                <button type="button" class="icon-btn" data-help="users" aria-label="Help: Users" title="Help: Users"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
+                <button id="new-user-btn" class="btn btn-primary" type="button">
+                  <i class="fa-solid fa-plus" aria-hidden="true"></i> New user
+                </button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-body py-2 border-bottom">
+                <input
+                  id="search-input"
+                  type="search"
+                  class="form-control"
+                  placeholder="Search name, email…"
+                  aria-label="Search users"
+                />
+              </div>
+              <div class="table-responsive">
+                <table class="table card-table table-vcenter">
+                  <thead>
+                    <tr>
+                      <th class="sort-th" data-sort="name" role="button">Name</th>
+                      <th class="sort-th" data-sort="role" role="button">Role</th>
+                      <th class="sort-th" data-sort="last_accessed" role="button">Last accessed</th>
+                      <th class="sort-th" data-sort="created" role="button">Created</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="users-body"></tbody>
+                </table>
+              </div>
+              <div id="users-empty" class="empty" hidden>
+                <div class="empty-icon">
+                  <i class="fa-solid fa-users-gear" aria-hidden="true"></i>
+                </div>
+                <div class="empty-title">No users found</div>
+                <div class="empty-subtitle text-secondary">
+                  Create a user to get started, or clear the search above.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal modal-blur fade" id="user-modal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="user-modal-title">New user</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-2">
+              <div class="col-12">
+                <label class="form-label">Email</label>
+                <input id="user-email" type="email" class="form-control" placeholder="user@example.com" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Display name <span class="text-secondary">(optional)</span></label>
+                <input id="user-display-name" type="text" class="form-control" placeholder="Jane Doe" />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label">Role</label>
+                <select id="user-role" class="form-select">
+                  <option value="user">User</option>
+                  <option value="admin">Administrator</option>
+                </select>
+              </div>
+              <div class="col-12">
+                <label class="form-label" id="user-password-label"
+                  >Password <span class="text-secondary">(at least 8 characters)</span></label
+                >
+                <input
+                  id="user-password"
+                  type="password"
+                  class="form-control"
+                  autocomplete="new-password"
+                  placeholder="Password"
+                />
+              </div>
+            </div>
+            <div id="user-error" class="alert alert-danger mt-3" hidden></div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn" data-bs-dismiss="modal">Cancel</button>
+            <button id="save-user-btn" class="btn btn-primary">Create user</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="/vendor/jquery/jquery.min.js"></script>
+    <script src="/vendor/tabler/js/tabler.min.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
+    <script src="/js/dialogs.js"></script>
+    <script src="/vendor/bootstrap/js/popover/index.js"></script>
+    <script src="/vendor/bootstrap/js/popover/data.js"></script>
+    <script src="/vendor/bootstrap/js/popover/manipulator.js"></script>
+    <script src="/vendor/bootstrap/js/popover/event-handler.js"></script>
+    <script src="/vendor/bootstrap/js/popover/selector-engine.js"></script>
+    <script src="/vendor/bootstrap/js/popover/config.js"></script>
+    <script src="/vendor/bootstrap/js/popover/sanitizer.js"></script>
+    <script src="/vendor/bootstrap/js/popover/template-factory.js"></script>
+    <script src="/vendor/bootstrap/js/popover/base-component.js"></script>
+    <script src="/vendor/bootstrap/js/popover/popper.min.js"></script>
+    <script>window['@popperjs/core'] = window.Popper;</script>
+    <script src="/vendor/bootstrap/js/popover/tooltip.js"></script>
+    <script src="/vendor/bootstrap/js/popover/popover.js"></script>
+    <script src="/vendor/bootstrap/js/modal/backdrop.js"></script>
+    <script src="/vendor/bootstrap/js/modal/focustrap.js"></script>
+    <script src="/vendor/bootstrap/js/modal/scrollbar.js"></script>
+    <script src="/vendor/bootstrap/js/modal/component-functions.js"></script>
+    <script src="/vendor/bootstrap/js/modal/modal.js"></script>
+    <script src="/js/help.js"></script>
+    <script>
+      function escapeHtml(s) {
+        return $("<div>").text(s).html();
+      }
+
+      var allUsers = [];
+      var sortKey = "created";
+      var sortDir = -1;
+      var editingId = null; // null = create, otherwise PATCH
+
+      function visibleUsers() {
+        var q = $("#search-input").val().trim().toLowerCase();
+        return allUsers
+          .filter(function (u) {
+            if (!q) return true;
+            return (
+              (u.email || "").toLowerCase().indexOf(q) >= 0 ||
+              (u.display_name || "").toLowerCase().indexOf(q) >= 0
+            );
+          })
+          .sort(function (a, b) {
+            var av, bv;
+            if (sortKey === "last_accessed") {
+              av = a.last_accessed_at ? new Date(a.last_accessed_at).getTime() : 0;
+              bv = b.last_accessed_at ? new Date(b.last_accessed_at).getTime() : 0;
+            } else if (sortKey === "created") {
+              av = new Date(a.created_at).getTime();
+              bv = new Date(b.created_at).getTime();
+            } else if (sortKey === "role") {
+              av = a.role;
+              bv = b.role;
+            } else if (sortKey === "name") {
+              av = (a.display_name || a.email || "").toLowerCase();
+              bv = (b.display_name || b.email || "").toLowerCase();
+            } else {
+              av = (a[sortKey] || "").toLowerCase();
+              bv = (b[sortKey] || "").toLowerCase();
+            }
+            return av < bv ? -sortDir : av > bv ? sortDir : 0;
+          });
+      }
+
+      function render() {
+        $(".sort-th").each(function () {
+          var k = $(this).data("sort");
+          this.removeAttribute("aria-sort");
+          if (k === sortKey)
+            this.setAttribute(
+              "aria-sort",
+              sortDir === 1 ? "ascending" : "descending",
+            );
+        });
+        var $body = $("#users-body").empty();
+        var list = visibleUsers();
+        $("#users-empty").prop("hidden", list.length > 0);
+        list.forEach(function (u) {
+          var name =
+            escapeHtml(u.display_name || u.email) +
+            '<div class="text-secondary small">' +
+            escapeHtml(u.email) +
+            "</div>";
+          var badge =
+            u.role === "admin"
+              ? '<span class="badge bg-yellow-lt">Admin</span>'
+              : '<span class="badge bg-lime-lt">User</span>';
+          var lastAccessed = u.last_accessed_at
+            ? new Date(u.last_accessed_at).toLocaleString()
+            : "—";
+          $body.append(
+            '<tr data-id="' + u.id + '">' +
+              "<td>" + name + "</td>" +
+              "<td>" + badge + "</td>" +
+              "<td>" + lastAccessed + "</td>" +
+              "<td>" + new Date(u.created_at).toLocaleDateString() + "</td>" +
+              '<td><button class="icon-btn edit-btn" data-id="' + u.id + '" aria-label="Edit user" title="Edit user"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> ' +
+              '<button class="icon-btn text-danger delete-btn" data-id="' + u.id + '" aria-label="Delete user" title="Delete user"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>',
+          );
+        });
+      }
+
+      function loadUsers() {
+        $.get("/api/v1/users")
+          .done(function (list) {
+            allUsers = list;
+            render();
+          })
+          .fail(function (xhr) {
+            if (xhr.status === 401) window.location.href = "/login.html";
+            if (xhr.status === 403) window.location.href = "/";
+          });
+      }
+
+      function openModal(u) {
+        editingId = u ? u.id : null;
+        $("#user-modal-title").text(u ? "Edit user" : "New user");
+        $("#save-user-btn").text(u ? "Save changes" : "Create user");
+        $("#user-email").val(u ? u.email : "").prop("disabled", !!u);
+        $("#user-display-name").val(u ? u.display_name || "" : "");
+        $("#user-role").val(u ? u.role : "user");
+        $("#user-password").val("").prop(
+          "placeholder",
+          u ? "Leave blank to keep the current password" : "Password",
+        );
+        $("#user-password-label")
+          .find(".text-secondary")
+          .text(u ? "(blank keeps the current password)" : "(at least 8 characters)");
+        $("#user-error").prop("hidden", true);
+        new Modal(document.getElementById("user-modal")).show();
+      }
+
+      $("#new-user-btn").on("click", function () {
+        openModal(null);
+      });
+
+      $("#users-body").on("click", ".edit-btn", function () {
+        var id = $(this).data("id");
+        var u = allUsers.find(function (x) {
+          return x.id === id;
+        });
+        if (u) openModal(u);
+      });
+
+      $("#save-user-btn").on("click", function () {
+        $("#user-error").prop("hidden", true);
+        var body = {
+          display_name: $("#user-display-name").val().trim(),
+          role: $("#user-role").val(),
+        };
+        if (!editingId) {
+          body.email = $("#user-email").val().trim();
+          body.password = $("#user-password").val();
+        } else if ($("#user-password").val()) {
+          body.password = $("#user-password").val();
+        }
+        $.ajax({
+          url: editingId ? "/api/v1/users/" + editingId : "/api/v1/users",
+          method: editingId ? "PATCH" : "POST",
+          contentType: "application/json",
+          data: JSON.stringify(body),
+        })
+          .done(function () {
+            Modal.getInstance(document.getElementById("user-modal")).hide();
+            loadUsers();
+          })
+          .fail(function (xhr) {
+            var msg =
+              (xhr.responseJSON && xhr.responseJSON.error) ||
+              (editingId ? "Failed to update user." : "Failed to create user.");
+            $("#user-error").text(msg).prop("hidden", false);
+          });
+      });
+
+      $("#users-body").on("click", ".delete-btn", async function () {
+        var id = $(this).data("id");
+        if (!(await DS.confirm("Delete this user?"))) return;
+        $.ajax({ url: "/api/v1/users/" + id, method: "DELETE" })
+          .fail(function (xhr) {
+            var msg =
+              (xhr.responseJSON && xhr.responseJSON.error) ||
+              "Failed to delete user.";
+            DS.error(msg);
+          })
+          .always(loadUsers);
+      });
+
+      $("#search-input").on("input", render);
+
+      $(".sort-th").on("click", function () {
+        var key = $(this).data("sort");
+        if (sortKey === key) {
+          sortDir = -sortDir;
+        } else {
+          sortKey = key;
+          sortDir = -1;
+        }
+        render();
+      });
+
+      loadUsers();
+    </script>
+  </body>
+</html>

@@ -1003,3 +1003,25 @@ filter, owner sort, edit modal pre-fill + PATCH, delete — zero console
 errors.
 
 **Status: Complete.**
+
+## Slice 23 — Admin user manager: CRUD, roles, guard rails, live last-accessed
+
+**Goal**: an admin-only Users page with full account CRUD, role badges,
+last-accessed column, and the self/last-admin/ownership guards (ADR-038).
+No migration.
+
+**Design**: four `requireAdmin` routes in `internal/api/users.go` over
+`internal/auth` additions (`ListAdminUsers` with a live
+`MAX(sessions.last_seen_at)` join, `AdminUpdate` as one COALESCE UPDATE,
+`GetUserByID`, `CountAdmins`, `DeleteUser`). Passwords ≥8 chars at the new
+admin trust boundary. UI: `users.html` (projects-page pattern: search,
+`sort-th` headers, shared create/edit modal via the `bootstrap/js/modal/`
+drop) plus a `Users` sidebar link injected from the existing auth-session
+fetch for admins. Help: `help/users.md` + `index.json` entry.
+
+**Tests**: `TestUserHTTP_CRUD` — non-admin 403, short-password 400,
+create/list/duplicate-409, last-accessed set after login, demote-last-admin
+400, promote+demote with two admins, admin password reset (new password
+logs in), self-delete 400, delete 204, audit rows recorded.
+
+**Status: Complete.**

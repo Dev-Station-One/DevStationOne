@@ -366,6 +366,17 @@
           }
           store(u.theme);
         }
+        // Users manager link, administrators only (the API enforces the
+        // same gate server-side; this only keeps the link out of the way).
+        if (u.is_admin) {
+          var sysList = document.querySelector('#ds-sidebar .navbar-nav');
+          if (sysList) {
+            sysList.insertAdjacentHTML('beforeend',
+              '<li class="nav-item"><a class="nav-link" href="/users.html">'
+              + '<i class="fa-solid fa-users-gear" aria-hidden="true"></i> '
+              + '<span class="nav-link-title">Users</span></a></li>');
+          }
+        }
       } catch (e) { /* malformed response: keep current theme */ }
     };
     xhr.send();

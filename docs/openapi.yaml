@@ -153,6 +153,111 @@ paths:
           description: Unknown value, or no field named
         "401":
           description: Not authenticated
+  /api/v1/users:
+    get:
+      summary: List user accounts (administrator only)
+      description: Every account, with its last-activity timestamp derived live from the user's auth sessions.
+      tags: [Users]
+      operationId: listUsers
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: All user accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+    post:
+      summary: Create a user account (administrator only)
+      tags: [Users]
+      operationId: createUser
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "400":
+          description: Invalid request body; email or password missing/short; or an invalid role
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "409":
+          description: The email is already registered
+  /api/v1/users/{userID}:
+    patch:
+      summary: Update a user account (administrator only; last-admin and self-demotion guards apply)
+      tags: [Users]
+      operationId: updateUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPatch"
+      responses:
+        "200":
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "400":
+          description: Invalid request body; short password; invalid role; or a guard rail fired (demoting yourself, or demoting/deleting the last administrator)
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: User not found
+    delete:
+      summary: Delete a user account (administrator only; self/last-admin/ownership guards apply)
+      tags: [Users]
+      operationId: deleteUser
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User deleted (their auth sessions are removed with the account)
+        "400":
+          description: A guard rail fired (deleting yourself, the last administrator, or a user who still owns projects/runtimes — the error names the counts)
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
+        "404":
+          description: User not found
   /api/v1/auth/sessions:
     get:
       summary: List active sessions for the current user
@@ -3336,6 +3441,55 @@ components:
       in: cookie
       name: devstationone_session
   schemas:
+    AdminUser:
+      type: object
+      required: [id, email, display_name, role, created_at, last_accessed_at]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        last_accessed_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: The account's last authenticated request (max sessions.last_seen_at); null until the user signs in.
+        created_at:
+          type: string
+          format: date-time
+    UserCreate:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+          description: At least 8 characters.
+        display_name:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+          default: user
+    UserPatch:
+      type: object
+      description: Only the fields present in the request change; a blank (absent) password keeps the existing one.
+      properties:
+        display_name:
+          type: string
+        password:
+          type: string
+          description: At least 8 characters; resets the account's password.
+        role:
+          type: string
+          enum: [user, admin]
     Error:
       type: object
       required: [code, message]

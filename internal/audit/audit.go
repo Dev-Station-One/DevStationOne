@@ -71,6 +71,10 @@ const (
 	EventJournalUpdated         = "journal.updated"
 	EventJournalDeleted         = "journal.deleted"
 	EventJournalAttachmentAdded = "journal.attachment_added"
+
+	EventUserCreated = "user.created"
+	EventUserUpdated = "user.updated"
+	EventUserDeleted = "user.deleted"
 )
 
 // Actor identifies who triggered an event. UserID is empty for an

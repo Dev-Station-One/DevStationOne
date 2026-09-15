@@ -1294,3 +1294,41 @@ DataTables vendor — and moves the create/edit form into one Bootstrap modal
 shared by "New project" (POST) and the row edit button (PATCH, pre-filled,
 runtime/shell/cwd seeded from the stored project so the modal opens even
 when the runtime is offline).
+
+## ADR-038 — User manager: admin-only CRUD with self/last-admin/ownership guards, live last-accessed from auth sessions
+
+**Decision.** The user manager is four `requireAdmin` routes
+(`internal/api/users.go`: `GET/POST /api/v1/users`, `PATCH/DELETE
+/api/v1/users/{userID}`) over the existing `users` table — no migration
+needed. "Last accessed" is not a new column: the auth-sessions table
+already bumps `last_seen_at` on every authenticated request
+(`internal/auth/session.go`), so `ListAdminUsers` derives it live with
+`MAX(sessions.last_seen_at)` via a `LEFT JOIN` — null until first sign-in,
+and never wrong (a stored "last seen" column on `users` would go stale the
+moment the write is skipped for cost).
+
+Guard rails live in `guardAdminEdit` and answer 400 with a message: you
+cannot demote or delete your own account; the **last remaining
+administrator** cannot be demoted or deleted (admin count only applies
+when the target is an admin — deleting a regular user with one admin
+present is fine); a user who still owns projects or runtimes cannot be
+deleted (the FKs have no `ON DELETE` action, so the count is checked up
+front and the error names what's in the way — same "block with
+explanation" model as revocation-adjacent flows). Deleting a user
+cascades their auth sessions and per-user preference rows; audit rows
+survive (`actor_user_id` is `ON DELETE SET NULL`).
+
+Passwords: admin-created and admin-reset passwords require ≥8 characters
+(a new trust boundary the login path never had — admin-created accounts
+should not be weaker than the admin chose to make them). `AdminUpdate` is
+one `COALESCE($n, col)` UPDATE rather than a dynamic SET builder — three
+optional columns, one boring statement.
+
+UI: `users.html` mirrors the projects page's datatable + shared-modal
+pattern exactly (same `sort-th` chevrons, same `vendor/bootstrap/js/modal/`
+drop for the Modal class — `tabler.min.js` still exposes no
+`window.bootstrap`). The `Users` sidebar link is injected by the existing
+`/api/v1/auth/session` fetch in `app.js` when the viewer is an admin; the
+API enforces the same gate server-side, so a non-admin probing
+`users.html` is redirected by its 403 handling and the data is never
+served.

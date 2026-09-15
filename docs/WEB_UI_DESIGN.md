@@ -271,3 +271,15 @@ Use semantic HTML, keyboard navigation, visible focus, accessible dialogs/menus,
 ## API-First Rule
 
 Every browser capability must use the documented API. The browser must not become an authorization authority and must not override server-resolved Project, runtime, filesystem, session, database, or service context.
+
+## Users manager (admin)
+
+`users.html` reuses the projects-page datatable + shared-modal pattern
+verbatim: search box, click-to-sort headers, role badges, per-row Edit and
+Delete icon buttons, one modal for create (email + display name + role +
+password) and edit (email locked, blank password keeps the current one).
+The `Users` sidebar entry is injected by the shared auth-session fetch in
+`app.js` for administrators only; the page itself redirects on a 403, and
+the API is the real gate. Guards (self-delete, last admin, ownership
+blocks) surface as the server's 400 message in the modal's error alert or
+a blocking error dialog.
