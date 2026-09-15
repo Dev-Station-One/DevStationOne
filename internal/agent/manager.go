@@ -156,12 +156,13 @@ func (m *sessionManager) withSession(sessionID string, fn func(*pty.Session)) {
 
 func (m *sessionManager) open(p protocol.SessionOpenPayload) {
 	s, err := pty.Start(pty.Options{
-		Shell:  p.Shell,
-		Dir:    p.Dir,
-		OSUser: p.OSUser,
-		Env:    p.Env,
-		Cols:   p.Cols,
-		Rows:   p.Rows,
+		Shell:   p.Shell,
+		Dir:     p.Dir,
+		OSUser:  p.OSUser,
+		Env:     p.Env,
+		Command: p.Command,
+		Cols:    p.Cols,
+		Rows:    p.Rows,
 	})
 	if err != nil {
 		m.send(protocol.MessageSessionError, protocol.SessionErrorPayload{SessionID: p.SessionID, Error: err.Error()})

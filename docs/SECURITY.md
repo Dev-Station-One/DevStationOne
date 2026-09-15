@@ -222,3 +222,25 @@ Security must be enforced at:
 3. runtime protocol layer
 4. runtime filesystem/process layer
 5. operating-system user boundary
+
+## Command run output capture (ADR-045)
+
+The Quick Commands feature persists the **last 64 KiB of a command-run
+session's PTY output** into `command_runs.output_tail` — the one deliberate
+exception to "do not store raw terminal streams" above, scoped strictly to
+sessions opened by a Quick Command click (ordinary terminals capture zero
+bytes). Risks and mitigations:
+
+- A command's output can contain anything echoed through it (environment
+  values, tokens). Anyone able to view the run history already has full
+  interactive terminal access to the same project — capture adds
+  *persistence* of a bounded tail, not new visibility.
+- The tail is stored in the project-scoped row, authorized exactly like a
+  terminal session attach (404 for everyone without project access),
+  never logged server-side, never included in list responses (only the
+  single-run GET).
+- Bounded (64 KiB per run, newest 100 runs per project, pruned on insert),
+  ANSI-stripped, forced to valid UTF-8.
+- The command string itself is treated like typed terminal input: never
+  logged, never interpolated server-side, executed by the runtime as
+  `shell -c <command>` under the project's own shell/working directory.

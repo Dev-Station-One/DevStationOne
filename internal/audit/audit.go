@@ -36,6 +36,10 @@ const (
 	EventSessionCreated    = "session.created"
 	EventSessionTerminated = "session.terminated"
 
+	EventCommandCreated = "command.created"
+	EventCommandUpdated = "command.updated"
+	EventCommandDeleted = "command.deleted"
+
 	EventDatabaseConnectionCreated = "database_connection.created"
 	EventDatabaseConnectionUpdated = "database_connection.updated"
 	EventDatabaseConnectionDeleted = "database_connection.deleted"

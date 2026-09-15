@@ -239,6 +239,7 @@
               <ul class="nav nav-tabs app-tabs flex-wrap" id="app-tabs" role="tablist">
                 <li class="nav-item" role="presentation"><a class="nav-link active" href="#" data-app-tab="overview" data-bs-target="#overview-panel" role="tab" aria-controls="overview-panel" aria-selected="true"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="terminal" data-bs-target="#terminal-panel" role="tab" aria-controls="terminal-panel" aria-selected="false"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="commands" data-bs-target="#commands-panel" role="tab" aria-controls="commands-panel" aria-selected="false"><i class="fa-solid fa-bolt" aria-hidden="true"></i> Commands</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="files" data-bs-target="#files-panel" role="tab" aria-controls="files-panel" aria-selected="false"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="code" data-bs-target="#code-panel" role="tab" aria-controls="code-panel" aria-selected="false"><i class="fa-solid fa-code" aria-hidden="true"></i> Code</a></li>
                 <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
@@ -283,6 +284,8 @@
                 <div id="terminal-canvas"></div>
               </div>
             </div>
+
+            <div id="commands-panel" class="tab-pane" role="tabpanel" tabindex="0"></div>
 
             <div id="backups-panel" class="tab-pane" role="tabpanel" tabindex="0"></div>
 
@@ -841,6 +844,7 @@
   <script src="/js/filetree.js"></script>
   <script src="/js/editor.js"></script>
   <script src="/js/termcards.js"></script>
+  <script src="/js/commands.js"></script>
   <script src="/js/help.js"></script>
   <script>
     function escapeHtml(s) {
@@ -3397,7 +3401,7 @@
     // Tab -> help topic id (docs/help/*.md); the single #app-help-btn icon
     // always describes whichever tab is currently open.
     var HELP_TOPIC_BY_TAB = {
-      overview: 'project-overview', terminal: 'terminal', files: 'files',
+      overview: 'project-overview', terminal: 'terminal', commands: 'commands', files: 'files',
       code: 'code', git: 'source-control', databases: 'databases',
       backups: 'backups', docker: 'docker', journal: 'journal'
     };
@@ -3422,6 +3426,15 @@
         } else if (activeSessionID && termState[activeSessionID]) {
           setTimeout(function () { termState[activeSessionID].fit.fit(); }, 0);
         }
+      }
+      if (tab === 'commands') {
+        // Quick Commands (web/static/js/commands.js, ADR-045); renders once,
+        // then its own buttons refetch. onSession: a run opens the terminal
+        // tab it created.
+        window.DSCommands.render($('#commands-panel'), {
+          projectID: projectID,
+          onSession: function (info) { showAppTab('terminal'); addSession(info); }
+        });
       }
       if (tab === 'backups') {
         if (!projectBackupsLoaded) {

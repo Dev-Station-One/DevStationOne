@@ -1236,3 +1236,59 @@ disabled-by-default path (no keys configured, e.g. the persistent
 `TestLoginLogoutFlow`.
 
 **Status: Complete.**
+
+## Slice 29 — Quick Commands tab + run history with captured output (ADR-045)
+
+**Goal**: a **Commands** tab on the project workspace — per-project named CLI
+commands ("Build" → `make build`) runnable with one click, each opening a
+real PTY session running `shell -c <command>`, with a per-run history
+(runner, timing, exit status, and the captured last 64 KiB of PTY output)
+for self-audit. Requirements via `/sc:brainstorm`; design via `/sc:design`.
+
+**Design**:
+- *Migration* `0019_quick_commands`: `project_commands` (project FK CASCADE,
+  name, command, sort_order, created_by) and `command_runs` (project FK
+  CASCADE, nullable command_id FK SET NULL, name/command_text snapshots,
+  session FK SET NULL, run_by, started/finished, exit_code, error,
+  output_tail text).
+- *Control Server*: `internal/commands` (CRUD + the pure Makefile/
+  package.json/`scripts/` import parsers), `internal/commandruns` (run
+  lifecycle + 64 KiB `Tail()` — ANSI-stripped, forced valid UTF-8), and
+  `internal/api/commands.go` (CRUD, run, import scan, history list/detail).
+  `startSession()` extracted from `createTermSessionHandler` so the run
+  path and the plain-session path share one open dance verbatim.
+- *Protocol*: `session.open` payload gains an optional `command` field —
+  the runtime starts `shell -c <command>` (still a real PTY,
+  `internal/pty.Options.Command`). No new protocol message for capture:
+  `sessions.Hub` gains a per-session bounded capture buffer registered
+  before dispatch (ordinary terminals capture zero bytes), flushed by the
+  runtime's `session.exit`/`session.error` handling (and by an explicit
+  session close) into the history row.
+- *Import*: reuses the existing `file.command` `read`/`list` RPCs —
+  Makefile targets, `package.json` `scripts`, executable files in
+  `scripts/`; missing files are normal empty results. The UI offers a
+  checkbox list (grouped by source); nothing saves until accepted.
+- *UI*: new **Commands** app tab (`web/static/js/commands.js`, rendered
+  into `#commands-panel` on first open like `backups.js`), rows with
+  Run/edit/delete + per-row History expander, output modal, add/edit modal,
+  import modal with a checkbox per candidate. A run switches to the
+  terminal tab it opened (host-page `onSession` → `addSession`).
+- *Security*: commands pass through like typed terminal input (never
+  logged, never interpolated server-side); import reads are fixed
+  filenames + `scripts/` inside the project root through the existing
+  containment; capture is project-access-gated, bounded (64 KiB/run, 100
+  runs/project), ANSI-stripped, valid UTF-8 — ADR-045's exception to
+  ADR-007, command-run sessions only. Audit events `command.created/
+  updated/deleted`.
+
+**Tests**: `internal/commands` (CRUD + project-scope guard against the test
+Postgres; import parser table tests: targets vs. assignments vs. dot-
+targets, malformed/missing package.json, executable-only scripts/ filter),
+`internal/commandruns` (lifecycle, failure path, list scoping/filtering/
+paging with tail-free rows, prune-to-100, `Tail` ANSI/UTF-8/bounds),
+`sessions.Hub` capture (registered → buffered bounded → taken-once,
+ordinary terminals capture nothing, Discard clears), `internal/pty`
+(`shell -c` runs to exit with the command's exit code; empty Command keeps
+the interactive shell).
+
+**Status: Complete** (2026-09-15).

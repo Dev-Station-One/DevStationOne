@@ -317,3 +317,36 @@ Interactive controls should generally have at least a 44x44px effective touch ta
 ## Final Visual Principle
 
 DevStationOne should feel like a remote development workstation. Terminal, files, databases, and services are integrated views of the same Project context. Workspace content takes priority over application chrome, and every meaningful operational state is visible and actionable.
+
+## Quick Commands Components (Slice 29, ADR-045)
+
+States per the Commands tab (`web/static/js/commands.js`):
+
+- **Loading** — "Loading commands…" text.
+- **Error** — alert banner with the API's error message (refresh button
+  adjacent).
+- **Empty** — card: "No commands yet. Add one by hand or import from a
+  Makefile, package.json, or the scripts/ folder."
+- **Loaded** — list-group rows: name (semibold), command in monospace
+  (truncated, title tooltip), **Run** (primary, small), edit (pencil) and
+  delete (trash, danger) icon buttons, and a per-row **History** expander.
+- **History expander (collapsed)** — summary "History"; fetches the last
+  10 runs for that command on first open only.
+- **History row** — exit badge (`bg-success-lt` "exit 0" green / `bg-red-lt`
+  "exit N" red / `bg-warning-lt` "running" while the session is live),
+  "time ago" of `started_at`, runner display name (email fallback), duration
+  (`finished_at - started_at`), and an **Output** button (only when a tail
+  or error exists) opening the output modal.
+- **Output modal** — read-only monospace `<pre>` of the captured 64 KiB
+  tail (`white-space: pre-wrap`, scrollable); empty tail with an error shows
+  the error instead.
+- **Add/Edit modal** — Name input + Command textarea (monospace,
+  spellcheck off); validation error inline in the modal.
+- **Import modal** — scrollable checkbox list grouped by source (Makefile
+  targets / `package.json` scripts / `scripts/` executables), each row
+  `[checkbox] name — command` (checked by default, name and command
+  editable after import in the normal editor); footer "Import selected"
+  (disabled when nothing detected).
+- **Run in flight** — the Run button disables until the session-create
+  round-trip returns; the terminal tab it opens behaves like any session
+  (status dot, activity marker, disconnect-safe).

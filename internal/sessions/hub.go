@@ -22,6 +22,10 @@ type BrowserConn interface {
 	Close()
 }
 
+// captureLimit is how much of one session's output is captured for the
+// Quick Command run history (ADR-045's bounded persistence exception).
+const captureLimit = 64 * 1024
+
 // Hub routes terminal bytes and open-session results between runtime
 // connections and attached browser connections. It is in-memory and scoped
 // to a single Control Server process, matching runtimes.Registry.
@@ -32,6 +36,11 @@ type Hub struct {
 	pending      map[string]chan error
 	lastActivity map[string]time.Time
 	idleNotified map[string]bool
+	// captures holds a bounded output tail per command-run session
+	// (ADR-045): Forward already sees every output byte, so the capture
+	// rides this existing choke point instead of a new protocol message.
+	// Ordinary terminals register nothing and capture zero bytes.
+	captures map[string][]byte
 }
 
 // NewHub creates an empty Hub.
@@ -42,6 +51,7 @@ func NewHub() *Hub {
 		pending:      make(map[string]chan error),
 		lastActivity: make(map[string]time.Time),
 		idleNotified: make(map[string]bool),
+		captures:     make(map[string][]byte),
 	}
 }
 
@@ -125,6 +135,13 @@ func (h *Hub) Forward(sessionID string, data []byte) {
 		buf = buf[len(buf)-scrollbackLimit:]
 	}
 	h.scrollback[sessionID] = buf
+	if _, ok := h.captures[sessionID]; ok {
+		cap := append(h.captures[sessionID], data...)
+		if len(cap) > captureLimit {
+			cap = cap[len(cap)-captureLimit:]
+		}
+		h.captures[sessionID] = cap
+	}
 	h.lastActivity[sessionID] = time.Now()
 	delete(h.idleNotified, sessionID)
 	c := h.attached[sessionID]
@@ -132,6 +149,26 @@ func (h *Hub) Forward(sessionID string, data []byte) {
 	if c != nil {
 		_ = c.WriteOutput(data)
 	}
+}
+
+// RegisterCapture starts buffering sessionID's output tail for the Quick
+// Command run history (ADR-045). Must be called before the session can
+// produce output, i.e. before session.open is dispatched.
+func (h *Hub) RegisterCapture(sessionID string) {
+	h.mu.Lock()
+	h.captures[sessionID] = nil
+	h.mu.Unlock()
+}
+
+// TakeCapture returns and forgets the buffered output tail for sessionID —
+// nil when the session has no capture registered (an ordinary terminal, or
+// one whose run row was already finalized). Called once at session exit.
+func (h *Hub) TakeCapture(sessionID string) []byte {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	tail := h.captures[sessionID]
+	delete(h.captures, sessionID)
+	return tail
 }
 
 // IdleSessions returns the IDs of sessions that have produced output before
@@ -162,5 +199,6 @@ func (h *Hub) Discard(sessionID string) {
 	delete(h.pending, sessionID)
 	delete(h.lastActivity, sessionID)
 	delete(h.idleNotified, sessionID)
+	delete(h.captures, sessionID)
 	h.mu.Unlock()
 }

@@ -2636,6 +2636,268 @@ paths:
           description: Not authenticated
         "404":
           description: Attachment not found (or belongs to another note/project)
+  /api/v1/projects/{projectID}/commands:
+    get:
+      summary: List a project's Quick Commands
+      tags: [QuickCommands]
+      operationId: listCommands
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The project's commands (sort_order, then created_at)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/QuickCommand"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+    post:
+      summary: Add a Quick Command
+      tags: [QuickCommands]
+      operationId: createCommand
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuickCommandFields"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuickCommand"
+        "400":
+          description: name/command must be non-empty
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+  /api/v1/projects/{projectID}/commands/import:
+    post:
+      summary: Detect importable commands (Makefile targets, package.json scripts, scripts/ executables)
+      description: |
+        One-shot scan via the project's runtime file RPC; returns candidates
+        only — nothing is saved until the caller POSTs each accepted one.
+        A missing Makefile/package.json/scripts directory is a normal,
+        empty-candidates outcome, never an error.
+      tags: [QuickCommands]
+      operationId: importCommands
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detected candidates (possibly empty)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [candidates]
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ImportCandidate"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is offline
+  /api/v1/projects/{projectID}/commands/{commandID}:
+    patch:
+      summary: Update a Quick Command (name, command, sort order)
+      tags: [QuickCommands]
+      operationId: updateCommand
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commandID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuickCommandFields"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuickCommand"
+        "400":
+          description: name/command must be non-empty
+        "401":
+          description: Not authenticated
+        "404":
+          description: Command not found (or belongs to another project)
+    delete:
+      summary: Delete a Quick Command (its run history is kept)
+      tags: [QuickCommands]
+      operationId: deleteCommand
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commandID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Not authenticated
+        "404":
+          description: Command not found
+  /api/v1/projects/{projectID}/commands/{commandID}/run:
+    post:
+      summary: Run a Quick Command (opens a real PTY session running shell -c <command>)
+      description: |
+        Records a run in the project's history (including the last 64 KiB of
+        PTY output, captured at session exit — ADR-045) and returns the
+        created terminal session, identical to a session created by hand.
+      tags: [QuickCommands]
+      operationId: runCommand
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: commandID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Session started (see Sessions POST for the full error set)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TerminalSession"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Command not found (or belongs to another project)
+        "409":
+          description: The project's runtime is offline
+        "502":
+          description: The runtime rejected session.open, or it could not be dispatched
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/command-runs:
+    get:
+      summary: List the project's Quick Command run history (newest first)
+      tags: [QuickCommands]
+      operationId: listCommandRuns
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: command_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 25
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: One page of runs (output_tail never included — fetch the run)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandRunPage"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+  /api/v1/projects/{projectID}/command-runs/{runID}:
+    get:
+      summary: Get one run, including its captured output tail
+      tags: [QuickCommands]
+      operationId: getCommandRun
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The run
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommandRun"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Run not found (or belongs to another project)
   /api/v1/projects/{projectID}/databases:
     post:
       summary: Create a database connection
@@ -4726,10 +4988,116 @@ components:
           description: |
             Client rendering mode (Slice 17). Immutable after creation —
             switch modes by opening a new session.
+        command:
+          type: string
+          description: |
+            Optional (Quick Commands, ADR-045): when set, the PTY runs
+            `shell -c <command>` to exit instead of an interactive shell
+            prompt. Empty/omitted = the plain shell.
     EditorState:
       type: object
       description: Opaque per-user+project editor tab state (open tabs, active tab, cursor offsets). The server stores it verbatim; the browser owns the shape.
       additionalProperties: true
+    QuickCommandFields:
+      type: object
+      required: [name, command]
+      properties:
+        name:
+          type: string
+          description: Button label, e.g. "Build".
+        command:
+          type: string
+          description: The CLI command string, run via the project shell (`shell -c <command>`) in the project's working directory.
+        sort_order:
+          type: integer
+          default: 0
+          description: UI position (ascending; ties break by creation time).
+    QuickCommand:
+      type: object
+      required: [id, project_id, name, command, sort_order, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        name:
+          type: string
+        command:
+          type: string
+        sort_order:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ImportCandidate:
+      type: object
+      description: One detected command offered by the import scan; nothing is saved until the caller POSTs it as a QuickCommand.
+      required: [source, name, command]
+      properties:
+        source:
+          type: string
+          enum: [makefile, npm, scripts]
+        name:
+          type: string
+        command:
+          type: string
+    CommandRun:
+      type: object
+      description: |
+        One recorded Quick Command run (ADR-045). output_tail is the last
+        64 KiB of the run's PTY output, captured at session exit — ANSI-
+        stripped and forced to valid UTF-8; empty while still running. It
+        is the one deliberate exception to ADR-007's never-persist rule,
+        scoped to command-run sessions only.
+      required: [id, project_id, name, command, run_by, run_by_name, started_at]
+      properties:
+        id:
+          type: string
+        project_id:
+          type: string
+        command_id:
+          type: [string, "null"]
+          description: Null once the command row is deleted; history keeps the snapshot.
+        name:
+          type: string
+        command:
+          type: string
+        session_id:
+          type: [string, "null"]
+        run_by:
+          type: string
+        run_by_name:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: [string, "null"]
+          format: date-time
+        exit_code:
+          type: [integer, "null"]
+        error:
+          type: string
+        output_tail:
+          type: string
+          description: Present only on the single-run GET, never the list.
+    CommandRunPage:
+      type: object
+      required: [runs, total, limit, offset]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommandRun"
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
     TerminalSession:
       type: object
       description: |

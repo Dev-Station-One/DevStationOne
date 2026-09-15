@@ -88,6 +88,17 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/sessions", requireSession(db, listTermSessionsHandler(db)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/sessions", requireSession(db, createTermSessionHandler(db, registry, hub)))
 
+	// Quick Commands (ADR-045): per-project click-to-run CLI commands, each
+	// opening a real PTY session, with run history under command-runs.
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/commands", requireSession(db, listCommandsHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/commands", requireSession(db, createCommandHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/commands/import", requireSession(db, importCommandsHandler(db, registry)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/commands/{commandID}", requireSession(db, patchCommandHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/commands/{commandID}", requireSession(db, deleteCommandHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/commands/{commandID}/run", requireSession(db, runCommandHandler(db, registry, hub)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/command-runs", requireSession(db, listCommandRunsHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/command-runs/{runID}", requireSession(db, getCommandRunHandler(db)))
+
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/editor/stream", requireSession(db, editorStreamHandler(db, registry, editorHub, logger)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/editor/state", requireSession(db, getEditorStateHandler(db)))
 	mux.HandleFunc("PUT /api/v1/projects/{projectID}/editor/state", requireSession(db, putEditorStateHandler(db)))

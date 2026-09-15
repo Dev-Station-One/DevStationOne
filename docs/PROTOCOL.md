@@ -132,7 +132,7 @@ kinds of messages travel on it:
 shape as Slice 2:
 
 ```text
-session.open    server -> runtime   {session_id, shell, dir, os_user, env, cols, rows}
+session.open    server -> runtime   {session_id, shell, dir, os_user, env, command?, cols, rows}
 session.ready    runtime -> server  {session_id}
 session.error    runtime -> server  {session_id, error}
 session.resize   server -> runtime  {session_id, cols, rows}
@@ -587,3 +587,31 @@ Every runtime connection is authenticated.
 Every server request to a runtime is authorized before dispatch.
 
 Runtime must validate command/resource IDs against its own known state.
+
+## Implementation (Slice 29): Quick Commands (ADR-045)
+
+A Project's stored CLI commands (`project_commands`, `internal/commands`)
+run with one click. There is **no new execution path**: the run endpoint
+opens a normal PTY session whose `session.open` payload carries an optional
+`command` field — when set, the runtime starts the shell as
+`shell -c <command>` (still a real PTY, `internal/pty.Options.Command`), so
+the session exits with the command's own exit code and every pre-existing
+lifecycle/exit-code rule applies unchanged. Empty `command` is byte-for-byte
+the pre-ADR-045 interactive shell.
+
+Run history (`command_runs`, `internal/commandruns`) records each run: who,
+when, exit status, and the **last 64 KiB of the session's PTY output**
+captured at exit — the one deliberate exception to ADR-007's never-persist
+rule, scoped to command-run sessions only. Capture needs no new protocol
+message: `sessions.Hub.Forward` is already the single point every runtime
+output byte passes through, so a capture buffer registered before
+`session.open` rides it (`Hub.RegisterCapture`/`Hub.TakeCapture`), and the
+runtime's `session.error`/`session.exit` handling finalizes the history row.
+An explicit `session.close` (or a failed session.open) finalizes the row
+directly; if the runtime dies mid-run with no further messages, the row
+stays `running` until the session row is deleted (then SET NULL by the FK) —
+a known, bounded gap.
+
+The import scan (Makefile targets / `package.json` scripts / executables in
+`scripts/`) reuses the existing `file.command` `read`/`list` RPCs — no new
+protocol messages.

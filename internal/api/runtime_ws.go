@@ -14,6 +14,7 @@ import (
 	"github.com/coder/websocket"
 
 	"devstationone/internal/auth"
+	"devstationone/internal/commandruns"
 	"devstationone/internal/database"
 	"devstationone/internal/editor"
 	"devstationone/internal/events"
@@ -296,6 +297,11 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 		if err := sessions.MarkFailed(ctx, db.Pool, p.SessionID, p.Error); err != nil {
 			logger.Error("session mark failed failed", "session_id", p.SessionID, "error", err)
 		}
+		// Finalize a Quick Command run row, if this failed session was one
+		// (ADR-045); a no-op for ordinary terminals.
+		if err := commandruns.FinalizeSession(ctx, db.Pool, p.SessionID, nil, p.Error, commandruns.Tail(hub.TakeCapture(p.SessionID))); err != nil {
+			logger.Warn("command run finalize failed", "session_id", p.SessionID, "error", err)
+		}
 		hub.ResolveOpen(p.SessionID, errors.New(p.Error))
 		hub.Discard(p.SessionID)
 
@@ -306,6 +312,11 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 		}
 		if err := sessions.MarkExited(ctx, db.Pool, p.SessionID, p.ExitCode); err != nil {
 			logger.Error("session mark exited failed", "session_id", p.SessionID, "error", err)
+		}
+		// Finalize the Quick Command run row with the captured output tail
+		// (ADR-045); a no-op for ordinary terminals.
+		if err := commandruns.FinalizeSession(ctx, db.Pool, p.SessionID, &p.ExitCode, "", commandruns.Tail(hub.TakeCapture(p.SessionID))); err != nil {
+			logger.Warn("command run finalize failed", "session_id", p.SessionID, "error", err)
 		}
 		if sess, err := sessions.Get(ctx, db.Pool, p.SessionID); err == nil {
 			if proj, err := projects.Get(ctx, db.Pool, sess.ProjectID); err == nil {

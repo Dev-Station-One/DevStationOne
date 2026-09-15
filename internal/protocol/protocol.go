@@ -221,8 +221,12 @@ type SessionOpenPayload struct {
 	Dir       string            `json:"dir"`
 	OSUser    string            `json:"os_user"`
 	Env       map[string]string `json:"env,omitempty"`
-	Cols      uint16            `json:"cols"`
-	Rows      uint16            `json:"rows"`
+	// Command optionally runs `shell -c <command>` instead of an
+	// interactive shell prompt (Quick Commands, ADR-045). Empty = the plain
+	// shell, exactly the pre-ADR-045 behavior.
+	Command string `json:"command,omitempty"`
+	Cols    uint16 `json:"cols"`
+	Rows    uint16 `json:"rows"`
 }
 
 // SessionReadyPayload is the payload of a MessageSessionReady envelope.

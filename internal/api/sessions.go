@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -8,6 +9,8 @@ import (
 	"time"
 
 	"devstationone/internal/audit"
+	"devstationone/internal/auth"
+	"devstationone/internal/commandruns"
 	"devstationone/internal/database"
 	"devstationone/internal/projects"
 	"devstationone/internal/protocol"
@@ -24,6 +27,10 @@ type termSessionRequest struct {
 	Cols       int    `json:"cols"`
 	Rows       int    `json:"rows"`
 	RenderMode string `json:"render_mode,omitempty"`
+	// Command optionally runs `shell -c <command>` instead of an
+	// interactive shell prompt (Quick Commands, ADR-045); empty = the
+	// plain shell, this struct's only behavior before ADR-045.
+	Command string `json:"command,omitempty"`
 }
 
 type termSessionResponse struct {
@@ -99,6 +106,116 @@ func listTermSessionsHandler(db *database.DB) http.HandlerFunc {
 	}
 }
 
+// httpError carries the HTTP status a startSession failure maps to; the
+// session handlers write exactly the same error responses they always have.
+type httpError struct {
+	status int
+	msg    string
+}
+
+func (e httpError) Error() string { return e.msg }
+
+func writeHTTPErr(w http.ResponseWriter, err error) {
+	he, ok := err.(httpError)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, he.status, map[string]string{"error": he.msg})
+}
+
+// startSession creates the terminal_sessions row and drives the full
+// session.open exchange, shared by the plain-session and Quick Command run
+// paths (ADR-045). A non-nil error is an httpError; when the
+// terminal_sessions row was created before the failure it is returned
+// alongside it, so a caller can link a command_runs row to it — the
+// runtime's session.error/session.exit then finalizes that row by
+// session_id (ADR-045).
+func startSession(ctx context.Context, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, project projects.Project, user auth.User, req termSessionRequest) (sessions.Session, error) {
+	if strings.TrimSpace(req.Name) == "" {
+		return sessions.Session{}, httpError{http.StatusBadRequest, "name is required"}
+	}
+	if req.Cols <= 0 {
+		req.Cols = 80
+	}
+	if req.Rows <= 0 {
+		req.Rows = 24
+	}
+	if req.RenderMode == "" {
+		req.RenderMode = "xterm"
+	}
+	if req.RenderMode != "xterm" && req.RenderMode != "cards" {
+		return sessions.Session{}, httpError{http.StatusBadRequest, "render_mode must be 'xterm' or 'cards'"}
+	}
+
+	sess, err := sessions.Create(ctx, db.Pool, project.ID, req.Name, req.Cols, req.Rows, user.ID, req.RenderMode)
+	if err != nil {
+		return sessions.Session{}, httpError{http.StatusInternalServerError, "failed to create session"}
+	}
+
+	conn, online := registry.Get(project.RuntimeID)
+	if !online {
+		_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "runtime offline")
+		return sess, httpError{http.StatusConflict, "runtime is offline"}
+	}
+
+	// The OS user is not stored on the Project — a runtime always runs
+	// as one fixed user (ADR-014), reported live in its capabilities.
+	rt, err := runtimes.GetByID(ctx, db.Pool, project.RuntimeID)
+	if err != nil {
+		_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "failed to look up runtime")
+		return sess, httpError{http.StatusInternalServerError, "failed to look up runtime"}
+	}
+
+	if err := sessions.MarkStarting(ctx, db.Pool, sess.ID); err != nil {
+		return sess, httpError{http.StatusInternalServerError, "failed to update session"}
+	}
+
+	// A command-run session captures its output tail for the run history
+	// (ADR-045); registered before dispatch so no output escapes. Ordinary
+	// terminals (empty Command) register nothing and capture zero bytes.
+	if req.Command != "" {
+		hub.RegisterCapture(sess.ID)
+	}
+
+	waitCh := hub.AwaitOpen(sess.ID)
+	openErr := conn.SendEnvelope(protocol.MessageSessionOpen, protocol.SessionOpenPayload{
+		SessionID: sess.ID,
+		Shell:     project.Shell,
+		Dir:       project.WorkingDirectory,
+		OSUser:    rt.Capabilities.OSUsername,
+		Env:       project.Environment,
+		Command:   req.Command,
+		Cols:      uint16(req.Cols),
+		Rows:      uint16(req.Rows),
+	})
+	if openErr != nil {
+		hub.ResolveOpen(sess.ID, nil)
+		_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "failed to dispatch session.open")
+		hub.TakeCapture(sess.ID)
+		return sess, httpError{http.StatusBadGateway, "failed to reach runtime"}
+	}
+
+	select {
+	case err := <-waitCh:
+		if err != nil {
+			_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, err.Error())
+			hub.TakeCapture(sess.ID)
+			return sess, httpError{http.StatusBadGateway, "runtime failed to start session: " + err.Error()}
+		}
+	case <-time.After(openTimeout):
+		_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "timed out waiting for runtime")
+		hub.TakeCapture(sess.ID)
+		return sess, httpError{http.StatusGatewayTimeout, "timed out waiting for runtime"}
+	}
+
+	final, err := sessions.Get(ctx, db.Pool, sess.ID)
+	if err != nil {
+		return sess, httpError{http.StatusInternalServerError, "failed to look up session"}
+	}
+	return final, nil
+}
+
 func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub *sessions.Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		project, ok := authorizedProject(w, r, db, r.PathValue("projectID"))
@@ -111,92 +228,16 @@ func createTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 			return
 		}
-		if strings.TrimSpace(req.Name) == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
-			return
-		}
-		if req.Cols <= 0 {
-			req.Cols = 80
-		}
-		if req.Rows <= 0 {
-			req.Rows = 24
-		}
-		if req.RenderMode == "" {
-			req.RenderMode = "xterm"
-		}
-		if req.RenderMode != "xterm" && req.RenderMode != "cards" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "render_mode must be 'xterm' or 'cards'"})
-			return
-		}
 
 		user, _ := userFromContext(r.Context())
-		ctx := r.Context()
-
-		sess, err := sessions.Create(ctx, db.Pool, project.ID, req.Name, req.Cols, req.Rows, user.ID, req.RenderMode)
+		final, err := startSession(r.Context(), db, registry, hub, project, user, req)
 		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create session"})
+			writeHTTPErr(w, err)
 			return
 		}
-
-		conn, online := registry.Get(project.RuntimeID)
-		if !online {
-			_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "runtime offline")
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "runtime is offline"})
-			return
-		}
-
-		// The OS user is not stored on the Project — a runtime always runs
-		// as one fixed user (ADR-014), reported live in its capabilities.
-		rt, err := runtimes.GetByID(ctx, db.Pool, project.RuntimeID)
-		if err != nil {
-			_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "failed to look up runtime")
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up runtime"})
-			return
-		}
-
-		if err := sessions.MarkStarting(ctx, db.Pool, sess.ID); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update session"})
-			return
-		}
-
-		waitCh := hub.AwaitOpen(sess.ID)
-		openErr := conn.SendEnvelope(protocol.MessageSessionOpen, protocol.SessionOpenPayload{
-			SessionID: sess.ID,
-			Shell:     project.Shell,
-			Dir:       project.WorkingDirectory,
-			OSUser:    rt.Capabilities.OSUsername,
-			Env:       project.Environment,
-			Cols:      uint16(req.Cols),
-			Rows:      uint16(req.Rows),
-		})
-		if openErr != nil {
-			hub.ResolveOpen(sess.ID, nil)
-			_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "failed to dispatch session.open")
-			writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to reach runtime"})
-			return
-		}
-
-		select {
-		case err := <-waitCh:
-			if err != nil {
-				_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, err.Error())
-				writeJSON(w, http.StatusBadGateway, map[string]string{"error": "runtime failed to start session: " + err.Error()})
-				return
-			}
-		case <-time.After(openTimeout):
-			_ = sessions.MarkFailed(ctx, db.Pool, sess.ID, "timed out waiting for runtime")
-			writeJSON(w, http.StatusGatewayTimeout, map[string]string{"error": "timed out waiting for runtime"})
-			return
-		}
-
-		final, err := sessions.Get(ctx, db.Pool, sess.ID)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to look up session"})
-			return
-		}
-		audit.Record(ctx, db.Pool, audit.EventSessionCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "session", final.ID, map[string]any{"project_id": project.ID, "name": final.Name}, clientIP(r))
+		audit.Record(r.Context(), db.Pool, audit.EventSessionCreated, audit.Actor{UserID: user.ID, Email: user.Email}, "session", final.ID, map[string]any{"project_id": project.ID, "name": final.Name}, clientIP(r))
 		// Metadata nicety only (projects list "Last accessed" column).
-		_ = projects.TouchAccessed(ctx, db.Pool, project.ID)
+		_ = projects.TouchAccessed(r.Context(), db.Pool, project.ID)
 		writeJSON(w, http.StatusCreated, toTermSessionResponse(final))
 	}
 }
@@ -245,6 +286,13 @@ func deleteTermSessionHandler(db *database.DB, registry *runtimes.Registry, hub 
 		}
 		if conn, online := registry.Get(project.RuntimeID); online {
 			_ = conn.SendEnvelope(protocol.MessageSessionClose, protocol.SessionClosePayload{SessionID: existing.ID})
+		}
+		// An explicit close terminates a command-run's process; finalize
+		// its history row now rather than waiting for a session.exit that
+		// never arrives if the runtime is unreachable (ADR-045).
+		if err := commandruns.FinalizeSession(r.Context(), db.Pool, existing.ID, nil, "session closed", commandruns.Tail(hub.TakeCapture(existing.ID))); err != nil {
+			// Best-effort: an unrecorded tail must not block the close.
+			_ = err
 		}
 		hub.Discard(existing.ID)
 		if err := sessions.MarkClosed(r.Context(), db.Pool, existing.ID); err != nil {

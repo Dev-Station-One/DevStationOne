@@ -30,6 +30,10 @@ type Options struct {
 	Env  map[string]string
 	Cols uint16
 	Rows uint16
+	// Command optionally runs `shell -c <command>` instead of an
+	// interactive shell prompt (Quick Commands, ADR-045). Empty = the plain
+	// shell, Start's only behavior before ADR-045.
+	Command string
 }
 
 // Session is one running PTY-backed process.
@@ -50,7 +54,12 @@ func Start(opts Options) (*Session, error) {
 		}
 	}
 
-	cmd := exec.Command(opts.Shell)
+	var cmd *exec.Cmd
+	if opts.Command != "" {
+		cmd = exec.Command(opts.Shell, "-c", opts.Command)
+	} else {
+		cmd = exec.Command(opts.Shell)
+	}
 	cmd.Dir = opts.Dir
 	cmd.Env = mergeEnv(os.Environ(), opts.Env)
 

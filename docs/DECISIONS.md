@@ -1539,3 +1539,36 @@ default, matching this project's "fail fast with descriptive messages"
 standard, over an availability-first fail-open that would defeat the
 feature's purpose during exactly the kind of network event an attacker
 might also be exploiting.
+
+## ADR-045 — Quick Commands: reuse the PTY session path; capture the output tail of command-run sessions only (bounded exception to ADR-007)
+
+A Project's Quick Commands tab lets a member store named CLI commands
+("Build" → `make build`) and run one at a click. Two decisions:
+
+1. **No new execution path.** A run opens a real PTY session whose
+   `session.open` payload carries an optional `command` field; the runtime
+   starts the shell as `shell -c <command>` (`internal/pty.Options.Command`)
+   instead of an interactive prompt. Every pre-existing session rule —
+   real PTY (ADR-006), disconnect-safe, exit code recorded, reconnect,
+   signals — applies unchanged, because it *is* an ordinary session. A
+   "background run with captured output" subsystem was considered and
+   dropped: it would have doubled the execution surface for the same
+   first-run need, and interactive follow-up (the common case) already has
+   a home.
+2. **Bounded output capture for command-run sessions only** (supersedes
+   ADR-007 for exactly these sessions; ordinary terminal bytes remain
+   never-persisted). No new protocol message exists for it:
+   `sessions.Hub.Forward` is already the single point every runtime output
+   byte passes through, so a per-session capture buffer registered before
+   `session.open` rides that choke point, and the runtime's
+   `session.error`/`session.exit` handling flushes it into `command_runs`.
+   The tail is capped at the last 64 KiB (per run) and 100 runs per
+   project; ANSI-stripped and forced to valid UTF-8 for the text column.
+
+Known trade-off, documented rather than hidden: a captured tail can contain
+anything a command echoed (environment dumps, tokens). It is visible only
+to project members — the same audience that already watched the bytes live
+over the terminal stream — capped, pruned, and never logged server-side.
+A run whose runtime dies mid-run with no further messages stays `running`
+in the history until the session row is deleted (FK SET NULL), because
+there is no message to finalize from and ADR-012 forbids a command queue.

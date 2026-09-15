@@ -1028,3 +1028,43 @@ tokens are rejected with `400` before the password is checked, and audited
 as `auth.login_turnstile_failed` (distinct from `auth.login_failed`).
 Disabled by default; see docs/SECURITY.md "Authentication" for the
 server-side verification and fail-closed behavior.
+
+## Quick Commands (Slice 29, ADR-045)
+
+Per-project named CLI commands (e.g. "Build" → `make build`) rendered as the
+project workspace's **Commands** tab. Any user authorized on the project can
+create, edit, delete, import, and run them — the same access level as
+creating sessions.
+
+- `GET /api/v1/projects/{projectID}/commands` — list (UI order:
+  `sort_order` ascending, then created_at).
+- `POST .../commands` — `{name, command, sort_order}`; both non-empty, else
+  400. Returns `201` + the command.
+- `PATCH .../commands/{commandID}` — same body; `404` if the command is not
+  found or belongs to another project.
+- `DELETE .../commands/{commandID}` — `204`. The run history survives
+  (history rows snapshot name/command text; `command_id` goes NULL).
+- `POST .../commands/{commandID}/run` — opens a **real PTY session** running
+  `shell -c <command>` in the project's working directory and returns the
+  same `TerminalSession` object as `POST .../sessions` (errors and status
+  codes identical). Each click is a new session, even if a previous run is
+  still active. Every run is recorded in
+  `GET .../command-runs?command_id=&limit=&offset=` (paged, newest first —
+  rows carry the runner, timing, exit code/error, and never the output
+  tail) and `GET .../command-runs/{runID}` (adds `output_tail`: the last
+  64 KiB of the run's PTY output, ANSI-stripped, captured at session exit —
+  ADR-045). Deleting a project deletes its history (FK CASCADE).
+- `POST .../commands/import` — one-shot scan of the project directory via
+  the runtime's file RPC: Makefile targets (`make <target>`), `package.json`
+  `scripts` (`npm run <key>`), and executable files in `scripts/`
+  (`./scripts/<name>`). Returns `{candidates: [{source, name, command}]}` —
+  nothing is saved until each accepted candidate is POSTed as a command.
+  Missing files are a normal empty result, not an error. The scan reads only
+  the fixed filenames `Makefile`/`package.json` and the `scripts/` directory
+  inside the project's working directory; no client-supplied path reaches
+  the file layer.
+
+Commands are visible to everyone with project access and are **not**
+secrets — never store a command string containing credentials. The captured
+output tail can contain anything a command echoed (see docs/SECURITY.md
+"Command run output capture", ADR-045).

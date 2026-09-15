@@ -174,7 +174,7 @@ A Project is the primary UI context. Show:
 
 Application tabs:
 
-`Terminal | Files | Source Control | Databases | Services | Journal`
+`Terminal | Commands | Files | Source Control | Databases | Backups | Docker | Journal`
 
 Terminal session tabs are a separate level:
 
@@ -283,3 +283,19 @@ The `Users` sidebar entry is injected by the shared auth-session fetch in
 the API is the real gate. Guards (self-delete, last admin, ownership
 blocks) surface as the server's 400 message in the modal's error alert or
 a blocking error dialog.
+
+## Commands tab (Slice 29, ADR-045)
+
+One row per Quick Command: name (bold), the command string in monospace
+(truncated, full text on hover), a primary **Run** button, pencil/trash
+edit+delete icons, and a collapsible **History** expander per row (fetches
+that command's last 10 runs on first open: exit badge, "time ago", runner,
+duration, an Output button opening a read-only monospace `<pre>` modal).
+Toolbar: **New command**, **Import**, refresh. Import opens a modal listing
+detected candidates (grouped Makefile targets / `package.json` scripts /
+`scripts/` executables) each with a checkbox — "Import selected" pre-creates
+only the checked ones (nothing saves until accepted). Add/Edit is a small
+modal: Name + Command (textarea, monospace). Empty state: "No commands yet.
+Add one by hand or import from a Makefile, package.json, or the scripts/
+folder." A run opens the PTY session's terminal tab (switching to Terminal)
+named after the command; rows stack full-width as tap targets on mobile.
