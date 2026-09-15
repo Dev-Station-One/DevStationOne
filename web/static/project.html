@@ -1058,7 +1058,7 @@
       var $pane = $('<div class="session-term-pane" hidden>').appendTo('#terminal-canvas');
       st.pane = $pane[0];
       var termOptions = { convertEol: true, cursorBlink: true, fontSize: 13, theme: { background: '#000000' } };
-      if (terminalFontPref === 'jetbrainsmono-nerd') termOptions.fontFamily = NERD_FONT_STACK;
+      if (terminalFontPref === 'jetbrainsmono-nerd') termOptions.fontFamily = TERMINAL_FONT_STACKS['jetbrainsmono-nerd'];
       st.term = new Terminal(termOptions);
       st.fit = new FitAddon.FitAddon();
       st.term.loadAddon(st.fit);
