@@ -57,9 +57,41 @@ the same `renderSidebar()` template in `web/static/js/app.js`, as a
 bottom-pinned `<ul class="navbar-nav mt-auto">` inside `#sidebar-menu` (so
 the mobile navbar toggler reveals it, and Tabler's folded-hover CSS
 collapses/reveals it with the rest of the rail). No page carries a
-`<header>` element. Global search and a help entry were part of the
-original top-navbar concept but were never implemented; they remain
-unimplemented, not top-bar casualties.
+`<header>` element. Global search was part of the original top-navbar
+concept but was never implemented; it remains unimplemented, not a top-bar
+casualty. A help entry, also from that original concept, **is** implemented
+— see "Help system" below.
+
+## Help system
+
+Two parts, both pure static assets — no DB/API/OpenAPI/protocol surface:
+
+- **Contextual popovers**: a `.icon-btn` with `data-help="<topic-id>"` next
+  to a page's `<h2>` (every top-level page) or a project workspace tab
+  (`project.html`'s single `#app-help-btn`, whose `data-help` is rewritten
+  by the `shown.bs.tab` handler to match whichever tab is active — see
+  `docs/DESIGN_ICON_SYSTEM.md` §8). Clicking it opens a real
+  `bootstrap.Popover` (title + one-line summary + "Read more" link into the
+  manual), not a hand-rolled tooltip — see ADR-036 for why that needed a
+  second, narrower Bootstrap vendor drop instead of the existing
+  `bootstrap.bundle.min.js`.
+- **Manual page** (`web/static/help.html`, sidebar entry + global `?`
+  shortcut wired in `app.js`): a two-pane TOC/search + rendered-Markdown
+  view, reusing the same `marked.parse()` + `DOMPurify.sanitize()` pattern
+  `project.html`'s file preview already uses.
+
+Content lives as flat-frontmatter Markdown under `web/static/help/*.md`
+(`id`/`title`/`summary` keys, deliberately not YAML — no parser dependency
+for three flat fields), enumerated by `web/static/help/index.json` (an id
+list only; titles/summaries stay single-sourced in each file's own
+frontmatter). `web/static/js/help.js` fetches, caches, and renders both the
+popovers and the manual page from that same content. Search is a plain
+client-side substring match over title/summary/body — the doc set is small
+and single-author, so a fuzzy-search library would be premature.
+
+Adding a topic: drop a new `.md` file with frontmatter into
+`web/static/help/`, add its id to `index.json`, and reference it from a
+`data-help="<id>"` icon or a `[Link](/help.html#<id>)` cross-reference.
 
 Every item in that bottom cluster is a real `.nav-link` (icon +
 `.nav-link-title`), styled identically to Dashboard/Projects/Runtimes above

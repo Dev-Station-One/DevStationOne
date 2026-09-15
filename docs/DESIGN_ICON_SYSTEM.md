@@ -122,6 +122,8 @@ Names are FA Free solid; **verify each against the vendored copy at implementati
 | Log out (dropdown item) | text | icon-prefixed text item `fa-right-from-bracket` (dropdown items keep text) |
 | Account (dropdown item) | text | icon-prefixed text item `fa-user-gear` |
 | Sidebar: Dashboard / Projects / Runtimes / Files / Databases / Services / Activity / Settings | text nav links | icon + text: `fa-gauge-high`, `fa-cubes`, `fa-server`, `fa-folder-tree`, `fa-database`, `fa-gears`, `fa-clock-rotate-left`, `fa-gear` |
+| Sidebar: Help | text nav link | icon + text: `fa-circle-question` |
+| Contextual help trigger (any page/panel) | — | `.icon-btn` `fa-circle-question`, `data-help="<topic-id>"` — see §8 |
 
 ### index.html
 
@@ -224,3 +226,25 @@ theme logic untouched (CSS does the swap). `dialogs.js` untouched.
 - Manual smoke: dashboard → projects (create/delete row) → project workspace
   (terminal tabs, files toolbar + row actions, services cards) → runtimes →
   account, in dark and light.
+
+## 8. Contextual help trigger
+
+Same `.icon-btn` markup as any other small action, plus `data-help`:
+
+```html
+<button type="button" class="icon-btn" data-help="dashboard"
+        aria-label="Help: Dashboard" title="Help: Dashboard">
+  <i class="fa-solid fa-circle-question" aria-hidden="true"></i>
+</button>
+```
+
+`web/static/js/help.js` scans `[data-help]` on every page and wires a real
+`bootstrap.Popover` (title/summary/"Read more" fetched from
+`web/static/help/<id>.md`'s frontmatter) — never the hand-rolled tooltip
+pattern `title`-only icon-buttons use elsewhere in this doc, since the
+content here is multi-line and links out to the manual. One page,
+`project.html`, reuses a single icon (`#app-help-btn`) across topics by
+rewriting `data-help` on tab change rather than placing eight separate
+icons in each panel — see `docs/WEB_UI_DESIGN.md`'s Help system section and
+ADR-036 for why this needed a second, minimal Bootstrap JS vendor drop
+alongside the existing `bootstrap.bundle.min.js`.

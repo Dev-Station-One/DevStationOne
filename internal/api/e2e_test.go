@@ -123,3 +123,108 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 		t.Fatalf("sidebar does not render the Activity nav item: %s", sidebarHTML)
 	}
 }
+
+// TestE2E_HelpSystem drives a real headless browser through the help
+// manual (web/static/help.html + web/static/help/*.md, rendered client-side
+// via marked/DOMPurify) and a contextual popover (web/static/js/help.js,
+// backed by the vendored Bootstrap Popover chain in
+// web/static/vendor/bootstrap/js/popover/). Both are pure static assets —
+// no API/DB involvement — so this is the only kind of test that can prove
+// the frontmatter fetch/parse and popover wiring actually work together in
+// a real browser.
+func TestE2E_HelpSystem(t *testing.T) {
+	chromiumPath := findChromium(t)
+	db := testDB(t)
+	ctx0 := context.Background()
+
+	if _, err := auth.CreateUser(ctx0, db.Pool, "e2e-help@example.com", "password123", true); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey)
+	server := httptest.NewServer(router)
+	t.Cleanup(server.Close)
+
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(),
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.ExecPath(chromiumPath),
+			chromedp.NoSandbox,
+			chromedp.DisableGPU,
+		)...,
+	)
+	defer cancelAlloc()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+	ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+	defer cancelTimeout()
+
+	err := chromedp.Run(ctx,
+		chromedp.Navigate(server.URL+"/login.html"),
+		chromedp.WaitVisible(`#email`, chromedp.ByID),
+		chromedp.SendKeys(`#email`, "e2e-help@example.com", chromedp.ByID),
+		chromedp.SendKeys(`#password`, "password123", chromedp.ByID),
+		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
+	)
+	if err != nil {
+		t.Fatalf("login flow: %v", err)
+	}
+
+	// The dashboard's own "Help: Dashboard" icon opens a real
+	// bootstrap.Popover with content fetched from help/dashboard.md.
+	var popoverText string
+	err = chromedp.Run(ctx,
+		chromedp.WaitVisible(`[data-help="dashboard"]`, chromedp.ByQuery),
+		chromedp.Click(`[data-help="dashboard"]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.popover .popover-body`, chromedp.ByQuery),
+		chromedp.Text(`.popover .popover-body`, &popoverText, chromedp.ByQuery),
+	)
+	if err != nil {
+		t.Fatalf("dashboard help popover: %v", err)
+	}
+	if !strings.Contains(popoverText, "live glance") {
+		t.Fatalf("dashboard popover body = %q, want the dashboard.md summary", popoverText)
+	}
+
+	// The full manual page renders Markdown client-side and lists every
+	// topic in help/index.json down the TOC.
+	var manualHeading, tocHTML string
+	err = chromedp.Run(ctx,
+		chromedp.Navigate(server.URL+"/help.html"),
+		chromedp.WaitVisible(`#help-content h1`, chromedp.ByQuery),
+		chromedp.Text(`#help-content h1`, &manualHeading, chromedp.ByQuery),
+		chromedp.OuterHTML(`#help-toc`, &tocHTML, chromedp.ByQuery),
+	)
+	if err != nil {
+		t.Fatalf("help manual page: %v", err)
+	}
+	if manualHeading != "Dashboard" {
+		t.Fatalf("help.html default topic heading = %q, want Dashboard", manualHeading)
+	}
+	if !strings.Contains(tocHTML, "Terminal") || !strings.Contains(tocHTML, "Databases") {
+		t.Fatalf("help.html TOC missing expected topics: %s", tocHTML)
+	}
+
+	// The search box filters the TOC to topics whose content matches — jQuery's
+	// .toggle() sets display:none rather than removing the element, so check
+	// each row's own style attribute rather than the TOC's outer HTML (every
+	// row's text stays present in the DOM either way).
+	var dashboardStyle, servicesStyle string
+	err = chromedp.Run(ctx,
+		chromedp.SendKeys(`#help-search`, "systemd", chromedp.ByID),
+		chromedp.Sleep(200*time.Millisecond),
+		chromedp.AttributeValue(`[data-toc="dashboard"]`, "style", &dashboardStyle, nil, chromedp.ByQuery),
+		chromedp.AttributeValue(`[data-toc="services"]`, "style", &servicesStyle, nil, chromedp.ByQuery),
+	)
+	if err != nil {
+		t.Fatalf("help search: %v", err)
+	}
+	if !strings.Contains(dashboardStyle, "display: none") {
+		t.Fatalf("help search for \"systemd\" should hide the unrelated Dashboard topic, style = %q", dashboardStyle)
+	}
+	if strings.Contains(servicesStyle, "display: none") {
+		t.Fatalf("help search for \"systemd\" should keep the Services topic visible, style = %q", servicesStyle)
+	}
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Help · DevStationOne</title>
+  <link rel="stylesheet" href="/vendor/tabler/css/tabler.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/fontawesome.min.css">
+  <link rel="stylesheet" href="/vendor/fontawesome/css/solid.min.css">
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/logo/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/assets/logo/favicon-16.png">
+  <link rel="apple-touch-icon" href="/assets/logo/favicon-256.png">
+  <link rel="stylesheet" href="/css/app.css">
+  <script>document.documentElement.setAttribute('data-bs-theme', (function () { try { return window.localStorage.getItem('ds-theme') === 'light' ? 'light' : 'dark'; } catch (e) { return 'dark'; } })());</script>
+  <script>try { if (window.localStorage.getItem('tabler-sidebar') !== 'default') document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); } catch (e) { document.documentElement.setAttribute('data-bs-sidebar', 'folded-hover'); }</script>
+</head>
+<body>
+  <div class="page">
+    <aside class="navbar navbar-vertical navbar-expand-lg" data-bs-theme="dark" id="ds-sidebar" data-active="help"></aside>
+    <div class="page-wrapper">
+      <div class="page-body">
+        <div class="container-fluid">
+          <h2 class="mb-3"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Help</h2>
+
+          <div id="help-app" class="row g-3">
+            <div class="col-12 col-md-3">
+              <input id="help-search" type="search" class="form-control mb-2" placeholder="Search…" aria-label="Search help topics">
+              <div id="help-toc" class="list-group"></div>
+            </div>
+            <div class="col-12 col-md-9">
+              <div class="card">
+                <div class="card-body">
+                  <div id="help-content"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/vendor/jquery/jquery.min.js"></script>
+  <script src="/vendor/tabler/js/tabler.min.js"></script>
+  <script src="/js/app.js"></script>
+  <script src="/vendor/marked/marked.min.js"></script>
+  <script src="/vendor/dompurify/purify.min.js"></script>
+  <script src="/js/help.js"></script>
+  <script>
+    $.get('/api/v1/auth/session').fail(function () {
+      window.location.href = '/login.html';
+    });
+  </script>
+</body>
+</html>

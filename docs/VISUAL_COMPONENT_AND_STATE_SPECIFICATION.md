@@ -54,6 +54,27 @@ All confirmation, text-input, and blocking-error dialogs use the vendored SweetA
 Dialogs follow the page's `data-bs-theme` (dark default) and use the brand tokens from
 `docs/BOOTSTRAP_COLORS.md`.
 
+## Help Popovers
+
+Contextual help (`data-help="<topic-id>"` on an `.icon-btn`, `fa-circle-question`;
+markup in `docs/DESIGN_ICON_SYSTEM.md` §8) opens a real `bootstrap.Popover`, not a
+custom widget — Tabler's own `.popover`/`.popover-header`/`.popover-body` styling
+applies automatically in both themes.
+
+- **Default** — plain `.icon-btn`, same borderless treatment as any other icon action.
+- **Hover/focus** — standard `.icon-btn` tint/focus ring; no popover yet (trigger is
+  `focus click`, not `hover`, so a mouse pass-over never pops content unintentionally).
+- **Open** — popover positioned `auto` (flips to stay on-screen), bold title, one-line
+  summary, and a "Read more" link into `/help.html#<topic-id>`.
+- **Dismiss** — outside click, `Escape`, or re-clicking the trigger (Bootstrap's own
+  focus/click-trigger behavior; no custom close button).
+- **Content unavailable** — if a topic's Markdown fails to fetch, the popover shows
+  "Help content unavailable." rather than staying empty or throwing — this should
+  only ever happen for a misconfigured `data-help` id, never for a shipped topic.
+- `project.html`'s single tab-bar help icon updates its title/aria-label/`data-help`
+  on every tab switch and hides any currently-open instance of itself, so a stale
+  popover from the previous tab can never linger into the new one.
+
 ## Terminal Components
 
 ```text

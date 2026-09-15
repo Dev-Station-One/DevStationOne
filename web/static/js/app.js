@@ -69,7 +69,8 @@
         + '<span class="nav-link-title">' + it.label + '</span></a></li>';
     }).join('');
     var systemItems = [
-      { id: 'activity', href: '/activity.html', icon: 'fa-list-check', label: 'Activity' }
+      { id: 'activity', href: '/activity.html', icon: 'fa-list-check', label: 'Activity' },
+      { id: 'help', href: '/help.html', icon: 'fa-circle-question', label: 'Help' }
     ];
     var systemLinks = systemItems.map(function (it) {
       return '<li class="nav-item' + (it.id === active ? ' active' : '') + '">'
@@ -283,8 +284,23 @@
     loadUnreadCount();
   }
 
+  // Global "?" shortcut to the help manual (docs/WEB_UI_DESIGN.md). Skipped
+  // while typing anywhere text entry could use a literal "?" — form fields,
+  // CodeMirror, xterm — and with any modifier held.
+  function initHelpShortcut() {
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey) return;
+      var t = e.target;
+      var tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      if (t && t.closest && (t.closest('.xterm') || t.closest('.CodeMirror'))) return;
+      window.location.href = '/help.html';
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     renderSidebar();
+    initHelpShortcut();
     var btn = document.getElementById('theme-toggle');
     if (btn) {
       btn.addEventListener('click', function () {

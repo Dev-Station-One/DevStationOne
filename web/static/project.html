@@ -230,16 +230,19 @@
               </div>
             </div>
 
-            <ul class="nav nav-tabs mb-3 app-tabs" id="app-tabs" role="tablist">
-              <li class="nav-item" role="presentation"><a class="nav-link active" href="#" data-app-tab="overview" data-bs-target="#overview-panel" role="tab" aria-controls="overview-panel" aria-selected="true"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="terminal" data-bs-target="#terminal-panel" role="tab" aria-controls="terminal-panel" aria-selected="false"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="files" data-bs-target="#files-panel" role="tab" aria-controls="files-panel" aria-selected="false"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="code" data-bs-target="#code-panel" role="tab" aria-controls="code-panel" aria-selected="false"><i class="fa-solid fa-code" aria-hidden="true"></i> Code</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="databases" data-bs-target="#databases-panel" role="tab" aria-controls="databases-panel" aria-selected="false"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="services" data-bs-target="#services-panel" role="tab" aria-controls="services-panel" aria-selected="false"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
-              <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="journal" data-bs-target="#journal-panel" role="tab" aria-controls="journal-panel" aria-selected="false"><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</a></li>
-            </ul>
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <ul class="nav nav-tabs app-tabs flex-wrap" id="app-tabs" role="tablist">
+                <li class="nav-item" role="presentation"><a class="nav-link active" href="#" data-app-tab="overview" data-bs-target="#overview-panel" role="tab" aria-controls="overview-panel" aria-selected="true"><i class="fa-solid fa-circle-info" aria-hidden="true"></i> Overview</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="terminal" data-bs-target="#terminal-panel" role="tab" aria-controls="terminal-panel" aria-selected="false"><i class="fa-solid fa-terminal" aria-hidden="true"></i> Terminal</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="files" data-bs-target="#files-panel" role="tab" aria-controls="files-panel" aria-selected="false"><i class="fa-solid fa-folder" aria-hidden="true"></i> Files</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="code" data-bs-target="#code-panel" role="tab" aria-controls="code-panel" aria-selected="false"><i class="fa-solid fa-code" aria-hidden="true"></i> Code</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="git" data-bs-target="#git-panel" role="tab" aria-controls="git-panel" aria-selected="false"><i class="fa-solid fa-code-branch" aria-hidden="true"></i> Source Control</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="databases" data-bs-target="#databases-panel" role="tab" aria-controls="databases-panel" aria-selected="false"><i class="fa-solid fa-database" aria-hidden="true"></i> Databases</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="services" data-bs-target="#services-panel" role="tab" aria-controls="services-panel" aria-selected="false"><i class="fa-solid fa-gears" aria-hidden="true"></i> Services</a></li>
+                <li class="nav-item" role="presentation"><a class="nav-link" href="#" data-app-tab="journal" data-bs-target="#journal-panel" role="tab" aria-controls="journal-panel" aria-selected="false"><i class="fa-solid fa-book" aria-hidden="true"></i> Journal</a></li>
+              </ul>
+              <button type="button" id="app-help-btn" class="icon-btn ms-2 flex-shrink-0" data-help="project-overview" aria-label="Help: Project overview" title="Help: Project overview"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
+            </div>
 
             <div class="tab-content" id="app-tab-content">
 
@@ -787,6 +790,7 @@
   <script src="/js/filetree.js"></script>
   <script src="/js/editor.js"></script>
   <script src="/js/termcards.js"></script>
+  <script src="/js/help.js"></script>
   <script>
     function escapeHtml(s) {
       return $('<div>').text(s).html();
@@ -3193,9 +3197,27 @@
       bootstrap.Tab.getOrCreateInstance(this).show();
     });
 
+    // Tab -> help topic id (docs/help/*.md); the single #app-help-btn icon
+    // always describes whichever tab is currently open.
+    var HELP_TOPIC_BY_TAB = {
+      overview: 'project-overview', terminal: 'terminal', files: 'files',
+      code: 'code', git: 'source-control', databases: 'databases',
+      services: 'services', journal: 'journal'
+    };
+    if (window.DSHelp) window.DSHelp.ensureTopics(Object.keys(HELP_TOPIC_BY_TAB).map(function (k) { return HELP_TOPIC_BY_TAB[k]; }));
+
     $('[data-app-tab]').on('shown.bs.tab', function () {
       var tab = $(this).data('app-tab');
       $('#overview-actions').prop('hidden', tab !== 'overview');
+      var helpBtn = document.getElementById('app-help-btn');
+      if (helpBtn) {
+        var topic = HELP_TOPIC_BY_TAB[tab] || 'project-overview';
+        helpBtn.setAttribute('data-help', topic);
+        helpBtn.setAttribute('aria-label', 'Help: ' + $(this).text().trim());
+        helpBtn.title = helpBtn.getAttribute('aria-label');
+        var inst = bootstrap.Popover.getInstance(helpBtn);
+        if (inst) inst.hide();
+      }
       if (tab === 'terminal') {
         if (!sessionsLoaded) {
           sessionsLoaded = true;

@@ -22,7 +22,10 @@
     <div class="page-wrapper">
       <div class="page-body">
         <div class="container-fluid">
-          <h2 class="mb-3"><i class="fa-solid fa-server" aria-hidden="true"></i> Runtimes</h2>
+          <div class="d-flex align-items-center justify-content-between mb-3">
+            <h2 class="mb-0"><i class="fa-solid fa-server" aria-hidden="true"></i> Runtimes</h2>
+            <button type="button" class="icon-btn" data-help="runtimes" aria-label="Help: Runtimes" title="Help: Runtimes"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>
+          </div>
 
           <div class="card mb-4">
             <div class="card-body">
@@ -78,6 +81,20 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
   <script src="/js/app.js"></script>
   <script src="/vendor/sweetalert2/sweetalert2.min.js"></script>
   <script src="/js/dialogs.js"></script>
+  <script src="/vendor/bootstrap/js/popover/index.js"></script>
+  <script src="/vendor/bootstrap/js/popover/data.js"></script>
+  <script src="/vendor/bootstrap/js/popover/manipulator.js"></script>
+  <script src="/vendor/bootstrap/js/popover/event-handler.js"></script>
+  <script src="/vendor/bootstrap/js/popover/selector-engine.js"></script>
+  <script src="/vendor/bootstrap/js/popover/config.js"></script>
+  <script src="/vendor/bootstrap/js/popover/sanitizer.js"></script>
+  <script src="/vendor/bootstrap/js/popover/template-factory.js"></script>
+  <script src="/vendor/bootstrap/js/popover/base-component.js"></script>
+  <script src="/vendor/bootstrap/js/popover/popper.min.js"></script>
+  <script>window['@popperjs/core'] = window.Popper;</script>
+  <script src="/vendor/bootstrap/js/popover/tooltip.js"></script>
+  <script src="/vendor/bootstrap/js/popover/popover.js"></script>
+  <script src="/js/help.js"></script>
   <script>
     function escapeHtml(s) {
       return $('<div>').text(s).html();

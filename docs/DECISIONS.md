@@ -1179,3 +1179,86 @@ bug was reachable from Go tests (this logic is JS-only, per the repo's
 existing no-JS-test-harness precedent) — both were only found by driving a
 real PTY (a live `read -p` menu and a real `git diff`) through the actual
 running dev instance in a browser.
+
+## ADR-036 — Help system: static Markdown + frontmatter content, real `bootstrap.Popover` via a second minimal vendor drop (not the full bundle), single dynamic icon on `project.html`
+
+**Decision.** The new help system (`docs/WEB_UI_DESIGN.md`'s Help system
+section, `docs/DESIGN_ICON_SYSTEM.md` §8) is pure static content: Markdown
+files with flat (non-YAML) frontmatter under `web/static/help/*.md`,
+enumerated by `web/static/help/index.json` (an id list only — titles and
+summaries stay single-sourced in each file's own frontmatter, never
+duplicated into the index). `web/static/js/help.js` fetches/caches/renders
+both the contextual popovers (every page) and the full manual page
+(`web/static/help.html`). No DB table, no API endpoint, no OpenAPI change.
+
+Contextual popovers use the real Bootstrap `Popover` component, not a
+hand-rolled widget — but not via the existing `bootstrap.bundle.min.js`
+either. That bundle is already known to collide with `tabler.min.js`'s own
+copy of Bootstrap's JS wherever both are loaded on the same page: ADR-034
+records this happening for real, once, on `project.html` (the shared
+notifications-bell/account dropdowns broke because both libraries bind
+`[data-bs-toggle="dropdown"]`'s Data API). Every page except `project.html`
+only loads `tabler.min.js`; loading the full bundle there too — just to get
+`Popover` — would reintroduce that exact bug on all six of them. Instead,
+those six pages (plus `help.html`) load only Bootstrap 5.3.8's Popover
+dependency chain as separate vendored files
+(`web/static/vendor/bootstrap/js/popover/`: `index.js`, `data.js`,
+`manipulator.js`, `event-handler.js`, `selector-engine.js`, `config.js`,
+`sanitizer.js`, `template-factory.js`, `base-component.js`, `popper.min.js`
+— `@popperjs/core@2.11.8`, the exact peer version Bootstrap 5.3.8 declares
+— then `tooltip.js`, `popover.js`, in that dependency order), fetched from
+the same official npm/jsDelivr distribution the existing bundle came from.
+These files never touch `dropdown.js`, so they can never re-trigger the
+ADR-034 collision. `project.html` needs none of this — its existing
+`bootstrap.bundle.min.js` (loaded for `Tab`) already includes `Popover`.
+`web/static/js/help.js`'s `popoverCtor()` picks `window.bootstrap.Popover`
+when present, else falls back to the flat `window.Popover` global the
+individual files expose.
+
+One wrinkle: these are UMD builds meant for bundler/AMD consumption as much
+as plain `<script>` tags, and `tooltip.js`'s UMD wrapper looks up its
+Popper dependency as the literal global key `globalThis["@popperjs/core"]`,
+not `globalThis.Popper` (which is what Popper's own UMD build actually
+sets). A one-line shim — `window['@popperjs/core'] = window.Popper;` —
+bridges this before `tooltip.js` loads. It's the only non-"single vendored
+file" JS dependency in the codebase; everywhere else remains one file, one
+`<script src>`, matching existing convention as closely as the collision
+constraint allowed.
+
+`project.html` itself gets one dynamic help icon (`#app-help-btn`, next to
+the workspace tab bar) rather than eight static ones inside each panel:
+its `data-help`/`aria-label`/`title` are rewritten by the existing
+`shown.bs.tab` handler to match whichever tab is active, and any
+currently-open popover instance on it is hidden on tab switch so a stale
+topic can never linger visibly into the new tab. This required exposing a
+tiny `window.DSHelp.ensureTopics(ids)` from `help.js`, called once with all
+eight tab topics up front — `initHelpIcons()` only scans `data-help` values
+present in the DOM *at page load* (just the initially-active tab's topic),
+so without this the popover would show "Help content unavailable." for
+every tab reached by switching rather than a fresh page load (caught by
+manual Playwright smoke-testing before the automated test was written).
+
+**Why not the hand-rolled popover drafted first.** A plain fixed-position
+`<div>` (mirroring the notifications-bell's own `positionPanel()`
+technique) was the initial approach specifically to dodge the
+dual-Bootstrap risk with zero new vendoring. Rejected on request in favor
+of the real component for better focus/ARIA/Escape/outside-click/
+positioning behavior — worth the extra vendored files once the Popover-only
+dependency chain was confirmed not to touch Dropdown.
+
+**Consequence.** Fourteen new script tags per non-`project.html` page (the
+Popover chain + one shim line) — verbose, but consistent with this
+codebase's existing style of individual `<script src>` tags with no bundler
+(`project.html` alone already lists ~20). Adding a help topic touches no
+code: a new `.md` file with frontmatter, its id appended to `index.json`,
+and a `data-help="<id>"` icon or `[text](/help.html#<id>)` link wherever it
+should be reachable from.
+
+Verified: `gofmt`/`go vet`/full `go test -p 1 ./...` green; a new
+`TestE2E_HelpSystem` (chromedp) drives a real headless browser through the
+dashboard's help popover, the manual page's default topic render, and the
+search box's filtering; manual Playwright smoke-testing against the
+`devstationone-dev` systemd instance covered the popover open/close, the
+manual page TOC/search, the tab-aware `project.html` icon across a real
+tab switch, and the global `?` shortcut — all with zero browser console
+errors.

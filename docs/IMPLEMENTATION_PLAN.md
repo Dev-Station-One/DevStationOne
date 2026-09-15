@@ -882,6 +882,52 @@ the requirements doc's acceptance criteria (no JS test infra in this repo).
 
 **Status: Complete.** Stages 1–4 done.
 
+## Slice 20 — Help system (contextual popovers + manual page)
+
+**Goal**: a discoverable, real (non-stub) in-app help system — a
+`data-help` icon on every top-level page and project workspace tab opening
+a real `bootstrap.Popover` with a one-line summary and a link into a full
+searchable manual page, plus a global `?` keyboard shortcut and a sidebar
+entry. Pure frontend/static-content slice: no DB table, no API endpoint,
+no OpenAPI/protocol change. Requirements gathered via `/sc:brainstorm`,
+designed via `/sc:design`; full rationale in ADR-036.
+
+**Design**:
+
+- Content: flat-frontmatter Markdown under `web/static/help/*.md` (13
+  topics: dashboard, projects, runtimes, account, activity,
+  project-overview, terminal, files, code, source-control, databases,
+  services, journal), enumerated by `web/static/help/index.json` (id list
+  only — titles/summaries stay single-sourced in each file's frontmatter).
+- `web/static/js/help.js`: fetches/caches/renders content for both contextual
+  popovers (every page) and the manual page. Search is a plain client-side
+  substring match over title/summary/body.
+- Popovers use the real Bootstrap `Popover` component. Six pages that only
+  load `tabler.min.js` get a second, minimal Bootstrap 5.3.8 vendor drop
+  (`web/static/vendor/bootstrap/js/popover/*`, Popover's dependency chain
+  only — never `dropdown.js`) instead of the full `bootstrap.bundle.min.js`,
+  to avoid re-triggering the ADR-034 dual-Bootstrap dropdown collision;
+  `project.html` reuses its existing bundle. `project.html` carries one
+  dynamic help icon (`#app-help-btn`) whose `data-help` follows the active
+  workspace tab rather than eight static per-panel icons.
+- `web/static/help.html`: two-pane manual (TOC + search | rendered
+  content), reusing the `marked.parse()` + `DOMPurify.sanitize()` pattern
+  already used by `project.html`'s file preview.
+- Sidebar "Help" entry and global `?` shortcut (skipped while focus is in
+  a text input, CodeMirror, or xterm) added to the shared `renderSidebar()`
+  in `web/static/js/app.js`.
+
+**Tests**: `TestE2E_HelpSystem` (`internal/api/e2e_test.go`, chromedp) —
+dashboard help popover content, manual page default-topic render and TOC,
+and search-box filtering, against a real headless browser. Manual
+Playwright smoke test against the `devstationone-dev` systemd instance
+covered the popover open/close, the tab-aware `project.html` icon across a
+real tab switch (this is how the "Help content unavailable." cache-priming
+bug fixed in ADR-036 was actually caught), and the `?` shortcut — zero
+console errors throughout.
+
+**Status: Complete.**
+
 ## Future, explicitly not MVP
 
 - Android client
