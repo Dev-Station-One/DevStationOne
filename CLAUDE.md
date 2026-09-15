@@ -335,7 +335,7 @@ logout and reboot):
 - Public: `https://ds1.premadev.com` (external TLS-terminating proxy pointed at the upstream)
 - Binary: `bin/devstationone-server` (gitignored). The service does not rebuild itself — after changing server code run `go build -o bin/devstationone-server ./cmd/devstationone-server && systemctl --user restart devstationone-dev.service`
 - Logs: `journalctl --user -u devstationone-dev.service -f`
-- Seeded dev user: `dev@local.test` — re-create with `echo '<password>' | bin/devstationone-admin --email dev@local.test` if the `users` table is ever empty (the `devstationone-admin` CLI, ADR-019; there is no env-var bootstrap anymore)
+- Seeded dev user: `dev@local.test` — re-create with `bin/devstationone-admin --email dev@local.test` if the `users` table is ever empty (the `devstationone-admin` CLI, ADR-019; there is no env-var bootstrap anymore). It needs the same `DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY` as the server, but those live only in `devstationone-dev.service`'s `Environment=` lines (systemd scopes them to that unit, not your shell) — pull them out first: `set -a; . <(systemctl --user cat devstationone-dev.service | grep '^Environment=' | sed 's/^Environment=//'); set +a` — then `echo '<password>' | bin/devstationone-admin --email dev@local.test`. Same pattern applies to any other devstationone instance deployed this way (docs/DEPLOYMENT.md "systemd (recommended)").
 - Integration tests (`make test`) use a separate test-only Postgres (`make dbtest-postgres-up`, port 55433, ADR-031) and `TRUNCATE ... CASCADE` freely there — they no longer touch the dev instance's database on 55432, so this seeded user survives test runs
 
 ## Definition of Done

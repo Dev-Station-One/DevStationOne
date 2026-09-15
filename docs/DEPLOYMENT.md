@@ -90,6 +90,23 @@ loginctl enable-linger $USER   # survive logout/reboot
 systemctl --user enable --now devstationone-server.service
 ```
 
+Once running this way, `devstationone-admin` (seeding a new admin, or
+resetting a password per "Upgrading"/troubleshooting below) needs the same
+`DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY` as the
+server — but those now live only inside the unit's `Environment=` lines,
+not in your shell (unlike the `install.sh` path, which writes a
+sourceable `server.env` you `source` first — see README.md "Resetting a
+password"). Systemd scopes `Environment=` to that unit's own process tree;
+an interactive SSH/login shell never inherits it. Pull the values out of
+the unit before running the CLI:
+
+```bash
+set -a
+. <(systemctl --user cat devstationone-server.service | grep '^Environment=' | sed 's/^Environment=//')
+set +a
+echo '<password>' | ./devstationone-admin -email admin@example.com
+```
+
 ### Reverse proxy / TLS
 
 The Control Server speaks plain HTTP; terminate TLS at a reverse proxy
