@@ -40,6 +40,12 @@ func sessionUserFromRequest(r *http.Request, db *database.DB) (auth.User, bool) 
 // (docs/DECISIONS.md ADR-047) calls the very same setup/confirm handlers a
 // logged-in user calls from account settings to add a second factor — the
 // only difference is which of these two a request arrives with.
+//
+// The challenge path only accepts PurposeEnroll challenges (ADR-050): the
+// login handler issues one solely when the account has no confirmed factor,
+// so a verification-stage token can never reach enrollment — the attacker
+// with the victim's password cannot re-enroll their own authenticator over
+// the victim's 2FA or mint a session.
 func resolveTwoFactorSubject(r *http.Request, db *database.DB, challengeToken string) (auth.User, bool) {
 	if user, ok := userFromContext(r.Context()); ok {
 		return user, true
@@ -48,7 +54,7 @@ func resolveTwoFactorSubject(r *http.Request, db *database.DB, challengeToken st
 		return user, true
 	}
 	challenge, ok := auth.GetChallenge(challengeToken)
-	if !ok {
+	if !ok || challenge.Purpose != auth.PurposeEnroll {
 		return auth.User{}, false
 	}
 	user, err := auth.GetUserByID(r.Context(), db.Pool, challenge.UserID)
@@ -419,12 +425,12 @@ func webauthnRegisterBeginHandler(db *database.DB, wa *webauthnlib.WebAuthn) htt
 			// Adding another passkey from account settings: no login in
 			// progress to reuse, mint a throwaway token to hold ceremony
 			// state between begin and finish.
-			if token, err = auth.NewChallenge(user.ID, false); err != nil {
+			if token, err = auth.NewChallenge(user.ID, false, auth.PurposeEnroll); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start passkey registration"})
 				return
 			}
 		} else if user2, ok := sessionUserFromRequest(r, db); ok {
-			if token, err = auth.NewChallenge(user2.ID, false); err != nil {
+			if token, err = auth.NewChallenge(user2.ID, false, auth.PurposeEnroll); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start passkey registration"})
 				return
 			}
@@ -569,7 +575,7 @@ func webauthnPasswordlessBeginHandler(wa *webauthnlib.WebAuthn) http.HandlerFunc
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start passkey login"})
 			return
 		}
-		token, err := auth.NewChallenge("", false)
+		token, err := auth.NewChallenge("", false, auth.PurposeVerify)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start passkey login"})
 			return

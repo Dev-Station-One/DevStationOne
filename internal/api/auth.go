@@ -5,7 +5,9 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"devstationone/internal/audit"
@@ -268,7 +270,15 @@ func loginHandler(db *database.DB, turnstileSecretKey string) http.HandlerFunc {
 			return
 		}
 
-		token, err := auth.NewChallenge(user.ID, false)
+		// Purpose matters (ADR-050): an unenrolled account's challenge may
+		// complete enrollment (and thereby the login); an enrolled account's
+		// may only verify an existing factor. resolveTwoFactorSubject
+		// enforces this on the enrollment handlers.
+		purpose := auth.PurposeVerify
+		if !enrolled {
+			purpose = auth.PurposeEnroll
+		}
+		token, err := auth.NewChallenge(user.ID, false, purpose)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
 			return
@@ -369,10 +379,73 @@ func revokeSessionHandler(db *database.DB) http.HandlerFunc {
 	}
 }
 
+// trustedProxyNets holds the parsed DEVSTATIONONE_TRUSTED_PROXIES prefixes;
+// nil (the default) means no proxy is trusted and clientIP always reports
+// the TCP peer address directly. Atomic because SetTrustedProxies is
+// called from tests while other tests' servers are already serving.
+var trustedProxyNets atomic.Pointer[[]netip.Prefix]
+
+// SetTrustedProxies configures the proxies whose X-Forwarded-For headers
+// clientIP trusts (DEVSTATIONONE_TRUSTED_PROXIES): a comma-separated list of
+// IP addresses or CIDR ranges. Invalid entries are ignored (fail-secure: the
+// peer address is used instead); an empty spec restores the default
+// direct-RemoteAddr behavior.
+func SetTrustedProxies(spec string) {
+	var nets []netip.Prefix
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !strings.Contains(part, "/") {
+			if addr, err := netip.ParseAddr(part); err == nil {
+				addr = addr.Unmap()
+				nets = append(nets, netip.PrefixFrom(addr, addr.BitLen()))
+			}
+			continue
+		}
+		if p, err := netip.ParsePrefix(part); err == nil {
+			if a := p.Addr(); a.Is4In6() {
+				p = netip.PrefixFrom(a.Unmap(), p.Bits()-96)
+			}
+			nets = append(nets, p)
+		}
+	}
+	trustedProxyNets.Store(&nets)
+}
+
+// clientIP returns the client IP for rate limiting, audit records, and
+// session rows. By default that is the TCP peer address. Only when the peer
+// itself is a configured trusted proxy (DEVSTATIONONE_TRUSTED_PROXIES) is
+// the leftmost valid X-Forwarded-For entry used instead — a client
+// connecting directly cannot spoof the header.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	if peer, err := netip.ParseAddr(host); err == nil && trustedProxy(peer) {
+		for _, part := range strings.Split(r.Header.Get("X-Forwarded-For"), ",") {
+			if ip, err := netip.ParseAddr(strings.TrimSpace(part)); err == nil {
+				return ip.String()
+			}
+		}
 	}
 	return host
+}
+
+// trustedProxy reports whether peer falls inside a configured trusted-proxy
+// network.
+func trustedProxy(peer netip.Addr) bool {
+	peer = peer.Unmap()
+	nets := trustedProxyNets.Load()
+	if nets == nil {
+		return false
+	}
+	for _, p := range *nets {
+		if p.Contains(peer) {
+			return true
+		}
+	}
+	return false
 }

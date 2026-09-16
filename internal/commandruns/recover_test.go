@@ -3,19 +3,9 @@ package commandruns
 import (
 	"context"
 	"testing"
-	"time"
 
 	"devstationone/internal/sessions"
 )
-
-// markRuntimeOffline simulates a runtime connection death, with last_seen_at
-// backdated so the "offline longer than RecoverOfflineFor" window is
-// testable without sleeping.
-func markRuntimeOffline(t *testing.T, pool interface {
-	Exec(ctx context.Context, sql string, args ...any) (interface{ RowsAffected() int64 }, error)
-}, runtimeID string, offlineFor time.Duration) {
-	t.Helper()
-}
 
 func TestRecoverStale_SessionTerminal(t *testing.T) {
 	pool := testPool(t)

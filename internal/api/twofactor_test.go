@@ -134,6 +134,69 @@ func TestTwoFactor_MandatoryEnrollmentAndMethods(t *testing.T) {
 	}
 }
 
+// TestTwoFactor_VerifyChallengeCannotEnroll is the ADR-050 regression test:
+// a verification-stage challenge token (issued to an already-enrolled
+// account) must be rejected by every enrollment handler — it must never
+// enroll a factor, overwrite an existing one, or mint a session.
+func TestTwoFactor_VerifyChallengeCannotEnroll(t *testing.T) {
+	db := testDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	if _, err := auth.CreateUser(t.Context(), db.Pool, "victim@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	cookie, _ := enrollTOTP(t, router, "victim@example.com", "password123")
+	_ = cookie // the victim's real session; an attacker must not be able to mint one
+
+	// Attacker with the victim's password: password passes, but the
+	// challenge now carries PurposeVerify, not PurposeEnroll.
+	body, _ := json.Marshal(map[string]string{"email": "victim@example.com", "password": "password123"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login: status = %d", rec.Code)
+	}
+	var challenge struct {
+		RequiresTwoFactor bool   `json:"requires_2fa"`
+		ChallengeToken    string `json:"challenge_token"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&challenge); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if !challenge.RequiresTwoFactor || challenge.ChallengeToken == "" {
+		t.Fatalf("expected requires_2fa challenge, got %+v", challenge)
+	}
+
+	for _, endpoint := range []string{
+		"/api/v1/auth/2fa/totp/setup",
+		"/api/v1/auth/2fa/email/enable",
+		"/api/v1/auth/2fa/webauthn/register/begin",
+	} {
+		body, _ := json.Marshal(map[string]string{"challenge_token": challenge.ChallengeToken})
+		req := httptest.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("%s with verify-purpose challenge: status = %d, want 401 (body: %s)", endpoint, rec.Code, rec.Body.String())
+		}
+		if n := len(rec.Result().Cookies()); n != 0 {
+			t.Fatalf("%s with verify-purpose challenge: must not set a session cookie, got %d", endpoint, n)
+		}
+	}
+
+	// A confirm attempt against the verify-purpose challenge must also fail
+	// even with a plausible code, since its setup call was refused.
+	confirmBody, _ := json.Marshal(map[string]string{"challenge_token": challenge.ChallengeToken, "code": "000000"})
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/2fa/totp/confirm", bytes.NewReader(confirmBody))
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("totp/confirm with verify-purpose challenge: status = %d, want 401", rec.Code)
+	}
+}
+
 // TestTwoFactor_AddFactorWhileSignedIn covers the account-settings path of
 // the dual-subject endpoints: with a session cookie and no challenge token,
 // totp/setup, totp/confirm, email/enable, and webauthn/register/begin must

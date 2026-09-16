@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,7 +18,6 @@ func testLogger(t *testing.T) *slog.Logger {
 // fakeEditSender records replies (SendReply) and pushes (SendEnvelope) so
 // tests can observe the edit manager's replies and code.file.changed pushes.
 type fakeEditSender struct {
-	mu        sync.Mutex
 	replies   chan protocol.Envelope
 	pushes    chan protocol.CodeFileChangedPayload
 	heartbeat chan struct{}

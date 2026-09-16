@@ -108,7 +108,7 @@ func dial(ctx context.Context) (*client.Client, string, error) {
 	if host == "" {
 		return nil, "", errors.New("no docker socket found")
 	}
-	c, err := client.New(client.WithHost(host), client.WithAPIVersionNegotiation())
+	c, err := client.New(client.WithHost(host))
 	if err != nil {
 		return nil, "", err
 	}

@@ -205,6 +205,45 @@ func TestPruneKeepsNewestHundred(t *testing.T) {
 	}
 }
 
+// TestPruneDeletesRunSessions is the regression test for pruning: each run
+// owns a terminal_sessions row, and dropping the run must drop that row too
+// — otherwise it grows unbounded and re-enters ListInteractiveForProject
+// once the NOT EXISTS check no longer matches.
+func TestPruneDeletesRunSessions(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	projectID, commandID, userID := seedFixtures(t, pool)
+
+	for i := 0; i < runsPerPage+5; i++ {
+		run, err := Start(ctx, pool, projectID, commandID, "Build", "make build", userID)
+		if err != nil {
+			t.Fatalf("Start[%d]: %v", i, err)
+		}
+		sessionID := seedSession(t, pool, projectID, userID)
+		if err := SetSession(ctx, pool, run.ID, sessionID); err != nil {
+			t.Fatalf("SetSession[%d]: %v", i, err)
+		}
+	}
+
+	_, total, err := ListForProject(ctx, pool, projectID, "", 25, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if total != runsPerPage {
+		t.Fatalf("total = %d, want pruned to %d", total, runsPerPage)
+	}
+
+	var sessionCount int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM terminal_sessions WHERE project_id = $1`, projectID,
+	).Scan(&sessionCount); err != nil {
+		t.Fatalf("session count: %v", err)
+	}
+	if sessionCount != runsPerPage {
+		t.Fatalf("session rows = %d, want pruned to %d alongside the runs", sessionCount, runsPerPage)
+	}
+}
+
 // TestDeletingCommandDeletesItsRuns is the regression test for the cascade
 // delete change: deleting a command must remove its run history too, not
 // orphan it (there is no UI path back to a run once its command's History

@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"bytes"
 	"errors"
 	"sync"
 	"testing"
@@ -32,6 +33,19 @@ func (c *fakeBrowserConn) writeCount() int {
 	return len(c.writes)
 }
 
+// waitForWrites polls until c has n writes (Forward's writer goroutine is
+// asynchronous) or the 1-second deadline expires.
+func waitForWrites(t *testing.T, c *fakeBrowserConn, n int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for c.writeCount() < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("writeCount on %p never reached %d", c, n)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 func TestHub_ForwardToAttached(t *testing.T) {
 	h := NewHub()
 	c := &fakeBrowserConn{}
@@ -39,9 +53,7 @@ func TestHub_ForwardToAttached(t *testing.T) {
 
 	h.Forward("s1", []byte("hello"))
 
-	if got := c.writeCount(); got != 1 {
-		t.Fatalf("writeCount = %d, want 1", got)
-	}
+	waitForWrites(t, c, 1)
 }
 
 func TestHub_ForwardWithNoAttachedViewerDropsButBuffers(t *testing.T) {
@@ -67,9 +79,7 @@ func TestHub_DetachIgnoresStaleConn(t *testing.T) {
 	h.Detach("s1", old) // stale disconnect handler for the old conn
 
 	h.Forward("s1", []byte("x"))
-	if got := newer.writeCount(); got != 1 {
-		t.Fatalf("newer.writeCount = %d, want 1 (stale Detach must not evict it)", got)
-	}
+	waitForWrites(t, newer, 1)
 }
 
 func TestHub_ForceDetachClosesAndRemovesViewer(t *testing.T) {
@@ -170,5 +180,82 @@ func TestHub_DiscardClearsScrollbackAndAttachment(t *testing.T) {
 	h.Attach("s1", fresh)
 	if got := fresh.writeCount(); got != 0 {
 		t.Fatalf("writeCount after Discard+reattach = %d, want 0 (scrollback cleared)", got)
+	}
+}
+
+// blockingBrowserConn never finishes a write: a viewer that stopped reading
+// while keeping its socket open. (The real wsConn's write carries a 5s
+// timeout; the blocking fake exercises the overflow path without it.)
+type blockingBrowserConn struct{}
+
+func (c *blockingBrowserConn) WriteOutput(data []byte) error {
+	select {}
+}
+
+func (c *blockingBrowserConn) Close() {}
+
+// TestHub_QueueFullDetachesWedgedViewer covers ADR-050's head-of-line fix:
+// a viewer that stops reading must be detached by the overflow path instead
+// of stalling Forward, and its scrollback must survive the detach.
+func TestHub_QueueFullDetachesWedgedViewer(t *testing.T) {
+	h := NewHub()
+	wedged := &blockingBrowserConn{}
+	h.Attach("s1", wedged)
+
+	// One frame is parked inside the wedged writer, so overflow needs more
+	// than depth+1 forwards regardless of goroutine scheduling.
+	for i := 0; i < outboundQueueDepth+5; i++ {
+		h.Forward("s1", []byte("x"))
+	}
+
+	deadline := time.Now().Add(time.Second)
+	for h.attachedConn("s1") != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("wedged viewer still attached after queue overflow")
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	// Scrollback survives; a fresh viewer replays it.
+	fresh := &fakeBrowserConn{}
+	h.Attach("s1", fresh)
+	if got := fresh.writeCount(); got != 1 {
+		t.Fatalf("reattach after wedged viewer detached: writeCount = %d, want 1", got)
+	}
+}
+
+func TestHub_CaptureTailCapped(t *testing.T) {
+	h := NewHub()
+	h.RegisterCapture("s1")
+
+	h.Forward("s1", bytes.Repeat([]byte("x"), captureLimit/2))
+	h.Forward("s1", bytes.Repeat([]byte("y"), captureLimit)) // pushes past the cap
+
+	tail := h.TakeCapture("s1")
+	if len(tail) > captureLimit {
+		t.Fatalf("capture len = %d, want <= %d", len(tail), captureLimit)
+	}
+	if !bytes.Equal(tail[len(tail)-len("yyyy"):], []byte("yyyy")) {
+		t.Fatal("capture tail should end with the newest bytes")
+	}
+}
+
+func TestHub_ScrollbackTrimmed(t *testing.T) {
+	h := NewHub()
+	h.Forward("s1", bytes.Repeat([]byte("a"), scrollbackLimit))
+	h.Forward("s1", []byte("END"))
+
+	c := &fakeBrowserConn{}
+	h.Attach("s1", c) // replay is the trimmed tail, exactly scrollbackLimit bytes
+	waitForWrites(t, c, 1)
+
+	c.mu.Lock()
+	replayed := c.writes[0]
+	c.mu.Unlock()
+	if len(replayed) != scrollbackLimit {
+		t.Fatalf("replayed len = %d, want %d", len(replayed), scrollbackLimit)
+	}
+	if !bytes.HasSuffix(replayed, []byte("END")) {
+		t.Fatal("replayed tail should end with the newest bytes")
 	}
 }

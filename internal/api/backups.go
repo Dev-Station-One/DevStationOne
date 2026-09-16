@@ -102,11 +102,23 @@ func toScheduleResponse(s backups.Schedule) scheduleResponse {
 	}
 }
 
-// backupCommand issues a backup.command RPC and decodes its result, writing
-// done/failed. The HTTP response already went out with state=running; the UI
-// re-fetches the list.
+// backupWatchTimeout bounds the background goroutine watching a running
+// backup job. A legitimate backup finishes well inside it; only a lost
+// runtime reply (the status poll never reaching done/failed, the runtime
+// never disconnecting) can hit it — the watch then marks the row failed
+// instead of leaking the goroutine and row forever.
+const backupWatchTimeout = 24 * time.Hour
+
+// watchBackupJob tails one backup job's state until it leaves running,
+// persisting each transition. The HTTP response already went out with
+// state=running; the UI re-fetches the list.
 func watchBackupJob(db *database.DB, conn runtimes.Conn, rowID, jobID string) {
-	state, size, jobErr := backups.AwaitJob(context.Background(), conn, jobID)
+	ctx, cancel := context.WithTimeout(context.Background(), backupWatchTimeout)
+	defer cancel()
+	state, size, jobErr := backups.AwaitJob(ctx, conn, jobID)
+	if state == "" && ctx.Err() != nil {
+		state, jobErr = "failed", "timed out waiting for backup job"
+	}
 	switch state {
 	case "done":
 		_ = backups.SetState(context.Background(), db.Pool, rowID, "done", size, "")

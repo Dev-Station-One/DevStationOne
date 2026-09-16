@@ -11,6 +11,20 @@ import (
 
 const challengeTTL = 5 * time.Minute
 
+// ChallengePurpose distinguishes the two login-gate uses of a challenge
+// (ADR-050): a challenge issued because the account has no second factor
+// yet (and may enroll one to complete the login), versus one issued to
+// verify an already-enrolled factor. Enrollment handlers must reject
+// verify-purpose challenges — otherwise a password-possessing attacker
+// could re-enroll their own authenticator over the victim's 2FA and mint a
+// session from a verification-stage token.
+type ChallengePurpose uint8
+
+const (
+	PurposeVerify ChallengePurpose = iota
+	PurposeEnroll
+)
+
 // LoginChallenge is server-side state for a login that has passed the first
 // factor (password) but not yet the second, or that must first complete
 // mandatory enrollment. Held in-memory only.
@@ -22,6 +36,7 @@ const challengeTTL = 5 * time.Minute
 type LoginChallenge struct {
 	UserID         string
 	TrustRequested bool
+	Purpose        ChallengePurpose
 	WebAuthnData   *webauthnlib.SessionData
 	// EmailCode is the one-time code most recently emailed for this
 	// challenge (empty until /2fa/email/request-code is called).
@@ -51,8 +66,10 @@ func startChallengeSweeper() {
 }
 
 // NewChallenge creates a pending login challenge for userID and returns its
-// opaque token.
-func NewChallenge(userID string, trustRequested bool) (string, error) {
+// opaque token. purpose must reflect what the challenge may be used for at
+// the login gate: PurposeEnroll only when the account has no confirmed
+// factor yet (see api/auth.go's login handler), PurposeVerify otherwise.
+func NewChallenge(userID string, trustRequested bool, purpose ChallengePurpose) (string, error) {
 	challengeOnce.Do(startChallengeSweeper)
 
 	buf := make([]byte, 32)
@@ -62,7 +79,7 @@ func NewChallenge(userID string, trustRequested bool) (string, error) {
 	token := hex.EncodeToString(buf)
 
 	challengeMu.Lock()
-	challengeStore[token] = &LoginChallenge{UserID: userID, TrustRequested: trustRequested, expires: time.Now().Add(challengeTTL)}
+	challengeStore[token] = &LoginChallenge{UserID: userID, TrustRequested: trustRequested, Purpose: purpose, expires: time.Now().Add(challengeTTL)}
 	challengeMu.Unlock()
 	return token, nil
 }

@@ -243,13 +243,28 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 
 	logger.Info("runtime connected", "runtime_id", rt.ID, "name", rt.Name, "hostname", hello.Hostname)
 
+	// Control-plane envelopes are handled off the read loop (ADR-050): the
+	// exit path alone runs four sequential DB round trips, and a slow
+	// commit inside the read loop would stall terminal-frame forwarding
+	// (hub.Forward) for every session of this runtime. One worker per
+	// connection keeps per-session envelope ordering; binary frames stay on
+	// the read loop (they only touch the hub's in-memory fast path).
+	envCh := make(chan protocol.Envelope, 64)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for env := range envCh {
+			handleRuntimeEnvelope(context.Background(), env, db, registry, hub, bus, editorHub, dockerLogsHub, logger, rt.ID)
+		}
+	}()
+
 	for {
 		readCtx, cancelRead := context.WithTimeout(ctx, heartbeatTimeout)
 		msgType, data, err := conn.Read(readCtx)
 		cancelRead()
 		if err != nil {
 			logger.Info("runtime disconnected", "runtime_id", rt.ID, "error", err)
-			return
+			break
 		}
 
 		if msgType == websocket.MessageBinary {
@@ -266,7 +281,46 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 		if wc.tryResolve(env) {
 			continue
 		}
-		handleRuntimeEnvelope(ctx, env, db, registry, hub, bus, editorHub, dockerLogsHub, logger, rt.ID)
+		envCh <- env
+	}
+
+	// Drain the worker before the disconnect sweep so a session.exit that
+	// raced the disconnect is applied first (its DB work uses a Background
+	// context and finishes on its own).
+	close(envCh)
+	<-done
+	sweepDisconnectedRuntime(context.Background(), db, hub, logger, rt.ID)
+}
+
+// sweepDisconnectedRuntime closes out the sessions of a runtime whose
+// connection just ended (ADR-050): a session.exit event that would have
+// arrived during the disconnect window is silently dropped by the runtime
+// (agent/manager.go's send() with no active sender), so those rows would
+// otherwise stay requested/starting/running/detached forever and their Hub
+// state (scrollback, captures, queues) would never be freed. Command-run
+// rows are finalized as failed the same way the exit path would have.
+//
+// A runtime that reconnects with surviving PTYs is the accepted trade-off:
+// its sessions will show failed until they actually exit (recovery for the
+// command-run subset is unchanged).
+func sweepDisconnectedRuntime(ctx context.Context, db *database.DB, hub *sessions.Hub, logger *slog.Logger, runtimeID string) {
+	ids, err := sessions.LiveSessionIDsForRuntime(ctx, db.Pool, runtimeID)
+	if err != nil {
+		logger.Error("runtime disconnect sweep: list sessions failed", "runtime_id", runtimeID, "error", err)
+		return
+	}
+	for _, id := range ids {
+		if err := sessions.MarkFailed(ctx, db.Pool, id, "runtime connection lost"); err != nil {
+			logger.Error("runtime disconnect sweep: mark failed failed", "session_id", id, "error", err)
+			continue
+		}
+		if err := commandruns.FinalizeSession(ctx, db.Pool, id, nil, "runtime connection lost", ""); err != nil {
+			logger.Warn("command run finalize failed", "session_id", id, "error", err)
+		}
+		hub.Discard(id)
+	}
+	if len(ids) > 0 {
+		logger.Warn("runtime disconnected with live sessions; swept", "runtime_id", runtimeID, "count", len(ids))
 	}
 }
 
@@ -363,8 +417,6 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 // and the content is fetched once via a code.command open RPC and then
 // published to every subscriber.
 func handleCodeFileChanged(ctx context.Context, db *database.DB, registry *runtimes.Registry, editorHub *editor.Hub, logger *slog.Logger, runtimeID string, p protocol.CodeFileChangedPayload) {
-	logger.Info("dbg: code.file.changed received", "push", p)
-	logger.Info("dbg: resolve proj for push")
 	proj, err := projects.GetByRuntimeRoot(ctx, db.Pool, runtimeID, p.Root)
 	if err != nil {
 		// No editor subscribers exist for a project the pair doesn't resolve

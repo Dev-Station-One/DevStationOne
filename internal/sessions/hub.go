@@ -23,10 +23,18 @@ type BrowserConn interface {
 }
 
 // captureLimit is how much of one session's output is captured for the
-// Quick Command run history (ADR-045's bounded persistence exception) —
-// the full output, capped at 100 MiB as a safety net; the same cap
-// commandruns.Tail enforces on the stored row.
-const captureLimit = 100 * 1024 * 1024
+// Quick Command run history (ADR-045). Only a tail is persisted
+// (commandruns.Tail), so a 1 MiB tail cap bounds memory without losing
+// anything the run row stores (amended from the original 100 MiB safety
+// net in ADR-050).
+const captureLimit = 1024 * 1024
+
+// outboundQueueDepth bounds the per-session outbound frame queue: Forward
+// (on the runtime read loop) hands frames to the session's writer goroutine
+// without ever blocking on a slow browser (ADR-050). A wedged viewer fills
+// its queue and gets force-detached instead of stalling the runtime
+// connection shared by every session of that runtime.
+const outboundQueueDepth = 64
 
 // Hub routes terminal bytes and open-session results between runtime
 // connections and attached browser connections. It is in-memory and scoped
@@ -43,6 +51,12 @@ type Hub struct {
 	// rides this existing choke point instead of a new protocol message.
 	// Ordinary terminals register nothing and capture zero bytes.
 	captures map[string][]byte
+	// queues holds one bounded outbound frame queue per session with an
+	// attached browser (ADR-050). Forward enqueues without blocking; the
+	// per-session writer goroutine started by Forward does the (up to 5s)
+	// websocket write, so a stalled viewer cannot stall the runtime read
+	// loop or any other session.
+	queues map[string]chan []byte
 }
 
 // NewHub creates an empty Hub.
@@ -54,6 +68,7 @@ func NewHub() *Hub {
 		lastActivity: make(map[string]time.Time),
 		idleNotified: make(map[string]bool),
 		captures:     make(map[string][]byte),
+		queues:       make(map[string]chan []byte),
 	}
 }
 
@@ -132,25 +147,67 @@ func (h *Hub) ForceDetach(sessionID string) {
 // clock and clears any prior idle notification flag.
 func (h *Hub) Forward(sessionID string, data []byte) {
 	h.mu.Lock()
-	buf := append(h.scrollback[sessionID], data...)
-	if len(buf) > scrollbackLimit {
-		buf = buf[len(buf)-scrollbackLimit:]
-	}
-	h.scrollback[sessionID] = buf
+	h.retainTail(h.scrollback, sessionID, data, scrollbackLimit)
 	if _, ok := h.captures[sessionID]; ok {
-		cap := append(h.captures[sessionID], data...)
-		if len(cap) > captureLimit {
-			cap = cap[len(cap)-captureLimit:]
-		}
-		h.captures[sessionID] = cap
+		h.retainTail(h.captures, sessionID, data, captureLimit)
 	}
 	h.lastActivity[sessionID] = time.Now()
 	delete(h.idleNotified, sessionID)
 	c := h.attached[sessionID]
-	h.mu.Unlock()
-	if c != nil {
-		_ = c.WriteOutput(data)
+	q, ok := h.queues[sessionID]
+	if !ok {
+		q = make(chan []byte, outboundQueueDepth)
+		h.queues[sessionID] = q
+		go h.writeLoop(sessionID, q)
 	}
+	h.mu.Unlock()
+
+	if c == nil {
+		return
+	}
+	select {
+	case q <- data:
+	default:
+		// The viewer stopped reading but kept the socket open; its queue is
+		// full, so detach it and drop the frame (its scrollback survives a
+		// reattach). Never block the caller: every session of this runtime
+		// shares one read loop upstream (ADR-050).
+		h.Detach(sessionID, c)
+	}
+}
+
+// retainTail appends data to the per-session tail buffer in place, keeping
+// at most limit bytes without the realloc-and-copy the slice-trim idiom
+// would pay inside the hub's global lock.
+func (h *Hub) retainTail(m map[string][]byte, sessionID string, data []byte, limit int) {
+	buf := append(m[sessionID], data...)
+	if over := len(buf) - limit; over > 0 {
+		copy(buf, buf[over:])
+		buf = buf[:limit]
+	}
+	m[sessionID] = buf
+}
+
+// writeLoop drains a session's outbound queue to whichever browser
+// connection is currently attached, exiting only when Discard closes the
+// queue. A write error detaches the viewer — its socket is gone or wedged.
+func (h *Hub) writeLoop(sessionID string, q chan []byte) {
+	for data := range q {
+		c := h.attachedConn(sessionID)
+		if c == nil {
+			continue
+		}
+		if err := c.WriteOutput(data); err != nil {
+			h.Detach(sessionID, c)
+		}
+	}
+}
+
+// attachedConn returns the session's current viewer, if any.
+func (h *Hub) attachedConn(sessionID string) BrowserConn {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.attached[sessionID]
 }
 
 // RegisterCapture starts buffering sessionID's output tail for the Quick
@@ -193,9 +250,12 @@ func (h *Hub) IdleSessions(threshold time.Duration) []string {
 }
 
 // Discard drops a session's in-memory state once it is closed/exited and
-// will never be attached to again.
+// will never be attached to again. It also terminates the session's
+// outbound writer goroutine.
 func (h *Hub) Discard(sessionID string) {
 	h.mu.Lock()
+	q := h.queues[sessionID]
+	delete(h.queues, sessionID)
 	delete(h.scrollback, sessionID)
 	delete(h.attached, sessionID)
 	delete(h.pending, sessionID)
@@ -203,4 +263,7 @@ func (h *Hub) Discard(sessionID string) {
 	delete(h.idleNotified, sessionID)
 	delete(h.captures, sessionID)
 	h.mu.Unlock()
+	if q != nil {
+		close(q)
+	}
 }

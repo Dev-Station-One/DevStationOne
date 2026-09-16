@@ -133,7 +133,7 @@ func (m *sessionManager) HandleEnvelope(env protocol.Envelope) {
 			return
 		}
 		m.closeSession(p.SessionID)
-		m.send(protocol.MessageSessionClosed, protocol.SessionClosedPayload{SessionID: p.SessionID})
+		m.send(protocol.MessageSessionClosed, protocol.SessionClosedPayload(p))
 	}
 }
 

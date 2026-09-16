@@ -73,9 +73,37 @@ func Create(ctx context.Context, pool *pgxpool.Pool, projectID, name string, col
 	))
 }
 
-// ListForProject returns a project's sessions, most recently created first.
+// ListForProject returns every session of projectID, newest first.
 func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID string) ([]Session, error) {
 	return list(ctx, pool, ` WHERE project_id = $1`, projectID)
+}
+
+// LiveSessionIDsForRuntime returns the ids of the runtime's sessions still
+// in a pre-terminal state (requested/starting/running/detached) — the sweep
+// source when a runtime connection drops (ADR-050): an exit event that
+// arrives during the disconnect window would otherwise leave its row
+// stuck in that state forever, since agent/manager drops messages while
+// sender is nil.
+func LiveSessionIDsForRuntime(ctx context.Context, pool *pgxpool.Pool, runtimeID string) ([]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT terminal_sessions.id FROM terminal_sessions
+		JOIN projects ON projects.id = terminal_sessions.project_id
+		WHERE projects.runtime_id = $1 AND terminal_sessions.status IN ($2, $3, $4, $5)
+	`, runtimeID, StatusRequested, StatusStarting, StatusRunning, StatusDetached)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
 }
 
 // ListInteractiveForProject is ListForProject minus command-run sessions

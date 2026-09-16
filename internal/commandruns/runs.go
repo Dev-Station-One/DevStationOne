@@ -80,9 +80,22 @@ func Start(ctx context.Context, pool *pgxpool.Pool, projectID, commandID, name, 
 		return Run{}, err
 	}
 	// History is for self-audit, not forever-storage: keep the newest 100.
+	// One statement deletes both the pruned runs and their terminal_sessions
+	// rows (each run owns one, created by the run handler) — atomic, and the
+	// keep guard below stops a session still referenced by a surviving run
+	// from being dropped with the prune.
 	_, _ = pool.Exec(ctx, `
-		DELETE FROM command_runs WHERE project_id = $1 AND id NOT IN
-			(SELECT id FROM command_runs WHERE project_id = $1 ORDER BY started_at DESC, id DESC LIMIT 100)`,
+		WITH keep AS (
+			SELECT id, session_id FROM command_runs
+			WHERE project_id = $1 ORDER BY started_at DESC, id DESC LIMIT 100
+		), prune AS (
+			DELETE FROM command_runs
+			WHERE project_id = $1 AND id NOT IN (SELECT id FROM keep)
+			RETURNING session_id
+		)
+		DELETE FROM terminal_sessions
+		WHERE id IN (SELECT session_id FROM prune WHERE session_id IS NOT NULL)
+			AND id NOT IN (SELECT session_id FROM keep WHERE session_id IS NOT NULL)`,
 		projectID)
 	return run, nil
 }

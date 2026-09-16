@@ -486,6 +486,13 @@ func genericQuery(ctx context.Context, db *sql.DB, sqlText string, limit int) (R
 // deliberate exception to that rule in this package is Query's raw SQL
 // text, not this function.
 func buildAndExecCommit(ctx context.Context, db *sql.DB, quotedTable string, edits []RowEdit, quoteIdent func(string) string, placeholder func(int) string) error {
+	// One transaction for the whole batch — a failure partway through must
+	// not leave the earlier edits committed.
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin: %w", err)
+	}
+	defer tx.Rollback() // no-op once Commit succeeds
 	for _, e := range edits {
 		switch e.Op {
 		case "insert":
@@ -500,7 +507,7 @@ func buildAndExecCommit(ctx context.Context, db *sql.DB, quotedTable string, edi
 				n++
 			}
 			q := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)", quotedTable, strings.Join(cols, ", "), strings.Join(phs, ", "))
-			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 				return fmt.Errorf("insert: %w", err)
 			}
 
@@ -522,7 +529,7 @@ func buildAndExecCommit(ctx context.Context, db *sql.DB, quotedTable string, edi
 				n++
 			}
 			q := fmt.Sprintf("UPDATE %s SET %s WHERE %s", quotedTable, strings.Join(sets, ", "), strings.Join(where, " AND "))
-			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 				return fmt.Errorf("update: %w", err)
 			}
 
@@ -539,7 +546,7 @@ func buildAndExecCommit(ctx context.Context, db *sql.DB, quotedTable string, edi
 				n++
 			}
 			q := fmt.Sprintf("DELETE FROM %s WHERE %s", quotedTable, strings.Join(where, " AND "))
-			if _, err := db.ExecContext(ctx, q, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 				return fmt.Errorf("delete: %w", err)
 			}
 
@@ -547,7 +554,7 @@ func buildAndExecCommit(ctx context.Context, db *sql.DB, quotedTable string, edi
 			return fmt.Errorf("unknown row edit op %q", e.Op)
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 // constraintTypeName normalizes information_schema.table_constraints'

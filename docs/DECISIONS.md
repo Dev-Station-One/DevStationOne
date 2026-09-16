@@ -1835,3 +1835,62 @@ SET NULL`) already encoded the right semantics; this ADR generalizes it.
    unblockable by history rows; the cascading identity tables (sessions,
    notifications, 2FA state, `project_editor_state`) keep their existing
    CASCADE rules.
+
+## ADR-050 — Hardening pass: challenge purpose binding, runtime-disconnect reconciliation, per-session outbound queues
+
+The 2026-09-16 full audit (quality, security, performance, architecture)
+found one security hole and a cluster of liveness/memory issues around the
+runtime connection and the terminal Hub. The decisions taken:
+
+1. **Login challenges are purpose-bound.** `LoginChallenge` gained
+   `ChallengePurpose` (`enroll` / `verify`). The login handler issues
+   `enroll` only when the account has no confirmed factor; an enrolled
+   account's challenge is `verify`. `resolveTwoFactorSubject` rejects
+   challenge-token callers whose challenge is not `enroll`, so a
+   password-possessing attacker can no longer reach the enrollment
+   handlers (`totp/setup`, `totp/confirm`, `email/enable`,
+   `webauthn/register/*`) with a verification-stage token — previously
+   they could re-enroll their own authenticator over the victim's 2FA
+   (upsert unconfirms the enrolled secret) or, worst case, complete a
+   login with zero verification via `email/enable`. Regression test:
+   `TestTwoFactor_VerifyChallengeCannotEnroll`.
+   Accepted residue: for an account with zero factors, enrollment
+   still completes a login — inherent to ADR-047's mandatory-enrollment
+   gate, not this ADR's scope.
+2. **Runtime disconnect sweeps that runtime's live sessions.**
+   `handleRuntimeConnection` now ends with a drain of the envelope worker
+   followed by `sweepDisconnectedRuntime`: every `requested/starting/
+   running/detached` session row of that runtime is marked `failed`
+   ("runtime connection lost"), its command-run row (if any) is finalized
+   failed, and its Hub state is discarded. Without this, a `session.exit`
+   lost to the disconnect window (agent/manager drops messages while its
+   sender is nil) left rows stuck non-terminal forever and leaked Hub
+   scrollback/captures. Accepted trade-off: a runtime that reconnects with
+   surviving PTYs will show those sessions as failed until they actually
+   exit; `commandruns.RecoverLoop` semantics are unchanged. Sessions of
+   command runs pruned per ADR-045 now have their `terminal_sessions`
+   rows deleted in the same prune step (previously zombie rows leaked
+   back into `ListInteractiveForProject` once their run row was pruned).
+3. **Terminal output fan-out never blocks the runtime read loop.**
+   `Hub.Forward` now enqueues frames into a bounded per-session queue
+   (depth 64) drained by a per-session writer goroutine; the previous
+   synchronous 5s-timeout write ran inline on the runtime read loop, so
+   one stalled browser tab stalled every session and RPC of that runtime.
+   On queue overflow the wedged viewer is detached (scrollback survives
+   reattach). Scrollback/capture tails are trimmed in place instead of
+   realloc-under-lock. The control-plane envelope handling moved off the
+   read loop onto one worker per connection (ordering preserved); binary
+   frames stay on the read loop (hub fast path only).
+4. **Quick Command capture cap: 100 MiB → 1 MiB (amends ADR-045).**
+   Only `commandruns.Tail` is persisted, so the larger in-memory cap
+   bought nothing but RSS; a runaway command now holds 1 MiB.
+5. **Trusted-proxy client IPs.** `DEVSTATIONONE_TRUSTED_PROXIES`
+   (comma-separated IPs/CIDRs, default empty = unchanged behavior) makes
+   `clientIP` honor `X-Forwarded-For` only from trusted peers, restoring
+   per-attacker rate-limit buckets and real audit IPs behind the TLS
+   proxy. Fail-secure: invalid entries are skipped, not errors.
+6. **Backup job watches are bounded** (24 h): a lost runtime reply can no
+   longer leak the watcher goroutine or pin the row at `running` forever.
+7. **Data-browser commits are atomic.** `buildAndExecCommit` wraps its
+   edit loop in one transaction; a mid-loop failure rolls back all edits
+   instead of leaving a partial write.

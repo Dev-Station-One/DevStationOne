@@ -85,6 +85,9 @@ func run() error {
 	if cfg.DevStatic {
 		staticDir = "web/static"
 	}
+	// X-Forwarded-For is honored only from these proxies (docs/SECURITY.md);
+	// empty = direct deployment, RemoteAddr only.
+	api.SetTrustedProxies(cfg.TrustedProxies)
 	handler, hub, bus, _, registry := api.NewRouter(db, logger, staticDir, cfg.DBEncryptionKey, cfg.TurnstileSiteKey, cfg.TurnstileSecretKey, twoFactorCfg)
 	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
 	go commandruns.RecoverLoop(ctx, db.Pool, hub, logger)

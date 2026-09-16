@@ -26,6 +26,7 @@ type Server struct {
 	SMTPStream         string
 	WebAuthnRPID       string
 	WebAuthnRPOrigin   string
+	TrustedProxies     string
 	DevStatic          bool
 }
 
@@ -55,6 +56,7 @@ func LoadServer() (Server, error) {
 		SMTPStream:         getenv("DEVSTATIONONE_SMTP_STREAM", ""),
 		WebAuthnRPID:       getenv("DEVSTATIONONE_WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPOrigin:   getenv("DEVSTATIONONE_WEBAUTHN_RP_ORIGIN", "http://localhost:8080"),
+		TrustedProxies:     getenv("DEVSTATIONONE_TRUSTED_PROXIES", ""),
 		DevStatic:          getenv("DEVSTATIONONE_DEV_STATIC", "") != "",
 	}
 	if (cfg.TurnstileSiteKey == "") != (cfg.TurnstileSecretKey == "") {
