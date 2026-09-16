@@ -161,6 +161,8 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/unstage", requireSession(db, gitStageHandler(db, registry, "unstage", audit.EventGitUnstaged)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/commit", requireSession(db, gitCommitHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/git/log", requireSession(db, gitLogHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/pull", requireSession(db, gitPullHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/push", requireSession(db, gitPushHandler(db, registry)))
 
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal", requireSession(db, listJournalNotesHandler(db)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal", requireSession(db, createJournalNoteHandler(db)))

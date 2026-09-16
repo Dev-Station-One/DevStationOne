@@ -17,8 +17,14 @@ import (
 	"devstationone/internal/protocol"
 )
 
-// gitCommandTimeout bounds a single git operation.
+// gitCommandTimeout bounds a single local git operation.
 const gitCommandTimeout = 30 * time.Second
+
+// gitNetworkCommandTimeout bounds pull/push, the only git actions that do
+// real network I/O — same split as dockerRPCTimeout vs.
+// dockerComposeRPCTimeout for a fast-local vs. slow-network op on one RPC
+// transport.
+const gitNetworkCommandTimeout = 2 * time.Minute
 
 // gitManager implements the git.command half of connection.Manager: it runs
 // the real git CLI (docs/DECISIONS.md ADR-028 — no shell, argv only, direct
@@ -61,7 +67,11 @@ func (m *gitManager) HandleEnvelope(env protocol.Envelope) {
 }
 
 func (m *gitManager) run(id string, cmd protocol.GitCommandPayload) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
+	timeout := gitCommandTimeout
+	if cmd.Action == "pull" || cmd.Action == "push" {
+		timeout = gitNetworkCommandTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	result, err := executeGit(ctx, cmd)
@@ -90,12 +100,45 @@ func executeGit(ctx context.Context, cmd protocol.GitCommandPayload) (protocol.G
 		// Scoped to Root via a "." pathspec rather than a bare `git status`,
 		// in case Root is a subdirectory of a larger git checkout — without
 		// it, a repo rooted above Root would leak paths/changes outside the
-		// Project's authorized directory into the result.
-		out, err := runGit(ctx, cmd.Root, "", "status", "--porcelain=v2", "-z", "--", ".")
+		// Project's authorized directory into the result. --branch adds the
+		// current branch/upstream/ahead-behind as extra "# ..." header
+		// records ahead of the file records, both NUL-terminated under -z.
+		out, err := runGit(ctx, cmd.Root, "", "status", "--porcelain=v2", "-z", "--branch", "--", ".")
 		if err != nil {
 			return protocol.GitResultPayload{}, err
 		}
-		return protocol.GitResultPayload{Files: parseGitStatus(out)}, nil
+		branch := parseGitBranch(out)
+		branch.HasRemote = hasAnyRemote(ctx, cmd.Root)
+		return protocol.GitResultPayload{Files: parseGitStatus(out), Branch: &branch}, nil
+
+	case "pull":
+		// --no-rebase is explicit rather than trusting the runtime host's
+		// own pull.rebase git config, so behavior (merge, not rebase) is
+		// consistent across dev machines regardless of each user's global
+		// config.
+		if _, err := runGit(ctx, cmd.Root, "", "pull", "--no-rebase"); err != nil {
+			statusOut, statusErr := runGit(ctx, cmd.Root, "", "status", "--porcelain=v2", "-z", "--", ".")
+			if statusErr == nil {
+				if conflicts := unmergedOnly(parseGitStatus(statusOut)); len(conflicts) > 0 {
+					return protocol.GitResultPayload{Conflicts: conflicts}, nil
+				}
+			}
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{}, nil
+
+	case "push":
+		if _, err := runGit(ctx, cmd.Root, "", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); err != nil {
+			// No upstream configured — first push publishes the branch.
+			if _, err := runGit(ctx, cmd.Root, "", "push", "-u", "origin", "HEAD"); err != nil {
+				return protocol.GitResultPayload{}, err
+			}
+			return protocol.GitResultPayload{PushedNewUpstream: true}, nil
+		}
+		if _, err := runGit(ctx, cmd.Root, "", "push"); err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{}, nil
 
 	case "diff":
 		p, err := gitDiffPath(cmd.Path)
@@ -206,7 +249,10 @@ func runGit(ctx context.Context, dir, stdin string, args ...string) (string, err
 // entry ("1 ...") or unmerged entry ("u ...") is one NUL-terminated record
 // ending in its path; a rename/copy entry ("2 ...") ends in its new path the
 // same way, but is followed by one more NUL-terminated record carrying the
-// original path; untracked entries ("? ...") are one record.
+// original path; untracked entries ("? ...") are one record. When --branch
+// was passed, leading "# branch...." header records are present too; the
+// switch below has no case for '#' so they're skipped here and read
+// separately by parseGitBranch.
 func parseGitStatus(out string) []protocol.GitFileStatus {
 	tokens := strings.Split(out, "\x00")
 	var files []protocol.GitFileStatus
@@ -280,4 +326,50 @@ func parseGitLog(out string) []protocol.GitCommitInfo {
 		commits = append(commits, protocol.GitCommitInfo{SHA: f[0], Subject: f[1], Author: f[2], Datetime: when})
 	}
 	return commits
+}
+
+// parseGitBranch reads the "# branch...." header records from a
+// `git status --porcelain=v2 -z --branch` run (see parseGitStatus). Missing
+// upstream/ab lines (no tracking branch set) leave Upstream/Ahead/Behind at
+// their zero values.
+func parseGitBranch(out string) protocol.GitBranchStatus {
+	var b protocol.GitBranchStatus
+	for _, tok := range strings.Split(out, "\x00") {
+		switch {
+		case strings.HasPrefix(tok, "# branch.head "):
+			if head := strings.TrimPrefix(tok, "# branch.head "); head != "(detached)" {
+				b.Name = head
+			}
+		case strings.HasPrefix(tok, "# branch.upstream "):
+			b.Upstream = strings.TrimPrefix(tok, "# branch.upstream ")
+		case strings.HasPrefix(tok, "# branch.ab "):
+			fmt.Sscanf(strings.TrimPrefix(tok, "# branch.ab "), "+%d -%d", &b.Ahead, &b.Behind)
+		}
+	}
+	return b
+}
+
+// hasAnyRemote reports whether the repository has at least one remote
+// configured (`git remote`, no args, one name per line on success).
+func hasAnyRemote(ctx context.Context, dir string) bool {
+	out, err := runGit(ctx, dir, "", "remote")
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
+// unmergedOnly filters a status list down to merge-conflict entries — the
+// seven XY combinations git-status(1) documents for an unmerged path (its
+// "u" porcelain-v2 record type, which parseGitStatus already folds into the
+// same GitFileStatus shape as ordinary changes).
+func unmergedOnly(files []protocol.GitFileStatus) []protocol.GitFileStatus {
+	unmergedXY := map[string]bool{
+		"DD": true, "AU": true, "UD": true, "UA": true,
+		"DU": true, "AA": true, "UU": true,
+	}
+	var conflicts []protocol.GitFileStatus
+	for _, f := range files {
+		if unmergedXY[f.Index+f.Worktree] {
+			conflicts = append(conflicts, f)
+		}
+	}
+	return conflicts
 }

@@ -1293,6 +1293,65 @@ the interactive shell).
 
 **Status: Complete** (2026-09-15).
 
+## Slice 30 — Git pull/push in the Source Control tab (ADR-046)
+
+**Goal**: Pull and Push buttons in the Source Control tab, for the current
+branch only. Requirements via `/sc:brainstorm`; design via `/sc:design`
+(`docs/DESIGN_GIT_PULL_PUSH.md`).
+
+**Design**:
+- *Protocol*: `git.command`'s `action` gains `pull`/`push` (no new payload
+  field — both always act on the current branch's upstream, never a
+  client-supplied remote/branch). `git.result` gains `Branch
+  *GitBranchStatus` (on `status`), `Conflicts []GitFileStatus` (on a
+  conflicted `pull`), `PushedNewUpstream bool` (on `push`).
+- *Runtime* (`internal/agent/git_manager.go`): `status` adds `--branch` to
+  its existing `git status --porcelain=v2 -z` call and parses the new
+  header records (`parseGitBranch`) plus a cheap `git remote` check
+  (`hasAnyRemote`) instead of a second ahead/behind RPC. `pull` runs `git
+  pull --no-rebase`; on failure, re-reads status and treats unmerged (`U`)
+  entries as conflicts (`unmergedOnly`) rather than than string-matching
+  stderr — a real `git.error` still covers every other failure (no remote,
+  auth, network). `push` checks for an upstream first, auto-sets one
+  (`push -u origin HEAD`) if absent; never `--force`. New
+  `gitNetworkCommandTimeout` (2 min) for these two actions vs. 30s for the
+  rest, mirroring the docker RPC/compose split.
+- *Control Server*: `gitPullHandler`/`gitPushHandler` (`internal/api/
+  git.go`), routes `POST git/pull`/`POST git/push`. `git/status`'s HTTP
+  response shape changes from a bare `GitFileStatus[]` array to `{files,
+  branch}` — a breaking change accepted without versioning since the REST
+  API has no external consumers yet. Audit events `git.pulled`/
+  `git.pushed`.
+- *UI* (`web/static/project.html`): Pull/Push buttons plus an ahead/behind
+  badge moved into the Source Control panel's always-visible header row,
+  not inside `#git-body` (which fully hides on a clean tree) — the bug the
+  requirements pass specifically flagged. Disabled with a tooltip when the
+  repo has no remote. A pull conflict renders as an inline alert naming the
+  conflicted paths and pointing at the Terminal tab; no in-browser conflict
+  resolution in this slice.
+- *Security*: ambient auth only (runtime host's own SSH agent/credential
+  helper) — no credential storage, no new secret surface. Remote/branch
+  resolved server/runtime-side, never client-supplied. No `--force` surface
+  at all.
+
+**Tests**: `internal/agent` (`TestExecuteGit_StatusReportsBranch`,
+`TestExecuteGit_PushNoUpstreamSetsOne`, `TestExecuteGit_PushExistingUpstream`,
+`TestExecuteGit_PullFastForward`, `TestExecuteGit_PullConflict` — real repos
+and bare remotes in `t.TempDir()`, real conflicting commits, no mocked
+git), `internal/api` (`TestGitHTTP_PushNewUpstreamThenExisting`,
+`TestGitHTTP_PullCleanAndConflict`, plus the pre-existing status tests
+updated for the `{files, branch}` shape).
+
+**Smoke test**: real dev Control Server + runtime, a throwaway project
+against a real repo with a real bare-repo remote — verified status/branch
+reporting, a real push (including first-push auto-upstream on a fresh
+branch), a real clean pull, and a real merge conflict end to end via the
+REST API and in the browser (Playwright): header buttons stay visible and
+enabled on a clean tree, ahead/behind badge renders, conflict banner and
+per-file "Conflict" rows render correctly.
+
+**Status: Complete** (2026-09-15).
+
 **Addendum (same slice, post-smoke)**: recovery sweep for stuck "running"
 history rows — a runtime that dies mid-run sends no session.exit, so
 `internal/commandruns.RecoverLoop` (30s tick in `cmd/devstationone-server`)

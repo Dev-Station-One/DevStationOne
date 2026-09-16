@@ -221,6 +221,152 @@ func TestExecuteGit_MissingRoot(t *testing.T) {
 	}
 }
 
+func TestExecuteGit_StatusReportsBranch(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "a.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "initial")
+	runSetupGit(t, dir, "branch", "-m", "main")
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "status", Root: dir})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if result.Branch == nil {
+		t.Fatal("status result missing Branch")
+	}
+	if result.Branch.Name != "main" {
+		t.Errorf("branch name = %q, want main", result.Branch.Name)
+	}
+	if result.Branch.Upstream != "" || result.Branch.Ahead != 0 || result.Branch.Behind != 0 {
+		t.Errorf("branch = %+v, want no upstream on a repo with no remote", result.Branch)
+	}
+	if result.Branch.HasRemote {
+		t.Errorf("branch.HasRemote = true, want false on a repo with no remote")
+	}
+}
+
+// initGitRepoWithRemote sets up a local clone tracking a bare "origin",
+// with one initial commit already pushed, for pull/push tests.
+func initGitRepoWithRemote(t *testing.T) (dir, remoteDir string) {
+	t.Helper()
+	remoteDir = t.TempDir()
+	runSetupGit(t, remoteDir, "init", "-q", "--bare")
+
+	dir = t.TempDir()
+	runSetupGit(t, dir, "init", "-q")
+	runSetupGit(t, dir, "config", "user.name", "Test User")
+	runSetupGit(t, dir, "config", "user.email", "test@example.com")
+	runSetupGit(t, dir, "remote", "add", "origin", remoteDir)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "a.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "initial")
+	runSetupGit(t, dir, "push", "-q", "-u", "origin", "HEAD")
+	return dir, remoteDir
+}
+
+func TestExecuteGit_PushNoUpstreamSetsOne(t *testing.T) {
+	dir, remoteDir := initGitRepoWithRemote(t)
+	// A fresh local branch with no upstream configured.
+	runSetupGit(t, dir, "checkout", "-qb", "feature")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "b.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "feature work")
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "push", Root: dir})
+	if err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if !result.PushedNewUpstream {
+		t.Error("PushedNewUpstream = false, want true for a first push")
+	}
+
+	clone := t.TempDir()
+	runSetupGit(t, clone, "clone", "-q", remoteDir, ".")
+	runSetupGit(t, clone, "rev-parse", "origin/feature")
+}
+
+func TestExecuteGit_PushExistingUpstream(t *testing.T) {
+	dir, remoteDir := initGitRepoWithRemote(t)
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "b.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "second")
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "push", Root: dir})
+	if err != nil {
+		t.Fatalf("push: %v", err)
+	}
+	if result.PushedNewUpstream {
+		t.Error("PushedNewUpstream = true, want false for an existing upstream")
+	}
+
+	remoteLog := runSetupGitOutput(t, remoteDir, "log", "-1", "--pretty=%s")
+	if strings.TrimSpace(remoteLog) != "second" {
+		t.Errorf("remote HEAD subject = %q, want %q", remoteLog, "second")
+	}
+}
+
+func TestExecuteGit_PullFastForward(t *testing.T) {
+	dir, remoteDir := initGitRepoWithRemote(t)
+
+	other := t.TempDir()
+	runSetupGit(t, other, "clone", "-q", remoteDir, ".")
+	runSetupGit(t, other, "config", "user.name", "Other User")
+	runSetupGit(t, other, "config", "user.email", "other@example.com")
+	if err := os.WriteFile(filepath.Join(other, "c.txt"), []byte("from other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, other, "add", "c.txt")
+	runSetupGit(t, other, "commit", "-q", "-m", "from other clone")
+	runSetupGit(t, other, "push", "-q")
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "pull", Root: dir})
+	if err != nil {
+		t.Fatalf("pull: %v", err)
+	}
+	if len(result.Conflicts) != 0 {
+		t.Fatalf("pull conflicts = %+v, want none", result.Conflicts)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "c.txt")); err != nil {
+		t.Errorf("c.txt not pulled in: %v", err)
+	}
+}
+
+func TestExecuteGit_PullConflict(t *testing.T) {
+	dir, remoteDir := initGitRepoWithRemote(t)
+
+	other := t.TempDir()
+	runSetupGit(t, other, "clone", "-q", remoteDir, ".")
+	runSetupGit(t, other, "config", "user.name", "Other User")
+	runSetupGit(t, other, "config", "user.email", "other@example.com")
+	if err := os.WriteFile(filepath.Join(other, "a.txt"), []byte("from other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, other, "commit", "-qam", "conflicting change from other clone")
+	runSetupGit(t, other, "push", "-q")
+
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("from local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "commit", "-qam", "conflicting local change")
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "pull", Root: dir})
+	if err != nil {
+		t.Fatalf("pull should surface conflicts, not an error: %v", err)
+	}
+	if len(result.Conflicts) != 1 || result.Conflicts[0].Path != "a.txt" {
+		t.Fatalf("conflicts = %+v, want one entry for a.txt", result.Conflicts)
+	}
+}
+
 func TestExecuteGit_RenameDetected(t *testing.T) {
 	dir := initGitRepo(t)
 	content := strings.Repeat("line of content\n", 20)

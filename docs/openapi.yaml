@@ -2149,7 +2149,7 @@ paths:
           description: The runtime did not respond within the timeout
   /api/v1/projects/{projectID}/git/status:
     get:
-      summary: List changed paths
+      summary: List changed paths and branch tracking state
       description: Every call is a live RPC to the runtime, scoped to the Project's working directory even when it is a subdirectory of a larger git checkout. See docs/API.md "Git".
       tags: [Git]
       operationId: gitStatus
@@ -2163,13 +2163,19 @@ paths:
             type: string
       responses:
         "200":
-          description: The changed paths
+          description: The changed paths and current branch's tracking state
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/GitFileStatus"
+                type: object
+                required: [files, branch]
+                properties:
+                  files:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GitFileStatus"
+                  branch:
+                    $ref: "#/components/schemas/GitBranchStatus"
         "401":
           description: Not authenticated
         "404":
@@ -2389,6 +2395,78 @@ paths:
           description: The project's runtime is not currently connected
         "502":
           description: The runtime's git command failed (e.g. not a git repository)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/pull:
+    post:
+      summary: Pull the current branch's upstream
+      description: Merges (never rebases) the upstream into the current branch. A merge conflict is not an error — the response is 200 with a non-empty `conflicts` array, and the worktree is left conflicted for the user to resolve via the Terminal tab, same as running `git pull` by hand. Authentication is ambient only (the runtime host's own SSH agent/credential helper); DevStationOne stores no git credentials. See docs/API.md "Git".
+      tags: [Git]
+      operationId: gitPull
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pull completed (conflicts is empty on a clean pull)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conflicts]
+                properties:
+                  conflicts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GitFileStatus"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (e.g. no remote configured, auth failure, network error)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/push:
+    post:
+      summary: Push the current branch
+      description: Pushes only the current checked-out branch; never forces. If the branch has no upstream yet, auto-sets one (`push -u origin HEAD`) and reports `pushed_new_upstream`. Authentication is ambient only, same as `git/pull`. See docs/API.md "Git".
+      tags: [Git]
+      operationId: gitPush
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Pushed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pushed_new_upstream]
+                properties:
+                  pushed_new_upstream:
+                    type: boolean
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (e.g. no remote configured, auth failure, network error)
         "504":
           description: The runtime did not respond within the timeout
   /api/v1/projects/{projectID}/journal:
@@ -5488,7 +5566,7 @@ components:
           description: Numeric gid.
     GitFileStatus:
       type: object
-      description: One changed path from a git status call. Not a stored resource — see docs/API.md "Git".
+      description: One changed path from a git status call, or one conflicted path from a git/pull call that resulted in a merge conflict. Not a stored resource — see docs/API.md "Git".
       required: [path, index, worktree]
       properties:
         path:
@@ -5502,6 +5580,24 @@ components:
         worktree:
           type: string
           description: The unstaged-change status code, same vocabulary as index.
+    GitBranchStatus:
+      type: object
+      description: The current branch's upstream tracking state, part of a git/status response. Not a stored resource.
+      required: [name, ahead, behind, has_remote]
+      properties:
+        name:
+          type: string
+          description: Current branch, "" for a detached HEAD.
+        upstream:
+          type: string
+          description: e.g. "origin/main". Absent if the branch has no tracking branch (never pushed, or pushed without setting one).
+        ahead:
+          type: integer
+        behind:
+          type: integer
+        has_remote:
+          type: boolean
+          description: Whether `git remote` reports at least one remote — distinguishes "no upstream yet" (push will set one) from "no remote at all" (pull/push should be disabled in the UI).
     AuditEvent:
       type: object
       description: One recorded audit event (docs/API.md "Audit"). actor_user_id is null for an event with no authenticated actor (e.g. a failed login) or once the referenced user is later deleted; actor_email is captured at event time and stays even then.

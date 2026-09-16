@@ -333,12 +333,14 @@ credential helper are already configured for the runtime's OS user
 
 | Operation | Endpoint |
 |---|---|
-| status | `GET /api/v1/projects/{projectID}/git/status` — changed-path list |
+| status | `GET /api/v1/projects/{projectID}/git/status` — `{"files": [...], "branch": {...}}`, the changed-path list plus the current branch's upstream tracking state (name, upstream, ahead, behind, has_remote) |
 | diff | `GET /api/v1/projects/{projectID}/git/diff?path=&staged=` — unified diff text; `staged=1` diffs the index against HEAD |
 | stage | `POST /api/v1/projects/{projectID}/git/stage` `{"path"}` |
 | unstage | `POST /api/v1/projects/{projectID}/git/unstage` `{"path"}` |
 | commit | `POST /api/v1/projects/{projectID}/git/commit` `{"message"}` — replies `{"commit": "<sha>"}` |
 | log | `GET /api/v1/projects/{projectID}/git/log?limit=` — recent commits (SHA, subject, author, datetime), newest first; feeds the journal commit picker. A repo with no commits yet is a 502 |
+| pull | `POST /api/v1/projects/{projectID}/git/pull` — merges (never rebases) the current branch's upstream; replies `{"conflicts": [...]}`, empty on a clean pull. A merge conflict is a 200 with populated `conflicts`, not an error — the worktree is left conflicted for the user to resolve via the Terminal tab |
+| push | `POST /api/v1/projects/{projectID}/git/push` — pushes the current branch only, never forces; auto-sets upstream on a first push (`push -u origin HEAD`) and replies `{"pushed_new_upstream": bool}` |
 
 `status`/`diff` are scoped to the Project's working directory with a git
 pathspec (`-- .` or the given path) even when it is a subdirectory of a
@@ -347,6 +349,14 @@ Project into the result. Staging/committing content from outside the
 Project's working directory (already staged there by something other than
 DevStationOne, in that same larger-checkout scenario) is a known
 limitation — see ADR-028.
+
+`pull`/`push` authenticate against the remote using whatever SSH
+agent/credential helper is already configured for the runtime's OS user —
+same ambient-auth model as every other git operation here. DevStationOne
+stores no git credentials and introduces no new secret surface for them
+(`docs/DECISIONS.md` ADR-046). The remote is always read from the
+repository's own `git remote` config (`origin` by convention) — there is no
+per-Project remote-URL setting.
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag `Git`).
 

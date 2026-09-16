@@ -1614,3 +1614,44 @@ doesn't serve the self-audit purpose history exists for, so migration
 CASCADE` (and removes any orphaned rows already created under the old
 behavior). Deleting a command is now the same "gone, history and all"
 model as deleting a project.
+
+## ADR-046 — Git pull/push: ambient auth only, merge not rebase, conflict is a result not an error
+
+The Source Control tab's `git.command` RPC (ADR-028) gains `pull` and
+`push`. Four decisions, each chosen to keep the new surface the same shape
+as the existing status/diff/stage/commit actions rather than growing new
+machinery:
+
+1. **No credential storage, ambient auth only.** `runGit` already just
+   execs `git` with `cmd.Dir` set; pull/push inherit whatever SSH
+   agent/credential helper the runtime host's process environment already
+   has, identical to a user running `git pull` by hand there. No encrypted
+   secret, no per-project remote-URL field — the remote comes from the
+   repo's own `git remote` config, same trust boundary `status`/`log`
+   already rely on for repo-local git state.
+2. **`git pull --no-rebase` explicitly**, not left to the runtime host's
+   `pull.rebase` config, so behavior is identical across dev machines
+   regardless of each user's global git config.
+3. **A merge conflict is a successful `git.result` with a `Conflicts`
+   field, not a `git.error`.** `git pull` exits non-zero on both a real
+   conflict and on any other failure (no remote, auth, network); rather
+   than string-matching git's stderr to tell them apart, the runtime
+   re-reads `status` after a failed pull and treats any unmerged (`U`)
+   entries as the conflict list — reusing `parseGitStatus`/`GitFileStatus`
+   instead of a new payload shape. No entries there means the failure was
+   something else, surfaced as an ordinary `git.error`. The worktree is
+   left conflicted for the user to resolve via the Terminal tab; this
+   slice does not add in-browser conflict resolution.
+4. **`push` auto-sets upstream on a branch that has none**
+   (`push -u origin HEAD`), checked via `git rev-parse --abbrev-ref
+   --symbolic-full-name @{u}` first — a first push from a new local branch
+   must not require dropping to the terminal. Never `--force`; that's not
+   exposed by this RPC surface at all.
+
+Also: `git/status`'s HTTP response shape changes from a bare
+`GitFileStatus[]` array to `{files, branch}`, `branch` being ahead/behind
+and upstream state read from the same `git status --porcelain=v2 --branch`
+call rather than a second `git rev-list` RPC. This is a breaking response
+shape change, accepted without a versioned/parallel endpoint because the
+Control Server's REST API has no external consumers yet — only its own
+bundled web UI, updated in the same commit.

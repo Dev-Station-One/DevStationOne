@@ -72,6 +72,8 @@ const (
 	EventGitStaged    = "git.staged"
 	EventGitUnstaged  = "git.unstaged"
 	EventGitCommitted = "git.committed"
+	EventGitPulled    = "git.pulled"
+	EventGitPushed    = "git.pushed"
 
 	EventJournalCreated         = "journal.created"
 	EventJournalUpdated         = "journal.updated"

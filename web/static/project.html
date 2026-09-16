@@ -483,8 +483,14 @@
             <div id="git-panel" class="tab-pane" role="tabpanel" tabindex="0">
               <div class="d-flex justify-content-between align-items-center mb-2">
                 <div id="git-summary" class="text-secondary">—</div>
-                <button id="git-refresh-btn" class="icon-btn" aria-label="Refresh source control" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                <div class="btn-list gap-1 align-items-center">
+                  <span id="git-branch-status" class="text-secondary small"></span>
+                  <button id="git-pull-btn" class="btn btn-sm" disabled>Pull</button>
+                  <button id="git-push-btn" class="btn btn-sm" disabled>Push</button>
+                  <button id="git-refresh-btn" class="icon-btn" aria-label="Refresh source control" title="Refresh"><i class="fa-solid fa-rotate" aria-hidden="true"></i></button>
+                </div>
               </div>
+              <div id="git-pull-error" class="alert alert-danger" hidden></div>
               <div id="git-loading" class="text-secondary">Loading status…</div>
               <div id="git-error" class="alert alert-danger" hidden></div>
               <div id="git-clean" class="card" hidden>
@@ -2550,16 +2556,40 @@
         });
     }
 
+    // Renders branch tracking state and enables/disables Pull/Push.
+    // Called unconditionally from loadGitStatus, before its clean/dirty
+    // early return, so the buttons never go stale on a clean tree (e.g.
+    // right after a commit).
+    function gitRenderBranch(branch) {
+      branch = branch || {};
+      $('#git-pull-btn, #git-push-btn').prop('disabled', !branch.has_remote);
+      $('#git-pull-btn, #git-push-btn').attr('title', branch.has_remote ? '' : 'No remote configured');
+      var label = '';
+      if (branch.has_remote) {
+        if (branch.upstream) {
+          var parts = [];
+          if (branch.ahead) parts.push('↑' + branch.ahead);
+          if (branch.behind) parts.push('↓' + branch.behind);
+          label = parts.join(' ');
+        } else {
+          label = 'no tracking branch';
+        }
+      }
+      $('#git-branch-status').text(label);
+    }
+
     function loadGitStatus() {
       $('#git-error').prop('hidden', true);
       $('#git-loading').prop('hidden', false);
       $('#git-clean').prop('hidden', true);
       $('#git-body').prop('hidden', true);
       $.get('/api/v1/projects/' + projectID + '/git/status')
-        .done(function (files) {
+        .done(function (status) {
+          var files = status.files;
           $('#git-loading').prop('hidden', true);
           $('#git-summary').text(files.length + ' changed path' + (files.length === 1 ? '' : 's'));
           $('#stat-git').text(files.length ? (files.length + ' changed') : 'Clean');
+          gitRenderBranch(status.branch);
           if (!files.length) {
             $('#git-clean').prop('hidden', false);
             gitSelected = null;
@@ -2589,6 +2619,34 @@
     }
 
     $('#git-refresh-btn').on('click', loadGitStatus);
+    $('#git-pull-btn').on('click', function () {
+      var $btn = $(this).prop('disabled', true);
+      $('#git-pull-error').prop('hidden', true);
+      $.post('/api/v1/projects/' + projectID + '/git/pull')
+        .done(function (body) {
+          if (body.conflicts && body.conflicts.length) {
+            var paths = body.conflicts.map(function (f) { return f.path; }).join(', ');
+            $('#git-pull-error').text('Pull conflicts in: ' + paths + '. Resolve via the Terminal tab.').prop('hidden', false);
+          }
+          loadGitStatus();
+        })
+        .fail(function (xhr) {
+          $('#git-pull-error').text((xhr.responseJSON && xhr.responseJSON.error) || 'Pull failed.').prop('hidden', false);
+        })
+        .always(function () { $btn.prop('disabled', false); });
+    });
+    $('#git-push-btn').on('click', function () {
+      var $btn = $(this).prop('disabled', true);
+      $('#git-pull-error').prop('hidden', true);
+      $.post('/api/v1/projects/' + projectID + '/git/push')
+        .done(function () {
+          loadGitStatus();
+        })
+        .fail(function (xhr) {
+          $('#git-pull-error').text((xhr.responseJSON && xhr.responseJSON.error) || 'Push failed.').prop('hidden', false);
+        })
+        .always(function () { $btn.prop('disabled', false); });
+    });
     $('#git-commit-message').on('input', function () {
       $('#git-commit-btn').prop('disabled', $('#git-staged-list').children().length === 0 || !$(this).val().trim());
     });

@@ -14,13 +14,25 @@ import (
 )
 
 // gitRPCTimeout bounds how long a git REST request waits for the runtime to
-// perform the operation and reply.
+// perform a local operation and reply.
 const gitRPCTimeout = 30 * time.Second
+
+// gitNetworkRPCTimeout bounds pull/push, matching
+// internal/agent/git_manager.go's gitNetworkCommandTimeout so the Control
+// Server doesn't time out the HTTP request before the runtime's own longer
+// deadline would.
+const gitNetworkRPCTimeout = 2 * time.Minute
 
 // gitCommand issues a git.command RPC to the project's runtime and decodes
 // its result, writing an appropriate error response on failure.
 func gitCommand(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, cmd protocol.GitCommandPayload) (protocol.GitResultPayload, bool) {
-	ctx, cancel := context.WithTimeout(r.Context(), gitRPCTimeout)
+	return gitCommandTimeout(w, r, conn, cmd, gitRPCTimeout)
+}
+
+// gitCommandTimeout is gitCommand with an explicit RPC timeout, for actions
+// (pull/push) that need longer than the default.
+func gitCommandTimeout(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, cmd protocol.GitCommandPayload, timeout time.Duration) (protocol.GitResultPayload, bool) {
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
 	defer cancel()
 
 	raw, err := conn.SendCommand(ctx, protocol.MessageGitCommand, cmd)
@@ -41,7 +53,8 @@ func gitCommand(w http.ResponseWriter, r *http.Request, conn runtimes.Conn, cmd 
 	return result, true
 }
 
-// gitStatusHandler GET .../git/status — the changed-file list.
+// gitStatusHandler GET .../git/status — the changed-file list plus the
+// current branch's upstream tracking state.
 func gitStatusHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		conn, root, ok := fileRoot(w, r, db, registry)
@@ -55,7 +68,51 @@ func gitStatusHandler(db *database.DB, registry *runtimes.Registry) http.Handler
 		if result.Files == nil {
 			result.Files = []protocol.GitFileStatus{}
 		}
-		writeJSON(w, http.StatusOK, result.Files)
+		if result.Branch == nil {
+			result.Branch = &protocol.GitBranchStatus{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"files": result.Files, "branch": result.Branch})
+	}
+}
+
+// gitPullHandler POST .../git/pull — pulls the current branch's upstream. A
+// merge conflict is not an error: the response is 200 with a non-empty
+// "conflicts" array, matching what running `git pull` by hand would leave
+// behind for the user to resolve via the Terminal tab.
+func gitPullHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		result, ok := gitCommandTimeout(w, r, conn, protocol.GitCommandPayload{Action: "pull", Root: root}, gitNetworkRPCTimeout)
+		if !ok {
+			return
+		}
+		if result.Conflicts == nil {
+			result.Conflicts = []protocol.GitFileStatus{}
+		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventGitPulled, audit.Actor{UserID: user.ID, Email: user.Email}, "git", "", map[string]any{"project_id": r.PathValue("projectID"), "conflicts": len(result.Conflicts)}, clientIP(r))
+		writeJSON(w, http.StatusOK, map[string]any{"conflicts": result.Conflicts})
+	}
+}
+
+// gitPushHandler POST .../git/push — pushes the current branch, auto-setting
+// its upstream (`push -u origin HEAD`) on a first push. Never forces.
+func gitPushHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		result, ok := gitCommandTimeout(w, r, conn, protocol.GitCommandPayload{Action: "push", Root: root}, gitNetworkRPCTimeout)
+		if !ok {
+			return
+		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventGitPushed, audit.Actor{UserID: user.ID, Email: user.Email}, "git", "", map[string]any{"project_id": r.PathValue("projectID")}, clientIP(r))
+		writeJSON(w, http.StatusOK, map[string]bool{"pushed_new_upstream": result.PushedNewUpstream})
 	}
 }
 

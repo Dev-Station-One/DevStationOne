@@ -508,7 +508,7 @@ type FileResultPayload struct {
 // read (status/diff) to it with a git pathspec rather than the whole
 // repository, in case Root is a subdirectory of a larger git checkout.
 type GitCommandPayload struct {
-	// Action is one of: status, diff, stage, unstage, commit, log.
+	// Action is one of: status, diff, stage, unstage, commit, log, pull, push.
 	Action string `json:"action"`
 	Root   string `json:"root"`
 	// Path scopes a "diff"/"stage"/"unstage" request, relative to Root. "" or
@@ -538,9 +538,28 @@ type GitFileStatus struct {
 	Worktree string `json:"worktree"`
 }
 
-// GitResultPayload is the payload of a MessageGitResult envelope. Exactly
-// one of Files, Diff, or Commit is populated, matching the request's Action
-// ("stage"/"unstage" populate none of them — success is the empty result).
+// GitBranchStatus reports the current branch's upstream tracking state, set
+// only on a "status" request's result. Parsed from `git status
+// --porcelain=v2 --branch`'s header lines rather than a separate `git
+// rev-list --left-right --count` call.
+type GitBranchStatus struct {
+	// Name is the current branch, "" for a detached HEAD.
+	Name string `json:"name"`
+	// Upstream is e.g. "origin/main", "" if the branch has no tracking
+	// branch (never pushed, or pushed without -u).
+	Upstream string `json:"upstream,omitempty"`
+	Ahead    int    `json:"ahead"`
+	Behind   int    `json:"behind"`
+	// HasRemote is true if `git remote` reports at least one remote — used
+	// to tell "no upstream yet" (push offers to set one) apart from "no
+	// remote at all" (pull/push should be disabled), which otherwise look
+	// identical from Upstream alone.
+	HasRemote bool `json:"has_remote"`
+}
+
+// GitResultPayload is the payload of a MessageGitResult envelope. Which
+// fields are populated depends on the request's Action ("stage"/"unstage"
+// populate none of them — success is the empty result).
 // GitCommitInfo is one recent commit from a "log" request.
 type GitCommitInfo struct {
 	SHA      string    `json:"sha"`
@@ -550,10 +569,22 @@ type GitCommitInfo struct {
 }
 
 type GitResultPayload struct {
-	Files   []GitFileStatus `json:"files,omitempty"`
-	Diff    string          `json:"diff,omitempty"`
-	Commit  string          `json:"commit,omitempty"`
-	Commits []GitCommitInfo `json:"commits,omitempty"`
+	Files   []GitFileStatus  `json:"files,omitempty"`
+	Branch  *GitBranchStatus `json:"branch,omitempty"`
+	Diff    string           `json:"diff,omitempty"`
+	Commit  string           `json:"commit,omitempty"`
+	Commits []GitCommitInfo  `json:"commits,omitempty"`
+	// PushedNewUpstream is true when a "push" request had no upstream
+	// configured and set one (`push -u origin HEAD`) — lets the UI report
+	// "published this branch" instead of a plain "pushed".
+	PushedNewUpstream bool `json:"pushed_new_upstream,omitempty"`
+	// Conflicts is set by a "pull" request that resulted in a merge
+	// conflict. This is not a git.error: the pull ran, git left the
+	// worktree in a conflicted-but-inspectable state (same as running `git
+	// pull` by hand), and Files/Conflicts are populated from a follow-up
+	// status read instead. A pull that fails for any other reason (no
+	// remote, auth, network) is still a git.error.
+	Conflicts []GitFileStatus `json:"conflicts,omitempty"`
 }
 
 // CodeCommandPayload is the payload of a MessageCodeCommand envelope.

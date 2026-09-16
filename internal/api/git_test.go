@@ -61,6 +61,13 @@ func gitURL(projectID, suffix, query string) string {
 	return u
 }
 
+// gitStatusResponse is the git/status handler's response shape:
+// {"files": [...], "branch": {...}}.
+type gitStatusResponse struct {
+	Files  []protocol.GitFileStatus  `json:"files"`
+	Branch *protocol.GitBranchStatus `json:"branch"`
+}
+
 func TestGitHTTP_StatusReflectsWorkingTree(t *testing.T) {
 	router, cookie, projectID, dir, _ := gitTestSetup(t)
 
@@ -68,23 +75,26 @@ func TestGitHTTP_StatusReflectsWorkingTree(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status: %d, body = %s", rec.Code, rec.Body.String())
 	}
-	var files []protocol.GitFileStatus
-	if err := json.NewDecoder(rec.Body).Decode(&files); err != nil {
+	var status gitStatusResponse
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(files) != 0 {
-		t.Fatalf("empty repo status = %+v, want none", files)
+	if len(status.Files) != 0 {
+		t.Fatalf("empty repo status = %+v, want none", status.Files)
+	}
+	if status.Branch == nil || status.Branch.Name != "master" && status.Branch.Name != "main" {
+		t.Fatalf("branch = %+v, want current branch name", status.Branch)
 	}
 
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	rec = gitReq(t, router, cookie, http.MethodGet, gitURL(projectID, "/status", ""), nil)
-	if err := json.NewDecoder(rec.Body).Decode(&files); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&status); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(files) != 1 || files[0].Path != "a.txt" || files[0].Index != "?" || files[0].Worktree != "?" {
-		t.Fatalf("status after untracked add = %+v", files)
+	if len(status.Files) != 1 || status.Files[0].Path != "a.txt" || status.Files[0].Index != "?" || status.Files[0].Worktree != "?" {
+		t.Fatalf("status after untracked add = %+v", status.Files)
 	}
 }
 
@@ -123,11 +133,11 @@ func TestGitHTTP_StageUnstageCommit(t *testing.T) {
 		t.Fatalf("stage: %d, body = %s", rec.Code, rec.Body.String())
 	}
 
-	var files []protocol.GitFileStatus
+	var status gitStatusResponse
 	rec = gitReq(t, router, cookie, http.MethodGet, gitURL(projectID, "/status", ""), nil)
-	json.NewDecoder(rec.Body).Decode(&files)
-	if len(files) != 1 || files[0].Index != "A" {
-		t.Fatalf("status after stage = %+v, want staged A entry", files)
+	json.NewDecoder(rec.Body).Decode(&status)
+	if len(status.Files) != 1 || status.Files[0].Index != "A" {
+		t.Fatalf("status after stage = %+v, want staged A entry", status.Files)
 	}
 
 	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/unstage", ""), []byte(`{"path":"a.txt"}`))
@@ -135,9 +145,9 @@ func TestGitHTTP_StageUnstageCommit(t *testing.T) {
 		t.Fatalf("unstage: %d, body = %s", rec.Code, rec.Body.String())
 	}
 	rec = gitReq(t, router, cookie, http.MethodGet, gitURL(projectID, "/status", ""), nil)
-	json.NewDecoder(rec.Body).Decode(&files)
-	if len(files) != 1 || files[0].Index != "?" {
-		t.Fatalf("status after unstage = %+v, want untracked entry", files)
+	json.NewDecoder(rec.Body).Decode(&status)
+	if len(status.Files) != 1 || status.Files[0].Index != "?" {
+		t.Fatalf("status after unstage = %+v, want untracked entry", status.Files)
 	}
 
 	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/stage", ""), []byte(`{"path":"a.txt"}`))
@@ -199,6 +209,129 @@ func TestGitHTTP_TraversalRejected(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("stage traversal: status = %d, want 400", rec.Code)
 	}
+}
+
+// gitTestSetupWithRemote is gitTestSetup with an "origin" bare remote and
+// one commit already pushed, for pull/push HTTP tests.
+func gitTestSetupWithRemote(t *testing.T) (router http.Handler, adminCookie *http.Cookie, projectID, dir, remoteDir string) {
+	t.Helper()
+	router, adminCookie, projectID, dir, _ = gitTestSetup(t)
+	remoteDir = t.TempDir()
+	runGitSetup(t, remoteDir, "init", "-q", "--bare")
+	runGitSetup(t, dir, "remote", "add", "origin", remoteDir)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, dir, "add", "a.txt")
+	runGitSetup(t, dir, "commit", "-q", "-m", "initial")
+	runGitSetup(t, dir, "push", "-q", "-u", "origin", "HEAD")
+	return router, adminCookie, projectID, dir, remoteDir
+}
+
+func TestGitHTTP_PushNewUpstreamThenExisting(t *testing.T) {
+	router, cookie, projectID, dir, remoteDir := gitTestSetupWithRemote(t)
+	runGitSetup(t, dir, "checkout", "-qb", "feature")
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, dir, "add", "b.txt")
+	runGitSetup(t, dir, "commit", "-q", "-m", "feature work")
+
+	rec := gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/push", ""), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("push: %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var body map[string]bool
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !body["pushed_new_upstream"] {
+		t.Error("pushed_new_upstream = false, want true for a first push")
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "c.txt"), []byte("more\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, dir, "add", "c.txt")
+	runGitSetup(t, dir, "commit", "-q", "-m", "more work")
+
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/push", ""), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("second push: %d, body = %s", rec.Code, rec.Body.String())
+	}
+	json.NewDecoder(rec.Body).Decode(&body)
+	if body["pushed_new_upstream"] {
+		t.Error("pushed_new_upstream = true, want false for an existing upstream")
+	}
+
+	remoteLog := runGitSetupOutput(t, remoteDir, "log", "-1", "--pretty=%s", "feature")
+	if strings.TrimSpace(remoteLog) != "more work" {
+		t.Errorf("remote feature HEAD subject = %q", remoteLog)
+	}
+}
+
+func TestGitHTTP_PullCleanAndConflict(t *testing.T) {
+	router, cookie, projectID, dir, remoteDir := gitTestSetupWithRemote(t)
+
+	other := t.TempDir()
+	runGitSetup(t, other, "clone", "-q", remoteDir, ".")
+	runGitSetup(t, other, "config", "user.name", "Other User")
+	runGitSetup(t, other, "config", "user.email", "other@example.com")
+	if err := os.WriteFile(filepath.Join(other, "d.txt"), []byte("from other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, other, "add", "d.txt")
+	runGitSetup(t, other, "commit", "-q", "-m", "from other clone")
+	runGitSetup(t, other, "push", "-q")
+
+	rec := gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/pull", ""), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("pull: %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var pullBody struct {
+		Conflicts []protocol.GitFileStatus `json:"conflicts"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&pullBody); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(pullBody.Conflicts) != 0 {
+		t.Fatalf("clean pull conflicts = %+v, want none", pullBody.Conflicts)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "d.txt")); err != nil {
+		t.Errorf("d.txt not pulled in: %v", err)
+	}
+
+	if err := os.WriteFile(filepath.Join(other, "a.txt"), []byte("from other\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, other, "commit", "-qam", "conflicting change from other")
+	runGitSetup(t, other, "push", "-q")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("from local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, dir, "commit", "-qam", "conflicting local change")
+
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/pull", ""), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("conflicting pull: %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&pullBody); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(pullBody.Conflicts) != 1 || pullBody.Conflicts[0].Path != "a.txt" {
+		t.Fatalf("conflicts = %+v, want one entry for a.txt", pullBody.Conflicts)
+	}
+}
+
+func runGitSetupOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return string(out)
 }
 
 func TestGitHTTP_OwnershipEnforced(t *testing.T) {

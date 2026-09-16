@@ -122,6 +122,81 @@ graph, (d) merge/rebase/stash UI. Slice boundaries to be finalized at
 - Staging, committing, and pushing from the panel lands the commit on the
   actual remote, authenticated via the runtime's own git identity/keys.
 
+### 4.1 Pull/Push (next slice, brainstorm pass 2026-09-15)
+
+Scoped down from full phase (b): pull and push only, on the current branch.
+Branch switch, fetch-only, and remote management stay out of this slice.
+
+**Functional requirements:**
+- Two new endpoints/RPCs, following the existing `git/status`, `git/diff`,
+  `git/stage`, `git/commit` pattern (`internal/api/git.go`,
+  `internal/agent/git_manager.go`, `protocol.GitCommandPayload`): `git/pull`,
+  `git/push`.
+- Push targets the current checked-out branch only. No `--force`.
+- If the current branch has no upstream, push auto-sets it
+  (`git push -u origin HEAD` equivalent) — a first push from a new local
+  branch must not require the terminal.
+- Remote is read from the repo's own `git remote` config (default `origin`),
+  same as `git log`/`git status` already trust repo-local git state. No new
+  Project field for remote URL.
+- Pull is fast-forward or merge as git's default resolves it. On conflict:
+  fail loud, return the conflicted file list, do not auto-merge or abort
+  automatically — user resolves via the Terminal tab (existing PTY, same
+  working directory).
+- Status response gains ahead/behind counts vs. upstream (`git rev-list
+  --left-right --count <upstream>...HEAD` or equivalent), so the UI can show
+  `↑2 ↓3` before the user clicks.
+- If the repo has no remotes at all, Pull/Push render disabled with a
+  tooltip explaining why, rather than being hidden.
+
+**UI requirements (`web/static/project.html`):**
+- Pull/Push buttons go in the always-visible header row next to the existing
+  Refresh icon-button (`#git-summary` / line ~484-487) — **not** inside
+  `#git-body`, which fully hides whenever `git/status` reports zero changed
+  files (`loadGitStatus`, line ~2553-2589). Buttons and ahead/behind counts
+  must stay visible on a clean tree, including immediately after a commit.
+- Result/error reporting reuses the existing alert pattern already used for
+  commit errors (`#git-commit-error`) and status-load errors (`#git-error`).
+
+**Authentication:** ambient only — the runtime's own SSH agent / git
+credential helper on the dev machine. No credential storage, no encryption,
+no new secret surface. Matches `docs/SECURITY.md` and the parent section's
+existing "uses the runtime's existing local git config" decision. If the
+machine has no working auth for the remote, pull/push fails with git's own
+error surfaced to the UI — same failure a user would see running git by hand
+there.
+
+**Security requirements:**
+- Same containment rule as the parent section: repo path resolved
+  server-side from the Project's authoritative working directory, never
+  client-supplied.
+- Push/pull are high-impact runtime operations per `CLAUDE.md` §Security —
+  authorize server-side, do not trust a client-supplied branch or remote
+  name for anything beyond display.
+
+**Acceptance criteria:**
+- A repo with an upstream ahead/behind the remote shows correct counts in
+  the header without requiring a click.
+- Pull on a clean fast-forward succeeds and refreshes status/diff.
+- Pull that would conflict fails loud and lists conflicted files; no partial
+  auto-merge is left in a silent state.
+- Push on a branch with no upstream succeeds and creates the remote branch,
+  set to track, in one click.
+- Pull/Push buttons remain visible and correctly enabled/disabled
+  immediately after a commit empties the changed-file list.
+- A repo with no remotes shows both buttons disabled with an explanatory
+  tooltip, not hidden.
+
+**Open questions for `/sc:design`:**
+- Exact ahead/behind data source: extend `git/status` response, or a
+  separate lightweight endpoint polled alongside it?
+- Conflict-list shape returned by `git/pull` — reuse the `git/status`
+  file-entry format, or a dedicated conflict payload?
+- Timeout/cancellation behavior for a pull/push that hangs on a stalled
+  network (existing `runGit` uses `exec.CommandContext`, so a context
+  deadline is available, but the current git ops are local and fast; pull/push
+  are the first git ops with real network I/O in this feature).
+
 ## Deferred features (not explored this pass)
 
 - Database backup/restore

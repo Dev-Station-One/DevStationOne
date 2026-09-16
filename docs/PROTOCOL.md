@@ -359,38 +359,61 @@ Slice 16 adds three message types, reusing the Slice 5 correlated
 request/response machinery unchanged:
 
 - `git.command` (server→runtime): `{action, root, path, staged, message, limit}`.
-  `action` is one of `status`, `diff`, `stage`, `unstage`, `commit`, `log`.
-  `log` runs `git log --max-count=<limit>` (limit defaults to 50, capped at
-  100; Slice 18's journal commit picker) and replies `git.result` with
-  `commits: [{sha, subject, author, datetime}]`, newest first. `root`
-  is the Project's working directory, filled by the Control Server — never
-  accepted from a client (same rule as `file.command`). `path` scopes
-  `diff`/`stage`/`unstage`, root-relative, validated with the same
-  `filesystem.Clean` rule as file paths on both sides. `staged` selects
-  `git diff --cached` instead of the working-tree-vs-index diff. `message`
-  is a commit message, sent runtime-side over `git commit -F -`'s stdin
-  rather than as a process argument (never logged, `docs/SECURITY.md`).
-- `git.result` (runtime→server): exactly one of `{files}`, `{diff}`,
-  `{commit}` populated, matching the action (`stage`/`unstage` populate
-  none of them — success is the empty result).
+  `action` is one of `status`, `diff`, `stage`, `unstage`, `commit`, `log`,
+  `pull`, `push` (`pull`/`push` added by the Source Control tab: git
+  pull/push slice, ADR-046). `log` runs `git log --max-count=<limit>`
+  (limit defaults to 50, capped at 100; Slice 18's journal commit picker)
+  and replies `git.result` with `commits: [{sha, subject, author,
+  datetime}]`, newest first. `root` is the Project's working directory,
+  filled by the Control Server — never accepted from a client (same rule
+  as `file.command`). `path` scopes `diff`/`stage`/`unstage`,
+  root-relative, validated with the same `filesystem.Clean` rule as file
+  paths on both sides. `staged` selects `git diff --cached` instead of the
+  working-tree-vs-index diff. `message` is a commit message, sent
+  runtime-side over `git commit -F -`'s stdin rather than as a process
+  argument (never logged, `docs/SECURITY.md`). `pull`/`push` take no
+  extra field — they always act on the current branch's upstream (or
+  `origin`/`HEAD` for a first push), never a client-supplied remote or
+  branch name (ADR-046).
+- `git.result` (runtime→server): populated fields depend on the action —
+  `{files, branch}` for `status` (`branch` added by ADR-046, see below),
+  `{diff}`, `{commit}`, `{commits}`, `{conflicts}` for a `pull` that hit a
+  merge conflict (empty/absent on a clean pull), `{pushed_new_upstream}`
+  for `push` (`stage`/`unstage`/a clean `pull` populate none of them —
+  success is the empty result).
 - `git.error` (runtime→server): `{error}` — the same payload shape as
-  `service.error`.
+  `service.error`. A `pull` that fails for a reason other than a merge
+  conflict (no remote, auth failure, network error) replies `git.error`
+  like any other action; a merge conflict itself is **not** a `git.error`
+  (ADR-046) — it's a `git.result` with `conflicts` populated.
 
 Runtime-side, `internal/agent/git_manager.go` runs the real `git` CLI as a
 direct child process (`os/exec`, argv only, no shell) with `cmd.Dir` set to
 `root` — not a Go git library; see `docs/DECISIONS.md` ADR-028 for why.
-`status` runs `git status --porcelain=v2 -z -- .` and parses the NUL-
-delimited porcelain v2 records into `[]GitFileStatus{path, orig_path,
+`status` runs `git status --porcelain=v2 -z --branch -- .` and parses the
+NUL-delimited porcelain v2 records into `[]GitFileStatus{path, orig_path,
 index, worktree}` (git-status(1) "Porcelain Format Version 2" — a
 rename/copy record is followed by one extra NUL-terminated record carrying
-the original path). `diff` runs `git diff` (or `git diff --cached` when
-`staged`), optionally scoped to `path`, and returns its raw stdout
+the original path) plus the leading `--branch` header records
+(`# branch.head`, `# branch.upstream`, `# branch.ab +<ahead> -<behind>`,
+also NUL-terminated under `-z`) into `GitBranchStatus{name, upstream,
+ahead, behind, has_remote}` — `has_remote` from a separate cheap `git
+remote` call, since an absent `branch.upstream` line means either "no
+remote at all" or "remote exists but this branch was never pushed", which
+otherwise look identical. `diff` runs `git diff` (or `git diff --cached`
+when `staged`), optionally scoped to `path`, and returns its raw stdout
 verbatim — no parsing, the browser renders the unified diff text as-is.
 `stage`/`unstage` run `git add --` / `git reset --` (not `git restore
 --staged`, which refuses to run in a repo with no commits yet — `git
 reset --` handles that case via an implicit empty tree). `commit` runs
 `git commit -F -` followed by `git rev-parse HEAD` to report the new
-commit's SHA (`git commit`'s own stdout isn't machine-parseable).
+commit's SHA (`git commit`'s own stdout isn't machine-parseable). `pull`
+runs `git pull --no-rebase`; on failure it re-reads `status` and treats any
+unmerged (`U`) entries as the conflict list (ADR-046) rather than
+string-matching git's stderr. `push` checks for an upstream first
+(`git rev-parse --abbrev-ref --symbolic-full-name @{u}`); none configured
+runs `git push -u origin HEAD` and reports `pushed_new_upstream: true`,
+otherwise a plain `git push` — never `--force`.
 
 Containment: `status` and `diff` (when no `path` is given) pass a `.`
 pathspec (`-- .`) rather than running a bare `git status`/`git diff`, so a
@@ -399,7 +422,14 @@ still only sees changes under its own root — without it, `git` would walk
 up to the enclosing `.git` and report the whole outer repository. `stage`/
 `unstage`/`commit` don't need the same treatment: every path they touch is
 already root-relative and `filesystem.Clean`-validated, so they can't name
-anything outside `root`.
+anything outside `root`. `pull`/`push` need no path containment at all —
+they take no path input.
+
+Timeout: `pull`/`push` are the only git actions with real network I/O, so
+they get a longer RPC deadline than the rest — `gitNetworkCommandTimeout`
+(runtime, 2 minutes) / `gitNetworkRPCTimeout` (Control Server, matching) vs.
+`gitCommandTimeout`/`gitRPCTimeout` (30s) for the local-only actions, same
+split as `dockerRPCTimeout` vs. `dockerComposeRPCTimeout`.
 
 ## Implementation (Code tab): editor commands
 
