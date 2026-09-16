@@ -18,6 +18,13 @@ type Server struct {
 	IdleNotifySeconds  int
 	TurnstileSiteKey   string
 	TurnstileSecretKey string
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPFrom           string
+	WebAuthnRPID       string
+	WebAuthnRPOrigin   string
 }
 
 // Runtime holds configuration for the devstationone-runtime binary.
@@ -38,9 +45,19 @@ func LoadServer() (Server, error) {
 		IdleNotifySeconds:  getenvInt("DEVSTATIONONE_IDLE_NOTIFY_SECONDS", 120),
 		TurnstileSiteKey:   getenv("DEVSTATIONONE_TURNSTILE_SITE_KEY", ""),
 		TurnstileSecretKey: getenv("DEVSTATIONONE_TURNSTILE_SECRET_KEY", ""),
+		SMTPHost:           getenv("DEVSTATIONONE_SMTP_HOST", ""),
+		SMTPPort:           getenvInt("DEVSTATIONONE_SMTP_PORT", 587),
+		SMTPUsername:       getenv("DEVSTATIONONE_SMTP_USERNAME", ""),
+		SMTPPassword:       getenv("DEVSTATIONONE_SMTP_PASSWORD", ""),
+		SMTPFrom:           getenv("DEVSTATIONONE_SMTP_FROM", ""),
+		WebAuthnRPID:       getenv("DEVSTATIONONE_WEBAUTHN_RP_ID", "localhost"),
+		WebAuthnRPOrigin:   getenv("DEVSTATIONONE_WEBAUTHN_RP_ORIGIN", "http://localhost:8080"),
 	}
 	if (cfg.TurnstileSiteKey == "") != (cfg.TurnstileSecretKey == "") {
 		return Server{}, fmt.Errorf("DEVSTATIONONE_TURNSTILE_SITE_KEY and DEVSTATIONONE_TURNSTILE_SECRET_KEY must both be set, or both unset")
+	}
+	if cfg.SMTPHost == "" && (cfg.SMTPUsername != "" || cfg.SMTPPassword != "" || cfg.SMTPFrom != "") {
+		return Server{}, fmt.Errorf("DEVSTATIONONE_SMTP_HOST is required when other DEVSTATIONONE_SMTP_* values are set")
 	}
 	keyB64 := os.Getenv("DEVSTATIONONE_DB_ENCRYPTION_KEY")
 	if keyB64 == "" {

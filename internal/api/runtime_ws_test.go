@@ -8,17 +8,76 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/pquerna/otp/totp"
 
 	"devstationone/internal/auth"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 )
+
+// loginAsHTTP is loginAs's equivalent for a real net/http.Client talking to
+// an httptest.Server (cookies flow through client's jar rather than being
+// read off a ResponseRecorder). Only handles first-time enrollment, like
+// loginAs.
+func loginAsHTTP(t *testing.T, client *http.Client, serverURL, email, password string) {
+	t.Helper()
+	loginBody, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	resp, err := client.Post(serverURL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginBody))
+	if err != nil {
+		t.Fatalf("login %s: %v", email, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("login %s: status = %d", email, resp.StatusCode)
+	}
+	var challenge struct {
+		RequiresEnrollment bool   `json:"requires_enrollment"`
+		ChallengeToken     string `json:"challenge_token"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&challenge); err != nil {
+		t.Fatalf("decode login response %s: %v", email, err)
+	}
+	if !challenge.RequiresEnrollment {
+		return
+	}
+
+	setupBody, _ := json.Marshal(map[string]string{"challenge_token": challenge.ChallengeToken})
+	setupResp, err := client.Post(serverURL+"/api/v1/auth/2fa/totp/setup", "application/json", bytes.NewReader(setupBody))
+	if err != nil {
+		t.Fatalf("totp setup %s: %v", email, err)
+	}
+	defer setupResp.Body.Close()
+	var setup struct {
+		OTPAuthURL string `json:"otpauth_url"`
+	}
+	if err := json.NewDecoder(setupResp.Body).Decode(&setup); err != nil {
+		t.Fatalf("decode totp setup %s: %v", email, err)
+	}
+	parsed, err := url.Parse(setup.OTPAuthURL)
+	if err != nil {
+		t.Fatalf("parse otpauth url %s: %v", email, err)
+	}
+	code, err := totp.GenerateCode(parsed.Query().Get("secret"), time.Now())
+	if err != nil {
+		t.Fatalf("generate totp code %s: %v", email, err)
+	}
+	confirmBody, _ := json.Marshal(map[string]string{"challenge_token": challenge.ChallengeToken, "code": code})
+	confirmResp, err := client.Post(serverURL+"/api/v1/auth/2fa/totp/confirm", "application/json", bytes.NewReader(confirmBody))
+	if err != nil {
+		t.Fatalf("totp confirm %s: %v", email, err)
+	}
+	defer confirmResp.Body.Close()
+	if confirmResp.StatusCode != http.StatusOK {
+		t.Fatalf("totp confirm %s: status = %d", email, confirmResp.StatusCode)
+	}
+}
 
 func wsURLFor(httpURL string) string {
 	return "ws" + strings.TrimPrefix(httpURL, "http") + "/api/v1/runtimes/connect"
@@ -79,7 +138,7 @@ func TestRuntimeWS_ConnectHeartbeatRevoke(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
 	server := httptest.NewServer(router)
 	defer server.Close()
 	wsURL := wsURLFor(server.URL)
@@ -119,12 +178,7 @@ func TestRuntimeWS_ConnectHeartbeatRevoke(t *testing.T) {
 	// Revoke via the admin HTTP API while the runtime is connected.
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	loginBody, _ := json.Marshal(map[string]string{"email": "admin@example.com", "password": "password123"})
-	loginResp, err := client.Post(server.URL+"/api/v1/auth/login", "application/json", bytes.NewReader(loginBody))
-	if err != nil {
-		t.Fatalf("admin login: %v", err)
-	}
-	loginResp.Body.Close()
+	loginAsHTTP(t, client, server.URL, "admin@example.com", "password123")
 
 	revokeResp, err := client.Post(server.URL+"/api/v1/runtimes/"+rt.ID+"/revoke", "application/json", nil)
 	if err != nil {

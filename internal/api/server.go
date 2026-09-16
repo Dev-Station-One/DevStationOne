@@ -9,13 +9,27 @@ import (
 	"golang.org/x/time/rate"
 
 	"devstationone/internal/audit"
+	"devstationone/internal/auth"
 	"devstationone/internal/database"
 	"devstationone/internal/editor"
 	"devstationone/internal/events"
+	"devstationone/internal/mail"
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
 )
+
+// TwoFactorConfig bundles the mandatory-2FA/passkey settings NewRouter needs
+// (docs/DECISIONS.md ADR-047): SMTP for email-OTP/recovery mail, and the
+// WebAuthn relying-party identity. A zero value disables email delivery
+// (mail.Config.Enabled() is false) but WebAuthn still works against
+// localhost defaults (see auth.NewWebAuthn), matching how tests exercise
+// the router without a real mail server or public origin.
+type TwoFactorConfig struct {
+	SMTP             mail.Config
+	WebAuthnRPID     string
+	WebAuthnRPOrigin string
+}
 
 // NewRouter builds the top-level HTTP handler for the Control Server. It
 // also returns the Hub, Bus, editor Hub and runtime Registry it constructed
@@ -24,13 +38,18 @@ import (
 // without a second, disconnected instance.
 // dbEncryptionKey decrypts stored database connection credentials
 // (docs/SECURITY.md) — see internal/dbconnections.
-func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte, turnstileSiteKey, turnstileSecretKey string) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub, *runtimes.Registry) {
+func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte, turnstileSiteKey, turnstileSecretKey string, twoFactorCfg TwoFactorConfig) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub, *runtimes.Registry) {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
 	hub := sessions.NewHub()
 	bus := events.NewBus()
 	editorHub := editor.NewHub()
 	dockerLogsHub := newDockerLogsHub()
+
+	wa, err := auth.NewWebAuthn(twoFactorCfg.WebAuthnRPID, twoFactorCfg.WebAuthnRPOrigin)
+	if err != nil {
+		logger.Error("webauthn: failed to initialize relying party, passkey endpoints will fail", "error", err)
+	}
 
 	// Per-IP rate limits (docs/SECURITY.md). One limiter instance per
 	// server process (not a package-level var): each Control Server, and
@@ -57,6 +76,33 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("PUT /api/v1/auth/preferences", requireSession(db, updatePreferencesHandler(db)))
 	mux.HandleFunc("GET /api/v1/auth/sessions", requireSession(db, listSessionsHandler(db)))
 	mux.HandleFunc("DELETE /api/v1/auth/sessions/{sessionID}", requireSession(db, revokeSessionHandler(db)))
+
+	// Mandatory 2FA + passkeys (docs/DECISIONS.md ADR-047). The setup/confirm
+	// handlers below work both from an authenticated session (adding a
+	// factor from account settings) and, with no session, from the
+	// mandatory-enrollment gate driven by /auth/login's challenge_token —
+	// see resolveTwoFactorSubject.
+	mux.HandleFunc("GET /api/v1/auth/2fa/methods", requireSession(db, twoFactorMethodsHandler(db)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/totp/setup", totpSetupHandler(db, dbEncryptionKey))
+	mux.HandleFunc("POST /api/v1/auth/2fa/totp/confirm", totpConfirmHandler(db, dbEncryptionKey))
+	mux.HandleFunc("DELETE /api/v1/auth/2fa/totp", requireSession(db, totpDeleteHandler(db)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/email/enable", emailEnableHandler(db))
+	mux.HandleFunc("DELETE /api/v1/auth/2fa/email", requireSession(db, emailDisableHandler(db)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/email/request-code", rateLimit(loginRateLimit, emailRequestCodeHandler(db, twoFactorCfg.SMTP)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/backup-codes/regenerate", requireSession(db, backupCodesRegenerateHandler(db)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/verify", rateLimit(loginRateLimit, twoFactorVerifyHandler(db, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/register/begin", webauthnRegisterBeginHandler(db, wa))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/register/finish", webauthnRegisterFinishHandler(db, wa))
+	mux.HandleFunc("DELETE /api/v1/auth/2fa/webauthn/{credentialID}", requireSession(db, webauthnCredentialDeleteHandler(db)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/login/begin", webauthnLoginBeginHandler(db, wa))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/login/finish", rateLimit(loginRateLimit, webauthnLoginFinishHandler(db, wa)))
+	mux.HandleFunc("POST /api/v1/auth/webauthn/passwordless/begin", webauthnPasswordlessBeginHandler(wa))
+	mux.HandleFunc("POST /api/v1/auth/webauthn/passwordless/finish", rateLimit(loginRateLimit, webauthnPasswordlessFinishHandler(db, wa)))
+	mux.HandleFunc("GET /api/v1/auth/trusted-devices", requireSession(db, trustedDevicesListHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/auth/trusted-devices/{deviceID}", requireSession(db, trustedDeviceDeleteHandler(db)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/recover/request", rateLimit(loginRateLimit, recoveryRequestHandler(db, twoFactorCfg.SMTP)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/recover/confirm", rateLimit(loginRateLimit, recoveryConfirmHandler(db)))
+	mux.HandleFunc("POST /api/v1/users/{userID}/2fa/reset", requireAdmin(db, adminResetTwoFactorHandler(db)))
 
 	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
 	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))

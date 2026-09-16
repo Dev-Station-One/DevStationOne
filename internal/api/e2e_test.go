@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
@@ -11,11 +12,56 @@ import (
 	"time"
 
 	"github.com/chromedp/chromedp"
+	"github.com/pquerna/otp/totp"
 
 	"devstationone/internal/auth"
 	"devstationone/internal/projects"
 	"devstationone/internal/runtimes"
 )
+
+// e2eLoginWithEnrollment drives a real browser through login.html's
+// password form and mandatory-2FA enrollment (docs/DECISIONS.md ADR-047)
+// via the TOTP path, ending on the dashboard. Every account starts
+// unenrolled, so every E2E test logging in needs this instead of a bare
+// form submit.
+func e2eLoginWithEnrollment(t *testing.T, ctx context.Context, serverURL, email, password string) {
+	t.Helper()
+	if err := chromedp.Run(ctx,
+		chromedp.Navigate(serverURL+"/login.html"),
+		chromedp.WaitVisible(`#email`, chromedp.ByID),
+		chromedp.SendKeys(`#email`, email, chromedp.ByID),
+		chromedp.SendKeys(`#password`, password, chromedp.ByID),
+		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#enroll-panel`, chromedp.ByID),
+		chromedp.Click(`#enroll-choice-totp`, chromedp.ByID),
+		chromedp.WaitVisible(`#enroll-totp-uri`, chromedp.ByID),
+	); err != nil {
+		t.Fatalf("login + start totp enrollment: %v", err)
+	}
+
+	var otpauthURL string
+	if err := chromedp.Run(ctx, chromedp.Text(`#enroll-totp-uri`, &otpauthURL, chromedp.ByID)); err != nil {
+		t.Fatalf("read otpauth url: %v", err)
+	}
+	parsed, err := url.Parse(otpauthURL)
+	if err != nil {
+		t.Fatalf("parse otpauth url: %v", err)
+	}
+	code, err := totp.GenerateCode(parsed.Query().Get("secret"), time.Now())
+	if err != nil {
+		t.Fatalf("generate totp code: %v", err)
+	}
+
+	if err := chromedp.Run(ctx,
+		chromedp.SendKeys(`#enroll-totp-code`, code, chromedp.ByID),
+		chromedp.Click(`#enroll-totp-confirm`, chromedp.ByID),
+		chromedp.WaitVisible(`#backup-codes-panel`, chromedp.ByID),
+		chromedp.Click(`#backup-codes-continue`, chromedp.ByID),
+		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
+	); err != nil {
+		t.Fatalf("confirm totp enrollment: %v", err)
+	}
+}
 
 // findChromium locates a real Chrome/Chromium binary for the browser E2E
 // test, skipping (not failing) when none is installed — this test proves
@@ -56,7 +102,7 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "")
+	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "", TwoFactorConfig{})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
@@ -80,18 +126,12 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 	// /api/v1/runtimes and found none (this test registers no runtime),
 	// concrete proof the dashboard rendered and ran, not just that some
 	// navigation happened.
+	e2eLoginWithEnrollment(t, ctx, server.URL, "e2e-admin@example.com", "password123")
+
 	var pageTitle string
-	err := chromedp.Run(ctx,
-		chromedp.Navigate(server.URL+"/login.html"),
-		chromedp.WaitVisible(`#email`, chromedp.ByID),
-		chromedp.SendKeys(`#email`, "e2e-admin@example.com", chromedp.ByID),
-		chromedp.SendKeys(`#password`, "password123", chromedp.ByID),
-		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
-		chromedp.Title(&pageTitle),
-	)
+	err := chromedp.Run(ctx, chromedp.Title(&pageTitle))
 	if err != nil {
-		t.Fatalf("login flow: %v", err)
+		t.Fatalf("read page title: %v", err)
 	}
 	if pageTitle != "DevStationOne" {
 		t.Fatalf("post-login page title = %q, want Dashboard page (login must have failed)", pageTitle)
@@ -144,7 +184,7 @@ func TestE2E_HelpSystem(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "")
+	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "", TwoFactorConfig{})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
@@ -162,22 +202,12 @@ func TestE2E_HelpSystem(t *testing.T) {
 	ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelTimeout()
 
-	err := chromedp.Run(ctx,
-		chromedp.Navigate(server.URL+"/login.html"),
-		chromedp.WaitVisible(`#email`, chromedp.ByID),
-		chromedp.SendKeys(`#email`, "e2e-help@example.com", chromedp.ByID),
-		chromedp.SendKeys(`#password`, "password123", chromedp.ByID),
-		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
-	)
-	if err != nil {
-		t.Fatalf("login flow: %v", err)
-	}
+	e2eLoginWithEnrollment(t, ctx, server.URL, "e2e-help@example.com", "password123")
 
 	// The dashboard's own "Help: Dashboard" icon opens a real
 	// bootstrap.Popover with content fetched from help/dashboard.md.
 	var popoverText string
-	err = chromedp.Run(ctx,
+	err := chromedp.Run(ctx,
 		chromedp.WaitVisible(`[data-help="dashboard"]`, chromedp.ByQuery),
 		chromedp.Click(`[data-help="dashboard"]`, chromedp.ByQuery),
 		chromedp.WaitVisible(`.popover .popover-body`, chromedp.ByQuery),
@@ -249,7 +279,7 @@ func TestE2E_AboutModal(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "")
+	router, _, _, _, _ := NewRouter(db, logger, "../../web/static", testDBEncryptionKey, "", "", TwoFactorConfig{})
 	server := httptest.NewServer(router)
 	t.Cleanup(server.Close)
 
@@ -281,13 +311,9 @@ func TestE2E_AboutModal(t *testing.T) {
 	ctx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
 	defer cancelTimeout()
 
+	e2eLoginWithEnrollment(t, ctx, server.URL, "e2e-about@example.com", "password123")
+
 	err = chromedp.Run(ctx,
-		chromedp.Navigate(server.URL+"/login.html"),
-		chromedp.WaitVisible(`#email`, chromedp.ByID),
-		chromedp.SendKeys(`#email`, "e2e-about@example.com", chromedp.ByID),
-		chromedp.SendKeys(`#password`, "password123", chromedp.ByID),
-		chromedp.Click(`button[type=submit]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
 		chromedp.Navigate(server.URL+"/project.html?id="+proj.ID),
 		chromedp.WaitVisible(`#app-help-btn`, chromedp.ByQuery),
 		// #about-btn lives inside #sidebar-menu, which the headless

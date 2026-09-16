@@ -84,11 +84,18 @@ paths:
                   description: Cloudflare Turnstile token (docs/DECISIONS.md ADR-044). Required only when GET /api/v1/auth/turnstile-config reports enabled=true; ignored otherwise.
       responses:
         "200":
-          description: Authenticated; session cookie set
+          description: |
+            Password verified. Mandatory 2FA (docs/DECISIONS.md ADR-047) means this is
+            almost never a session directly: a valid trusted-device cookie yields a User
+            with the session cookie set, otherwise the response is a LoginChallenge
+            (requires_enrollment or requires_2fa) to be completed against the /2fa/...
+            endpoints below using its challenge_token.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/User"
+                oneOf:
+                  - $ref: "#/components/schemas/User"
+                  - $ref: "#/components/schemas/LoginChallenge"
         "400":
           description: Invalid request body, or Turnstile verification failed/missing while enabled
         "401":
@@ -389,6 +396,507 @@ paths:
           description: Not authenticated
         "404":
           description: Session not found
+  /api/v1/auth/2fa/methods:
+    get:
+      summary: Get the current user's configured 2FA methods
+      tags: [Auth]
+      operationId: getTwoFactorMethods
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Configured methods
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoFactorMethods"
+        "401":
+          description: Not authenticated
+  /api/v1/auth/2fa/totp/setup:
+    post:
+      summary: Start TOTP setup (mandatory enrollment or account-settings "add a factor")
+      description: Callable with a session cookie (already logged in) or challenge_token (mandatory-enrollment gate) — see docs/API.md "Two-factor authentication & passkeys".
+      tags: [Auth]
+      operationId: totpSetup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                challenge_token:
+                  type: string
+      responses:
+        "200":
+          description: Unconfirmed TOTP secret generated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [otpauth_url]
+                properties:
+                  otpauth_url:
+                    type: string
+                    description: otpauth:// URI — render as a QR code.
+        "401":
+          description: Not authenticated and no valid challenge_token
+  /api/v1/auth/2fa/totp/confirm:
+    post:
+      summary: Confirm TOTP setup with a code from the authenticator app
+      tags: [Auth]
+      operationId: totpConfirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                challenge_token:
+                  type: string
+      responses:
+        "200":
+          description: TOTP confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactorAddedResponse"
+        "400":
+          description: No pending TOTP setup for this account
+        "401":
+          description: Invalid code, or not authenticated and no valid challenge_token
+  /api/v1/auth/2fa/totp:
+    delete:
+      summary: Remove the TOTP factor
+      tags: [Auth]
+      operationId: totpDelete
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Removed
+        "409":
+          description: This is the account's last 2FA factor
+  /api/v1/auth/2fa/email/enable:
+    post:
+      summary: Enable email one-time codes as a 2FA method
+      tags: [Auth]
+      operationId: emailTwoFactorEnable
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                challenge_token:
+                  type: string
+      responses:
+        "200":
+          description: Email codes enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactorAddedResponse"
+        "401":
+          description: Not authenticated and no valid challenge_token
+  /api/v1/auth/2fa/email:
+    delete:
+      summary: Disable email one-time codes
+      tags: [Auth]
+      operationId: emailTwoFactorDisable
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Disabled
+        "409":
+          description: This is the account's last 2FA factor
+  /api/v1/auth/2fa/email/request-code:
+    post:
+      summary: Send a one-time email code for a pending login
+      tags: [Auth]
+      operationId: emailTwoFactorRequestCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_token]
+              properties:
+                challenge_token:
+                  type: string
+      responses:
+        "204":
+          description: Code emailed
+        "400":
+          description: Email codes are not enabled for this account
+        "401":
+          description: Login challenge expired or invalid
+        "503":
+          description: SMTP is not configured
+  /api/v1/auth/2fa/backup-codes/regenerate:
+    post:
+      summary: Regenerate backup codes, invalidating any existing ones
+      tags: [Auth]
+      operationId: regenerateBackupCodes
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: New codes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [backup_codes]
+                properties:
+                  backup_codes:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          description: Not authenticated
+  /api/v1/auth/2fa/verify:
+    post:
+      summary: Complete login with a TOTP, email, or backup code
+      tags: [Auth]
+      operationId: twoFactorVerify
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_token, method, code]
+              properties:
+                challenge_token:
+                  type: string
+                method:
+                  type: string
+                  enum: [totp, email, backup_code]
+                code:
+                  type: string
+                trust_device:
+                  type: boolean
+                  description: Set a 30-day trusted-device cookie so future logins from this browser skip the second factor (password is still always required).
+      responses:
+        "200":
+          description: Authenticated; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "400":
+          description: Unknown method
+        "401":
+          description: Invalid code, or login challenge expired/invalid
+  /api/v1/auth/2fa/webauthn/register/begin:
+    post:
+      summary: Start passkey registration
+      description: "options is an opaque WebAuthn CredentialCreationOptions object (github.com/go-webauthn/webauthn) — pass directly to navigator.credentials.create()."
+      tags: [Auth]
+      operationId: webauthnRegisterBegin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                challenge_token:
+                  type: string
+                resident_key:
+                  type: boolean
+                  description: Request a discoverable credential, usable for passwordless login later.
+      responses:
+        "200":
+          description: Registration options
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge_token, options]
+                properties:
+                  challenge_token:
+                    type: string
+                  options:
+                    type: object
+        "401":
+          description: Not authenticated and no valid challenge_token
+  /api/v1/auth/2fa/webauthn/register/finish:
+    post:
+      summary: Finish passkey registration
+      description: Request body is the raw PublicKeyCredential JSON from navigator.credentials.create(), unwrapped — not a DevStationOne-shaped envelope.
+      tags: [Auth]
+      operationId: webauthnRegisterFinish
+      parameters:
+        - name: challenge_token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: name
+          in: query
+          schema:
+            type: string
+          description: Label for the credential (e.g. "YubiKey"); defaults to "Passkey".
+        - name: resident_key
+          in: query
+          schema:
+            type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Passkey registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactorAddedResponse"
+        "400":
+          description: Passkey registration failed (attestation/challenge mismatch)
+        "401":
+          description: Not authenticated, or registration challenge expired/invalid
+  /api/v1/auth/2fa/webauthn/{credentialID}:
+    delete:
+      summary: Remove a passkey
+      tags: [Auth]
+      operationId: webauthnCredentialDelete
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: credentialID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Removed
+        "404":
+          description: Passkey not found
+        "409":
+          description: This is the account's last 2FA factor
+  /api/v1/auth/2fa/webauthn/login/begin:
+    post:
+      summary: Start passkey verification for a pending login (2FA step-up)
+      description: "options is an opaque WebAuthn CredentialRequestOptions object — pass directly to navigator.credentials.get()."
+      tags: [Auth]
+      operationId: webauthnLoginBegin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_token]
+              properties:
+                challenge_token:
+                  type: string
+      responses:
+        "200":
+          description: Assertion options
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [options]
+                properties:
+                  options:
+                    type: object
+        "401":
+          description: Login challenge expired or invalid
+  /api/v1/auth/2fa/webauthn/login/finish:
+    post:
+      summary: Finish passkey verification, completing login
+      description: Request body is the raw PublicKeyCredential assertion JSON from navigator.credentials.get(), unwrapped.
+      tags: [Auth]
+      operationId: webauthnLoginFinish
+      parameters:
+        - name: challenge_token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: trust_device
+          in: query
+          schema:
+            type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Authenticated; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Passkey verification failed, or login challenge expired/invalid
+  /api/v1/auth/webauthn/passwordless/begin:
+    post:
+      summary: Start a full passwordless passkey login
+      description: Discoverable/usernameless — no email required. A successful passkey login satisfies mandatory 2FA outright (docs/DECISIONS.md ADR-047); this bypasses /auth/login entirely.
+      tags: [Auth]
+      operationId: webauthnPasswordlessBegin
+      responses:
+        "200":
+          description: Assertion options
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge_token, options]
+                properties:
+                  challenge_token:
+                    type: string
+                  options:
+                    type: object
+  /api/v1/auth/webauthn/passwordless/finish:
+    post:
+      summary: Finish a passwordless passkey login
+      description: Request body is the raw PublicKeyCredential assertion JSON from navigator.credentials.get(), unwrapped.
+      tags: [Auth]
+      operationId: webauthnPasswordlessFinish
+      parameters:
+        - name: challenge_token
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: trust_device
+          in: query
+          schema:
+            type: boolean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Authenticated; session cookie set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Passkey login failed, or login challenge expired/invalid
+  /api/v1/auth/trusted-devices:
+    get:
+      summary: List the current user's trusted devices
+      tags: [Auth]
+      operationId: listTrustedDevices
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Trusted devices
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TrustedDevice"
+        "401":
+          description: Not authenticated
+  /api/v1/auth/trusted-devices/{deviceID}:
+    delete:
+      summary: Revoke a trusted device
+      tags: [Auth]
+      operationId: revokeTrustedDevice
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: deviceID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "404":
+          description: Trusted device not found
+  /api/v1/auth/2fa/recover/request:
+    post:
+      summary: Request a 2FA recovery link by email
+      description: Always 202 regardless of whether the account exists or has 2FA enrolled — no account enumeration.
+      tags: [Auth]
+      operationId: twoFactorRecoverRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: Accepted (a recovery email may or may not have been sent)
+        "400":
+          description: Invalid request body
+  /api/v1/auth/2fa/recover/confirm:
+    post:
+      summary: Complete 2FA recovery, clearing all factors and logging in
+      description: Wipes every 2FA factor and resets the account back into the mandatory-enrollment gate.
+      tags: [Auth]
+      operationId: twoFactorRecoverConfirm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        "200":
+          description: Authenticated; session cookie set; account is unenrolled again
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Recovery link is invalid or expired
+  /api/v1/users/{userID}/2fa/reset:
+    post:
+      summary: Admin-clear a user's 2FA factors, forcing re-enrollment
+      tags: [Users]
+      operationId: adminResetTwoFactor
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Factors cleared
+        "404":
+          description: User not found
+        "403":
+          description: Administrator access required
   /api/v1/runtimes:
     get:
       summary: List registered runtimes
@@ -4890,6 +5398,86 @@ components:
           format: date-time
         current:
           type: boolean
+    LoginChallenge:
+      type: object
+      required: [challenge_token]
+      description: Returned by POST /api/v1/auth/login in place of a session when the account still needs to complete the mandatory-enrollment gate or a second factor (docs/DECISIONS.md ADR-047).
+      properties:
+        requires_enrollment:
+          type: boolean
+        requires_2fa:
+          type: boolean
+        challenge_token:
+          type: string
+          description: Opaque, short-lived (5 minute) reference to this pending login; not a JWT, carries no information itself.
+        methods:
+          type: array
+          items:
+            type: string
+            enum: [totp, email, webauthn]
+          description: Only present with requires_2fa; lists the methods this account actually configured.
+    FactorAddedResponse:
+      type: object
+      description: Returned by every 2FA setup/confirm endpoint. user (and the session cookie) is present only when the call completed a pending login rather than an already-authenticated settings change.
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        backup_codes:
+          type: array
+          items:
+            type: string
+          description: 10 single-use recovery codes, shown once. Present the first time any factor is confirmed, and whenever backup codes are regenerated.
+    TwoFactorMethods:
+      type: object
+      required: [enrolled, totp_confirmed, email_enabled, webauthn_credentials, backup_codes_remaining]
+      properties:
+        enrolled:
+          type: boolean
+        totp_confirmed:
+          type: boolean
+        email_enabled:
+          type: boolean
+        webauthn_credentials:
+          type: array
+          items:
+            $ref: "#/components/schemas/WebAuthnCredential"
+        backup_codes_remaining:
+          type: integer
+    WebAuthnCredential:
+      type: object
+      required: [id, name, resident_key, created_at, last_used_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        resident_key:
+          type: boolean
+          description: True for a discoverable credential usable for passwordless login; false for a 2FA-only credential.
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+    TrustedDevice:
+      type: object
+      required: [id, user_agent, ip_address, created_at, expires_at]
+      properties:
+        id:
+          type: string
+        user_agent:
+          type: string
+        ip_address:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
     RuntimeCapabilities:
       type: object
       properties:

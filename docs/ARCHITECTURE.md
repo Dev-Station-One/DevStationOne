@@ -375,6 +375,11 @@ PostgreSQL stores:
   (`command_runs`, including the full output capped at 100 MiB — ADR-045's
   one exception to the PTY-bytes-never-persisted rule, command-run
   sessions only)
+- mandatory 2FA + passkeys (ADR-047): `user_totp` (TOTP secret, sealed same
+  as database connection credentials), `webauthn_credentials` (passkeys,
+  the full credential as JSONB), `user_backup_codes`, `user_email_2fa`,
+  `user_trusted_devices`, `user_2fa_recovery_tokens`, plus
+  `users.two_factor_enrolled_at`
 
 Sensitive credentials require protected storage.
 

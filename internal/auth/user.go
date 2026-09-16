@@ -346,3 +346,20 @@ func GetUserByID(ctx context.Context, pool *pgxpool.Pool, id string) (User, erro
 	}
 	return u, nil
 }
+
+// GetUserByEmail looks a user up by email without checking a password —
+// used by the 2FA recovery-request flow, which must know whether an
+// account exists before deciding whether to send a recovery email.
+func GetUserByEmail(ctx context.Context, pool *pgxpool.Pool, email string) (User, error) {
+	var u User
+	err := pool.QueryRow(ctx, `
+		SELECT id, email, is_admin, created_at, terminal_font, theme, display_name, editor_font, font_size, enabled_languages FROM users WHERE email = $1
+	`, email).Scan(&u.ID, &u.Email, &u.IsAdmin, &u.CreatedAt, &u.TerminalFont, &u.Theme, &u.DisplayName, &u.EditorFont, &u.FontSize, &u.EnabledLanguages)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrNotFound
+	}
+	if err != nil {
+		return User{}, err
+	}
+	return u, nil
+}

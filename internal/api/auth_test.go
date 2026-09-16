@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -49,7 +50,7 @@ func TestLoginLogoutFlow(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
 
 	// Wrong password: unauthorized, no cookie.
 	body, _ := json.Marshal(map[string]string{"email": "flow@example.com", "password": "wrong"})
@@ -60,19 +61,12 @@ func TestLoginLogoutFlow(t *testing.T) {
 		t.Fatalf("wrong password: status = %d, want 401", rec.Code)
 	}
 
-	// Correct password: sets session cookie.
-	body, _ = json.Marshal(map[string]string{"email": "flow@example.com", "password": "password123"})
-	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
-	rec = httptest.NewRecorder()
-	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("login: status = %d, body = %s", rec.Code, rec.Body.String())
+	// Correct password: completes mandatory 2FA enrollment (fresh account,
+	// docs/DECISIONS.md ADR-047) and ends with a session cookie.
+	sessionCookie := loginAs(t, router, "flow@example.com", "password123")
+	if sessionCookie.Name != auth.CookieName {
+		t.Fatalf("expected a %s cookie, got %q", auth.CookieName, sessionCookie.Name)
 	}
-	cookies := rec.Result().Cookies()
-	if len(cookies) != 1 || cookies[0].Name != auth.CookieName {
-		t.Fatalf("expected one %s cookie, got %v", auth.CookieName, cookies)
-	}
-	sessionCookie := cookies[0]
 
 	// Protected endpoint without cookie: unauthorized.
 	req = httptest.NewRequest(http.MethodGet, "/api/v1/auth/session", nil)
@@ -120,15 +114,24 @@ func TestSessionCookieSecureFlagFollowsRequestScheme(t *testing.T) {
 	db := testDB(t)
 	ctx := context.Background()
 
-	if _, err := auth.CreateUser(ctx, db.Pool, "cookie-scheme@example.com", "password123", false); err != nil {
-		t.Fatalf("create user: %v", err)
-	}
-
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
-	body, _ := json.Marshal(map[string]string{"email": "cookie-scheme@example.com", "password": "password123"})
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
 
+	// Every account starts unenrolled (docs/DECISIONS.md ADR-047), so the
+	// session cookie is actually set by /2fa/totp/confirm, not /auth/login.
+	// setSessionCookie/requestIsSecure don't care which endpoint calls them,
+	// so exercising the flag once through enrollment covers every caller —
+	// each mutate variant gets a fresh account since an account can only
+	// enroll once.
+	n := 0
 	cookieFrom := func(mutate func(*http.Request)) *http.Cookie {
+		n++
+		email := fmt.Sprintf("cookie-scheme-%d@example.com", n)
+		if _, err := auth.CreateUser(ctx, db.Pool, email, "password123", false); err != nil {
+			t.Fatalf("create user: %v", err)
+		}
+
+		body, _ := json.Marshal(map[string]string{"email": email, "password": "password123"})
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body))
 		mutate(req)
 		rec := httptest.NewRecorder()
@@ -136,13 +139,13 @@ func TestSessionCookieSecureFlagFollowsRequestScheme(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("login: status = %d, body = %s", rec.Code, rec.Body.String())
 		}
-		for _, c := range rec.Result().Cookies() {
-			if c.Name == auth.CookieName {
-				return c
-			}
+		var challenge struct {
+			ChallengeToken string `json:"challenge_token"`
 		}
-		t.Fatalf("no %s cookie in response", auth.CookieName)
-		return nil
+		if err := json.NewDecoder(rec.Body).Decode(&challenge); err != nil {
+			t.Fatalf("decode login response: %v", err)
+		}
+		return completeTOTPEnrollment(t, router, mutate, email, challenge.ChallengeToken)
 	}
 
 	// Plain HTTP (LAN IP over http://): Secure cookie would be dropped by the
@@ -171,7 +174,7 @@ func TestTerminalFontPreference(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
 	cookie := loginAs(t, router, "fontpref@example.com", "password123")
 
 	get := func() userResponse {
@@ -334,12 +337,12 @@ func TestTurnstileConfigHandler(t *testing.T) {
 		return resp
 	}
 
-	disabled, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "")
+	disabled, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
 	if resp := get(disabled); resp.Enabled || resp.SiteKey != "" {
 		t.Fatalf("unconfigured: %+v, want disabled/empty", resp)
 	}
 
-	enabled, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "sitekey123", "secretkey456")
+	enabled, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "sitekey123", "secretkey456", TwoFactorConfig{})
 	if resp := get(enabled); !resp.Enabled || resp.SiteKey != "sitekey123" {
 		t.Fatalf("configured: %+v, want enabled with site key", resp)
 	}
@@ -363,7 +366,7 @@ func TestLogin_TurnstileEnabled(t *testing.T) {
 	t.Cleanup(func() { turnstile.SiteVerifyURL = origURL })
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "sitekey", "secretkey")
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "sitekey", "secretkey", TwoFactorConfig{})
 
 	login := func(turnstileToken string) *httptest.ResponseRecorder {
 		body, _ := json.Marshal(map[string]string{
@@ -390,12 +393,19 @@ func TestLogin_TurnstileEnabled(t *testing.T) {
 	}
 
 	// Valid token, correct password: succeeds exactly like the no-Turnstile
-	// flow.
+	// flow — a fresh account isn't 2FA-enrolled yet, so this is the
+	// enrollment challenge rather than a session cookie directly.
 	rec := login("valid-token")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("valid token: status = %d, body = %s", rec.Code, rec.Body.String())
 	}
-	if len(rec.Result().Cookies()) != 1 {
-		t.Fatalf("valid token: expected session cookie")
+	var challenge struct {
+		RequiresEnrollment bool `json:"requires_enrollment"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&challenge); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	if !challenge.RequiresEnrollment {
+		t.Fatalf("valid token: expected requires_enrollment for a fresh account")
 	}
 }

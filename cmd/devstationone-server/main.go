@@ -20,6 +20,7 @@ import (
 	"devstationone/internal/database"
 	"devstationone/internal/events"
 	"devstationone/internal/logging"
+	"devstationone/internal/mail"
 	"devstationone/internal/notifications"
 	"devstationone/internal/projects"
 	"devstationone/internal/sessions"
@@ -66,7 +67,18 @@ func run() error {
 
 	go auditPurgeLoop(ctx, db, logger)
 
-	handler, hub, bus, _, registry := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey, cfg.TurnstileSiteKey, cfg.TurnstileSecretKey)
+	twoFactorCfg := api.TwoFactorConfig{
+		SMTP: mail.Config{
+			Host:     cfg.SMTPHost,
+			Port:     cfg.SMTPPort,
+			Username: cfg.SMTPUsername,
+			Password: cfg.SMTPPassword,
+			From:     cfg.SMTPFrom,
+		},
+		WebAuthnRPID:     cfg.WebAuthnRPID,
+		WebAuthnRPOrigin: cfg.WebAuthnRPOrigin,
+	}
+	handler, hub, bus, _, registry := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey, cfg.TurnstileSiteKey, cfg.TurnstileSecretKey, twoFactorCfg)
 	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
 	go commandruns.RecoverLoop(ctx, db.Pool, hub, logger)
 	go backups.RunScheduler(ctx, db.Pool, registry, cfg.DBEncryptionKey, logger)

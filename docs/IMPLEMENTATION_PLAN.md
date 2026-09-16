@@ -1368,3 +1368,74 @@ too — migration `0020_command_runs_cascade_delete` changes
 ON DELETE CASCADE` (and cleans up any pre-existing orphaned rows). Orphaned
 history with no UI path back to it (the History expander lives on the
 command row) didn't serve the self-audit purpose it was kept for.
+
+## Slice 31 — Mandatory 2FA + passkeys (ADR-047)
+
+**Goal**: every account must complete two-factor authentication; add
+passkeys (WebAuthn) as both a full passwordless login path and a 2FA
+method, alongside TOTP, email one-time codes, and backup-code recovery.
+
+**Design**: see ADR-047 for the full rationale. Migration `0021_two_factor`
+adds `users.two_factor_enrolled_at` (NULL = must enroll, permanently the
+default for every account, not just a rollout flag) plus `user_totp`,
+`webauthn_credentials`, `user_backup_codes`, `user_email_2fa`,
+`user_trusted_devices`, `user_2fa_recovery_tokens`. New dependencies
+`github.com/go-webauthn/webauthn` and `github.com/pquerna/otp` (no viable
+stdlib equivalent for either protocol). New `internal/mail` package
+(`net/smtp`, stdlib) for email-OTP/recovery mail. `internal/auth` gains
+`totp.go`, `backupcodes.go`, `twofactor.go`, `webauthn.go`,
+`trusteddevice.go`, `recovery.go`, `challenge.go` (the in-memory pending-
+login/ceremony state). `internal/api/twofactor.go` adds 21 endpoints:
+enrollment/factor management (shared between the mandatory gate and
+account-settings "add a factor" via `resolveTwoFactorSubject`), login
+step-up (`/2fa/verify`, WebAuthn-as-2FA, email-request-code), full
+passwordless passkey login, trusted-device management, three independent
+recovery paths (backup code, self-service email link, admin reset), all
+converging on `auth.ClearAllTwoFactor`. `loginHandler` (`internal/api/
+auth.go`) now branches on trusted-device cookie → enrollment gate → 2FA
+step-up instead of ever setting a session directly. `NewRouter` gains a
+`TwoFactorConfig` parameter (SMTP + WebAuthn RP settings) — updated at
+every one of its ~20 call sites. New audit events: `auth.2fa_enrolled`,
+`auth.2fa_factor_added/_removed`, `auth.2fa_verify_failed`,
+`auth.2fa_backup_code_used`, `auth.2fa_recovery_used`,
+`auth.2fa_admin_reset`, `auth.passkey_login`,
+`auth.trusted_device_added/_revoked`. `web/static/login.html` rewritten
+with enrollment (TOTP QR/manual-secret, email, passkey), step-up
+(method picker, trust-device checkbox), and full passwordless-passkey UI,
+using vanilla WebAuthn base64url/ArrayBuffer transforms (no new JS
+dependency).
+
+**Tests**: `internal/auth` (TOTP drift/seal-open, backup-code generation),
+`internal/mail` (SMTP-disabled and header-injection guards),
+`internal/api/twofactor_test.go` (mandatory enrollment + `/2fa/methods`,
+last-factor-cannot-be-removed guard, backup-code single-use login,
+trusted-device skip + revoke, admin reset, recovery-confirm) — all via the
+real HTTP router, no mocked auth layer. `internal/api`'s shared `loginAs`
+test helper (used by ~20 other test files) now drives every fresh account
+through TOTP enrollment automatically, and through step-up verify on a
+second login, so the rest of the suite kept working unmodified apart from
+that one helper. The three browser E2E tests (`e2e_test.go`) gained
+`e2eLoginWithEnrollment`, driving the real login page's new enrollment UI
+in headless Chrome rather than assuming a bare password-only redirect.
+WebAuthn ceremony crypto itself (real attestation/assertion signing) is
+**not** covered by an automated test — faking a FIDO2 authenticator's ECDSA
+signing and COSE key encoding is a disproportionate undertaking for this
+pass; the begin/finish wiring, storage, and authorization gates around it
+are tested, the cryptographic ceremony itself needs a real authenticator or
+browser, exercised manually.
+
+**Known limitation**: a recovery-confirm session is issued immediately (so
+the user isn't locked out), but nothing server-side blocks other endpoints
+until re-enrollment — only `GET /2fa/methods` reporting `enrolled: false`
+nudges the client back into the gate. Passkey/WebAuthn UI in
+`login.html` is functional but not restyled beyond the existing Tabler
+card/button patterns already on that page — no QR-code image renderer was
+added (the `otpauth://` URI is shown as manually-enterable text instead,
+which every authenticator app also accepts); a QR library is a reasonable
+later addition if the text fallback proves to be a real UX problem.
+Account-settings pages for managing factors after enrollment (viewing/
+removing passkeys, regenerating backup codes, revoking trusted devices
+outside the login flow) expose their endpoints but have no dedicated UI in
+this slice — only the login-time flows got one.
+
+**Status: Complete** (2026-09-15).

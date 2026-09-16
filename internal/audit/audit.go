@@ -19,10 +19,22 @@ import (
 // Event types. The string values are the stored event_type column and the
 // stable API/UI vocabulary — do not rename an existing constant's value.
 const (
-	EventLoginSucceeded       = "auth.login"
-	EventLoginFailed          = "auth.login_failed"
-	EventLoginTurnstileFailed = "auth.login_turnstile_failed"
-	EventLogout               = "auth.logout"
+	EventLoginSucceeded        = "auth.login"
+	EventLoginFailed           = "auth.login_failed"
+	EventLoginTurnstileFailed  = "auth.login_turnstile_failed"
+	EventLogout                = "auth.logout"
+	EventPasskeyLoginSucceeded = "auth.passkey_login"
+
+	// Two-factor authentication (docs/DECISIONS.md ADR-047).
+	EventTwoFactorEnrolled      = "auth.2fa_enrolled"
+	EventTwoFactorFactorAdded   = "auth.2fa_factor_added"
+	EventTwoFactorFactorRemoved = "auth.2fa_factor_removed"
+	EventTwoFactorVerifyFailed  = "auth.2fa_verify_failed"
+	EventBackupCodeUsed         = "auth.2fa_backup_code_used"
+	EventTwoFactorRecoveryUsed  = "auth.2fa_recovery_used"
+	EventTwoFactorAdminReset    = "auth.2fa_admin_reset"
+	EventTrustedDeviceAdded     = "auth.trusted_device_added"
+	EventTrustedDeviceRevoked   = "auth.trusted_device_revoked"
 
 	EventRuntimeDeleted     = "runtime.deleted"
 	EventRuntimeRegistered  = "runtime.registered"

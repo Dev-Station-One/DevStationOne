@@ -1039,6 +1039,67 @@ as `auth.login_turnstile_failed` (distinct from `auth.login_failed`).
 Disabled by default; see docs/SECURITY.md "Authentication" for the
 server-side verification and fail-closed behavior.
 
+## Two-factor authentication & passkeys (docs/DECISIONS.md ADR-047)
+
+Every account must complete 2FA. `users.two_factor_enrolled_at` is `NULL`
+for every account until it enrolls; `POST /api/v1/auth/login` checks a
+trusted-device cookie first, then branches on that flag rather than ever
+returning a session directly for an unenrolled or step-up-pending account:
+
+- Trusted device present and valid → normal session (see below).
+- Not enrolled → `200 {"requires_enrollment": true, "challenge_token": "..."}`.
+- Enrolled, no trusted device → `200 {"requires_2fa": true, "challenge_token": "...", "methods": ["totp", "email", "webauthn"]}` (methods lists only what the account actually configured).
+
+`challenge_token` is a short-lived (5 minute), server-side, in-memory
+reference (`internal/auth/challenge.go`) — it is not a JWT and carries no
+information itself; every endpoint below that names it looks up the pending
+login by it.
+
+**Enrollment / factor management.** The same setup/confirm endpoints work
+both as the mandatory-enrollment gate (called with `challenge_token`, no
+session yet) and from an authenticated account-settings page (called with
+the session cookie, no `challenge_token` needed) — whichever the caller has
+identifies the account (`resolveTwoFactorSubject`). Confirming an account's
+first factor is itself what completes that login.
+
+- `GET /api/v1/auth/2fa/methods` (session only) — `{enrolled, totp_confirmed, email_enabled, webauthn_credentials: [{id, name, resident_key, created_at, last_used_at}], backup_codes_remaining}`.
+- `POST /api/v1/auth/2fa/totp/setup` `{challenge_token?}` → `{otpauth_url}` (render as a QR code). Secret is stored sealed (AES-256-GCM under `DEVSTATIONONE_DB_ENCRYPTION_KEY`), unconfirmed.
+- `POST /api/v1/auth/2fa/totp/confirm` `{challenge_token?, code}` → `{user?, backup_codes}` — `user` is present (and a session cookie set) only when this call completed a pending login rather than an already-authenticated settings change. Generates 10 backup codes on first confirmation.
+- `DELETE /api/v1/auth/2fa/totp` (session only) → `204`, or `409` if this is the account's last factor (`ErrLastFactor`).
+- `POST /api/v1/auth/2fa/email/enable` `{challenge_token?}` → `{user?, backup_codes}` (same completion semantics as TOTP confirm).
+- `DELETE /api/v1/auth/2fa/email` (session only) → `204`/`409`.
+- `POST /api/v1/auth/2fa/backup-codes/regenerate` (session only) → `{backup_codes}` — invalidates all previous codes.
+- `POST /api/v1/auth/2fa/webauthn/register/begin` `{challenge_token?, resident_key}` → `{challenge_token, options}` (a WebAuthn `CredentialCreationOptions`; pass to `navigator.credentials.create()`). `resident_key: true` requests a discoverable credential usable for passwordless login later.
+- `POST /api/v1/auth/2fa/webauthn/register/finish?challenge_token=...&name=...&resident_key=true` (query params; body is the raw `PublicKeyCredential` JSON from `create()`, unwrapped) → `{user?, backup_codes}`.
+- `DELETE /api/v1/auth/2fa/webauthn/{credentialID}` (session only) → `204`/`409`.
+
+**Login step-up** (all unauthenticated, driven by `challenge_token` from `/auth/login`):
+
+- `POST /api/v1/auth/2fa/verify` `{challenge_token, method: "totp"|"email"|"backup_code", code, trust_device}` → session cookie + user, same as a normal login. Failed attempts are audited (`auth.2fa_verify_failed`) and re-trigger Turnstile on the next `/auth/login` for that email (docs/DECISIONS.md ADR-044) — no separate rate-limit counter.
+- `POST /api/v1/auth/2fa/email/request-code` `{challenge_token}` → `204`, emails a 6-digit code (5 minute expiry, tied to the challenge). Must be called explicitly — picking "email" as the method doesn't silently send mail on every password attempt.
+- `POST /api/v1/auth/2fa/webauthn/login/begin` `{challenge_token}` → `{options}` (`CredentialRequestOptions` for `navigator.credentials.get()`), scoped to the account's own credentials.
+- `POST /api/v1/auth/2fa/webauthn/login/finish?challenge_token=...&trust_device=true` (body is the raw assertion JSON) → session cookie + user.
+
+**Passwordless passkey login** (unauthenticated, no password step, bypasses `/auth/login` and `requires_2fa` entirely — a passkey assertion already combines possession with a biometric/PIN unlock, so it satisfies mandatory 2FA outright):
+
+- `POST /api/v1/auth/webauthn/passwordless/begin` → `{challenge_token, options}` (discoverable/usernameless — no email needed).
+- `POST /api/v1/auth/webauthn/passwordless/finish?challenge_token=...&trust_device=true` (raw assertion body) → session cookie + user.
+
+**Trusted devices** ("remember this device for 30 days", set via `trust_device: true` on any of the verify/finish calls above — password is still always required, only the second factor is skipped next time):
+
+- `GET /api/v1/auth/trusted-devices` (session only) → `[{id, user_agent, ip_address, created_at, expires_at}]`.
+- `DELETE /api/v1/auth/trusted-devices/{deviceID}` (session only) → `204`.
+
+**Recovery**, three independent paths, all converging on wiping every
+factor and resetting `two_factor_enrolled_at` to `NULL` (the account
+re-enters the enrollment gate exactly like a new account):
+
+- Self-service, in-band: consume a backup code via `/2fa/verify` with `method: "backup_code"`.
+- Self-service, out-of-band: `POST /api/v1/auth/2fa/recover/request {email}` → always `202` regardless of whether the account exists or has 2FA (no enumeration); if it does, emails a 30-minute single-use link. `POST /api/v1/auth/2fa/recover/confirm {token}` → session cookie + user, factors cleared.
+- Admin-assisted: `POST /api/v1/users/{userID}/2fa/reset` (admin only) → `204`, factors cleared, audited as `auth.2fa_admin_reset` with the admin as actor.
+
+**Configuration**: `DEVSTATIONONE_SMTP_HOST`/`_PORT`/`_USERNAME`/`_PASSWORD`/`_FROM` (email OTP + recovery mail; unset `_HOST` disables email delivery, `/2fa/email/request-code` and `/2fa/recover/request` then no-op/`503` rather than erroring loudly) and `DEVSTATIONONE_WEBAUTHN_RP_ID`/`_RP_ORIGIN` (must match the origin the browser actually sees, or every WebAuthn ceremony fails closed; default to `localhost`/`http://localhost:8080` for local dev).
+
 ## Quick Commands (Slice 29, ADR-045)
 
 Per-project named CLI commands (e.g. "Build" → `make build`) rendered as the

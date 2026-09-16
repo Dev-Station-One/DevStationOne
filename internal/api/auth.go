@@ -37,6 +37,50 @@ func toUserResponse(u auth.User) userResponse {
 	return userResponse{ID: u.ID, Email: u.Email, DisplayName: u.DisplayName, IsAdmin: u.IsAdmin, TerminalFont: u.TerminalFont, Theme: u.Theme, EditorFont: u.EditorFont, FontSize: u.FontSize, EnabledLanguages: u.EnabledLanguages, CreatedAt: u.CreatedAt}
 }
 
+// loginChallengeResponse is what /auth/login returns instead of a session
+// when the account still needs to complete mandatory 2FA enrollment
+// (docs/DECISIONS.md ADR-047) or verify a second factor. challengeToken must
+// be presented back to whichever /auth/2fa/... endpoint completes the flow.
+type loginChallengeResponse struct {
+	RequiresEnrollment bool     `json:"requires_enrollment,omitempty"`
+	RequiresTwoFactor  bool     `json:"requires_2fa,omitempty"`
+	ChallengeToken     string   `json:"challenge_token"`
+	Methods            []string `json:"methods,omitempty"`
+}
+
+// completeLogin finishes any login path (password+trusted-device,
+// password+2FA-verify, or full passwordless passkey) by creating a session,
+// optionally minting a trusted-device cookie, auditing eventType, and
+// writing the user response. Shared so every path ends up with identical
+// session/cookie/audit behavior.
+func completeLogin(w http.ResponseWriter, r *http.Request, db *database.DB, user auth.User, eventType string, trustDevice bool) {
+	token, err := auth.CreateSession(r.Context(), db.Pool, user.ID, r.UserAgent(), clientIP(r))
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
+		return
+	}
+	setSessionCookie(w, r, token)
+
+	if trustDevice {
+		trustToken, err := auth.CreateTrustedDevice(r.Context(), db.Pool, user.ID, r.UserAgent(), clientIP(r))
+		if err == nil {
+			http.SetCookie(w, &http.Cookie{
+				Name:     auth.TrustedDeviceCookieName,
+				Value:    trustToken,
+				Path:     "/",
+				HttpOnly: true,
+				Secure:   requestIsSecure(r),
+				SameSite: http.SameSiteLaxMode,
+				MaxAge:   int(auth.TrustedDeviceTTL.Seconds()),
+			})
+			audit.Record(r.Context(), db.Pool, audit.EventTrustedDeviceAdded, audit.Actor{UserID: user.ID, Email: user.Email}, "user", user.ID, nil, clientIP(r))
+		}
+	}
+
+	audit.Record(r.Context(), db.Pool, eventType, audit.Actor{UserID: user.ID, Email: user.Email}, "user", user.ID, nil, clientIP(r))
+	writeJSON(w, http.StatusOK, toUserResponse(user))
+}
+
 // updatePreferencesHandler PUT /api/v1/auth/preferences — partial update of
 // the authenticated user's preferences (terminal font, theme). Fields left
 // out are untouched; the request must name at least one.
@@ -208,15 +252,39 @@ func loginHandler(db *database.DB, turnstileSecretKey string) http.HandlerFunc {
 			return
 		}
 
-		token, err := auth.CreateSession(r.Context(), db.Pool, user.ID, r.UserAgent(), clientIP(r))
+		// A trusted-device cookie skips the second factor entirely — the
+		// password check above already happened, so this is still
+		// password-plus-something, never password-only.
+		if cookie, err := r.Cookie(auth.TrustedDeviceCookieName); err == nil {
+			if trusted, err := auth.IsTrustedDevice(r.Context(), db.Pool, user.ID, cookie.Value); err == nil && trusted {
+				completeLogin(w, r, db, user, audit.EventLoginSucceeded, false)
+				return
+			}
+		}
+
+		enrolled, err := auth.IsTwoFactorEnrolled(r.Context(), db.Pool, user.ID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
 			return
 		}
 
-		audit.Record(r.Context(), db.Pool, audit.EventLoginSucceeded, audit.Actor{UserID: user.ID, Email: user.Email}, "user", user.ID, nil, clientIP(r))
-		setSessionCookie(w, r, token)
-		writeJSON(w, http.StatusOK, toUserResponse(user))
+		token, err := auth.NewChallenge(user.ID, false)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
+			return
+		}
+
+		if !enrolled {
+			writeJSON(w, http.StatusOK, loginChallengeResponse{RequiresEnrollment: true, ChallengeToken: token})
+			return
+		}
+
+		methods, err := auth.AvailableTwoFactorMethods(r.Context(), db.Pool, user.ID)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "login failed"})
+			return
+		}
+		writeJSON(w, http.StatusOK, loginChallengeResponse{RequiresTwoFactor: true, ChallengeToken: token, Methods: methods})
 	}
 }
 

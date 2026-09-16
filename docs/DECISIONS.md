@@ -1655,3 +1655,75 @@ call rather than a second `git rev-list` RPC. This is a breaking response
 shape change, accepted without a versioned/parallel endpoint because the
 Control Server's REST API has no external consumers yet — only its own
 bundled web UI, updated in the same commit.
+
+## ADR-047 — Mandatory 2FA + passkeys: one enrollment gate, four factors, a shared in-memory challenge
+
+Every account must complete two-factor authentication; `users.two_factor_enrolled_at`
+is `NULL` for every existing row and every newly created one, so the gate is
+a permanent account-creation-time default, not a one-off migration flag.
+Several decisions shape how that gate and its four factors (TOTP, WebAuthn
+as a second factor, email one-time codes, backup codes) fit into the
+existing password/session model with minimal new surface:
+
+1. **`/auth/login` never returns a session directly for an enrolled or
+   unenrolled account — only a `challenge_token`.** It authenticates the
+   password first (unchanged), then branches: a trusted-device cookie
+   (`user_trusted_devices`) skips straight to a session; otherwise it always
+   returns `{requires_enrollment}` or `{requires_2fa, methods}` alongside a
+   short-lived opaque token. The `/2fa/...` endpoints that come next accept
+   that same token — enrollment and step-up verification are different
+   things a client does with an identical handshake, not two API shapes.
+2. **Enrollment and step-up-verify share the same setup/confirm handlers.**
+   `resolveTwoFactorSubject` (internal/api/twofactor.go) resolves the acting
+   user from either a session cookie (an already-logged-in user adding a
+   second passkey from account settings) or a `challenge_token` (a brand
+   new account completing the mandatory gate) — every `/2fa/totp/setup`,
+   `/2fa/totp/confirm`, `/2fa/email/enable`, and `/2fa/webauthn/register/*`
+   call goes through it. Confirming the very first factor is itself what
+   completes the login (`finishFactorSetup` mints the session then), so
+   there is one "add a factor" code path instead of two.
+3. **Pending 2FA/WebAuthn ceremony state lives in an in-memory map
+   (internal/auth/challenge.go), not a table.** A `LoginChallenge` holds the
+   pending user ID, an optional WebAuthn `SessionData` (parked there between
+   a ceremony's begin and finish calls), and an optional emailed OTP, with a
+   5-minute TTL and background sweep. `ponytail: single Control Server
+   process — move to a DB-backed table only if this ever runs
+   multi-instance; today's deployment is one systemd unit (see the "Dev
+   instance" section of CLAUDE.md).`
+4. **A successful passwordless passkey login satisfies the mandatory-2FA
+   requirement outright — no separate step-up factor follows it.** WebAuthn
+   already combines possession (the authenticator) with a local unlock
+   (biometric/PIN), so demanding a second factor on top would add UX friction
+   without a real security gain; `/webauthn/passwordless/finish` calls
+   `completeLogin` directly.
+5. **TOTP secrets are sealed with the existing `DEVSTATIONONE_DB_ENCRYPTION_KEY`,
+   duplicating a ~20-line AES-256-GCM seal/open pair rather than exporting
+   `internal/dbconnections`'s private one.** Backup codes and trusted-device
+   tokens instead reuse `auth.HashToken` (SHA-256, one-way) — they're
+   verified by exact match, never read back, so they don't need the
+   TOTP secret's reversible encryption.
+6. **Removing a factor is guarded by `ErrLastFactor`, computed inside a
+   transaction (`removeFactor`), not by a UI-only check.** An enrolled
+   account may never drop back to zero of {TOTP, email-OTP, WebAuthn
+   credential} — backup codes don't count as a factor themselves, they're a
+   recovery aid for one.
+7. **Existing sessions are left alone at rollout — no forced global
+   re-login.** The enrollment gate only fires on an actual `/auth/login`
+   call; a session issued before this shipped keeps working until it
+   naturally expires (7-day TTL) or the user logs in again.
+8. **Recovery has three independent paths, not a hierarchy**: a backup code
+   consumed through the normal `/2fa/verify` endpoint, a self-service
+   emailed link (`/2fa/recover/request` → `/2fa/recover/confirm`, always
+   `202` regardless of whether the account exists, no enumeration), and an
+   admin-triggered reset (`POST /users/{userID}/2fa/reset`). All three
+   converge on `auth.ClearAllTwoFactor`, which wipes every factor and resets
+   `two_factor_enrolled_at` to `NULL` — recovery and admin-reset re-enter the
+   exact same enrollment gate a new account goes through, rather than a
+   separate "recovered" state.
+
+Known limitation, not fixed in this slice: a recovery-confirm session is
+issued immediately (so the user isn't locked out while recovering), but
+nothing server-side blocks other endpoints until they re-enroll — the
+account settings page showing `enrolled: false` is the only nudge back into
+the gate. A hard block would require touching `requireSession` globally for
+an edge case; left as a follow-up if it proves to matter in practice.

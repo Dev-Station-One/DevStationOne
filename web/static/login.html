@@ -25,8 +25,9 @@
       </div>
       <div class="card card-md">
         <div class="card-body">
-          <h2 class="h2 text-center mb-4">Sign in to your account</h2>
+          <h2 class="h2 text-center mb-4" id="card-title">Sign in to your account</h2>
           <div id="login-error" class="alert alert-danger" hidden></div>
+
           <form id="login-form" autocomplete="on">
             <div class="mb-3">
               <label class="form-label">Email address</label>
@@ -41,6 +42,55 @@
               <button type="submit" id="login-submit" class="btn btn-primary w-100">Sign in</button>
             </div>
           </form>
+          <div class="hr-text">or</div>
+          <button type="button" id="passkey-login-btn" class="btn btn-outline-secondary w-100">
+            <i class="fa-solid fa-key me-1"></i> Sign in with a passkey
+          </button>
+
+          <!-- Mandatory 2FA enrollment (docs/DECISIONS.md ADR-047): shown in place of the
+               form above once /auth/login reports requires_enrollment. -->
+          <div id="enroll-panel" hidden>
+            <p class="text-secondary">Two-factor authentication is required on this account. Choose how you'd like to verify future sign-ins.</p>
+            <div id="enroll-choice" class="d-grid gap-2">
+              <button type="button" class="btn btn-outline-primary" id="enroll-choice-totp">Use an authenticator app</button>
+              <button type="button" class="btn btn-outline-primary" id="enroll-choice-passkey">Use a passkey</button>
+              <button type="button" class="btn btn-outline-primary" id="enroll-choice-email">Use email codes</button>
+            </div>
+
+            <div id="enroll-totp" hidden>
+              <p>Scan this in your authenticator app (Google Authenticator, 1Password, Authy, ...), or enter the secret manually if it can't scan a link directly:</p>
+              <div class="mb-2"><code id="enroll-totp-uri" style="word-break: break-all;"></code></div>
+              <div class="mb-2">
+                <label class="form-label">6-digit code</label>
+                <input type="text" id="enroll-totp-code" class="form-control" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+              </div>
+              <button type="button" class="btn btn-primary w-100" id="enroll-totp-confirm">Confirm</button>
+            </div>
+          </div>
+
+          <!-- Login step-up for an already-enrolled account. -->
+          <div id="verify-panel" hidden>
+            <p class="text-secondary">Verify it's you.</p>
+            <div id="verify-choice" class="d-grid gap-2"></div>
+
+            <div id="verify-code-panel" hidden>
+              <div class="mb-2">
+                <label class="form-label" id="verify-code-label">Code</label>
+                <input type="text" id="verify-code" class="form-control" autocomplete="one-time-code">
+              </div>
+              <div class="mb-2 form-check">
+                <input type="checkbox" class="form-check-input" id="verify-trust-device">
+                <label class="form-check-label" for="verify-trust-device">Trust this device for 30 days</label>
+              </div>
+              <button type="button" class="btn btn-primary w-100" id="verify-code-submit">Verify</button>
+            </div>
+          </div>
+
+          <div id="backup-codes-panel" hidden>
+            <p>Save these backup codes somewhere safe. Each can be used once if you lose access to your other sign-in method.</p>
+            <pre id="backup-codes-list" class="bg-secondary-lt p-2 rounded"></pre>
+            <button type="button" class="btn btn-primary w-100" id="backup-codes-continue">Continue</button>
+          </div>
         </div>
       </div>
     </div>
@@ -52,6 +102,7 @@
   <script src="/js/dialogs.js"></script>
   <script>
     var turnstileToken = '';
+    var challengeToken = '';
 
     function turnstileLoadFailed() {
       turnstileToken = '';
@@ -87,6 +138,68 @@
       document.body.appendChild(script);
     });
 
+    // --- base64url <-> ArrayBuffer helpers for WebAuthn (docs/DECISIONS.md ADR-047) ---
+    function b64urlToBuf(b64url) {
+      var b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      var bin = atob(b64);
+      var buf = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      return buf.buffer;
+    }
+    function bufToB64url(buf) {
+      var bytes = new Uint8Array(buf);
+      var bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    function transformCreationOptions(pk) {
+      pk.challenge = b64urlToBuf(pk.challenge);
+      pk.user.id = b64urlToBuf(pk.user.id);
+      if (pk.excludeCredentials) {
+        pk.excludeCredentials = pk.excludeCredentials.map(function (c) {
+          return $.extend({}, c, { id: b64urlToBuf(c.id) });
+        });
+      }
+      return pk;
+    }
+    function transformRequestOptions(pk) {
+      pk.challenge = b64urlToBuf(pk.challenge);
+      if (pk.allowCredentials) {
+        pk.allowCredentials = pk.allowCredentials.map(function (c) {
+          return $.extend({}, c, { id: b64urlToBuf(c.id) });
+        });
+      }
+      return pk;
+    }
+    function credentialToJSON(cred) {
+      var out = { id: cred.id, rawId: bufToB64url(cred.rawId), type: cred.type };
+      if (cred.response.attestationObject) {
+        out.response = {
+          attestationObject: bufToB64url(cred.response.attestationObject),
+          clientDataJSON: bufToB64url(cred.response.clientDataJSON)
+        };
+      } else {
+        out.response = {
+          authenticatorData: bufToB64url(cred.response.authenticatorData),
+          clientDataJSON: bufToB64url(cred.response.clientDataJSON),
+          signature: bufToB64url(cred.response.signature),
+          userHandle: cred.response.userHandle ? bufToB64url(cred.response.userHandle) : null
+        };
+      }
+      return out;
+    }
+
+    function showError(msg) {
+      $('#login-error').text(msg).prop('hidden', false);
+    }
+
+    function goHome() {
+      window.location.href = '/';
+    }
+
+    // --- password step ---
+
     $('#login-form').on('submit', function (e) {
       e.preventDefault();
       $('#login-error').prop('hidden', true);
@@ -99,12 +212,219 @@
           password: $('#password').val(),
           turnstile_token: turnstileToken
         })
-      }).done(function () {
-        window.location.href = '/';
+      }).done(function (resp) {
+        if (resp && resp.requires_enrollment) {
+          challengeToken = resp.challenge_token;
+          showEnroll();
+        } else if (resp && resp.requires_2fa) {
+          challengeToken = resp.challenge_token;
+          showVerify(resp.methods || []);
+        } else {
+          goHome();
+        }
       }).fail(function (xhr) {
         var msg = (xhr.responseJSON && xhr.responseJSON.error) || 'Sign in failed';
-        $('#login-error').text(msg).prop('hidden', false);
+        showError(msg);
       });
+    });
+
+    function switchPanel(id) {
+      $('#login-form, #passkey-login-btn, #enroll-panel, #verify-panel, #backup-codes-panel').prop('hidden', true);
+      $('.hr-text').prop('hidden', true);
+      $('#' + id).prop('hidden', false);
+    }
+
+    // --- mandatory enrollment ---
+
+    function showEnroll() {
+      $('#card-title').text('Set up two-factor authentication');
+      switchPanel('enroll-panel');
+      $('#enroll-choice').prop('hidden', false);
+      $('#enroll-totp').prop('hidden', true);
+    }
+
+    $('#enroll-choice-totp').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/totp/setup',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ challenge_token: challengeToken })
+      }).done(function (resp) {
+        $('#enroll-totp-uri').text(resp.otpauth_url);
+        $('#enroll-choice').prop('hidden', true);
+        $('#enroll-totp').prop('hidden', false);
+      }).fail(function (xhr) {
+        showError((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to start setup');
+      });
+    });
+
+    $('#enroll-totp-confirm').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/totp/confirm',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ challenge_token: challengeToken, code: $('#enroll-totp-code').val() })
+      }).done(function (resp) {
+        showBackupCodes(resp.backup_codes || []);
+      }).fail(function (xhr) {
+        showError((xhr.responseJSON && xhr.responseJSON.error) || 'Invalid code');
+      });
+    });
+
+    $('#enroll-choice-email').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/email/enable',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ challenge_token: challengeToken })
+      }).done(function (resp) {
+        showBackupCodes(resp.backup_codes || []);
+      }).fail(function (xhr) {
+        showError((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to enable email codes');
+      });
+    });
+
+    $('#enroll-choice-passkey').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/webauthn/register/begin',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ challenge_token: challengeToken, resident_key: true })
+      }).done(function (resp) {
+        var ceremonyToken = resp.challenge_token;
+        navigator.credentials.create({ publicKey: transformCreationOptions(resp.options.publicKey) })
+          .then(function (cred) {
+            return $.ajax({
+              url: '/api/v1/auth/2fa/webauthn/register/finish?challenge_token=' + encodeURIComponent(ceremonyToken) + '&resident_key=true',
+              method: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify(credentialToJSON(cred))
+            });
+          })
+          .then(function (resp2) {
+            showBackupCodes(resp2.backup_codes || []);
+          })
+          .catch(function (err) {
+            showError((err && err.responseJSON && err.responseJSON.error) || (err && err.message) || 'Passkey setup failed');
+          });
+      }).fail(function (xhr) {
+        showError((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to start passkey setup');
+      });
+    });
+
+    function showBackupCodes(codes) {
+      $('#backup-codes-list').text(codes.join('\n'));
+      switchPanel('backup-codes-panel');
+    }
+    $('#backup-codes-continue').on('click', goHome);
+
+    // --- login step-up (already-enrolled account) ---
+
+    function showVerify(methods) {
+      $('#card-title').text('Verify it\'s you');
+      switchPanel('verify-panel');
+      $('#verify-code-panel').prop('hidden', true);
+      var $choice = $('#verify-choice').empty();
+      var labels = { totp: 'Use an authenticator app code', email: 'Email me a code', webauthn: 'Use my passkey' };
+      methods.forEach(function (m) {
+        var $btn = $('<button type="button" class="btn btn-outline-primary"></button>').text(labels[m] || m);
+        $btn.on('click', function () { selectVerifyMethod(m); });
+        $choice.append($btn);
+      });
+      var $backup = $('<button type="button" class="btn btn-outline-secondary"></button>').text('Use a backup code');
+      $backup.on('click', function () { selectVerifyMethod('backup_code'); });
+      $choice.append($backup);
+    }
+
+    var currentVerifyMethod = '';
+
+    function selectVerifyMethod(method) {
+      currentVerifyMethod = method;
+      if (method === 'webauthn') {
+        verifyWebAuthn();
+        return;
+      }
+      if (method === 'email') {
+        $.ajax({
+          url: '/api/v1/auth/2fa/email/request-code',
+          method: 'POST',
+          contentType: 'application/json',
+          data: JSON.stringify({ challenge_token: challengeToken })
+        }).fail(function (xhr) {
+          showError((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to send code');
+        });
+      }
+      $('#verify-code-label').text(method === 'backup_code' ? 'Backup code' : 'Code');
+      $('#verify-code').val('');
+      $('#verify-code-panel').prop('hidden', false);
+    }
+
+    $('#verify-code-submit').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/verify',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+          challenge_token: challengeToken,
+          method: currentVerifyMethod,
+          code: $('#verify-code').val(),
+          trust_device: $('#verify-trust-device').is(':checked')
+        })
+      }).done(goHome).fail(function (xhr) {
+        showError((xhr.responseJSON && xhr.responseJSON.error) || 'Invalid code');
+      });
+    });
+
+    function verifyWebAuthn() {
+      $.ajax({
+        url: '/api/v1/auth/2fa/webauthn/login/begin',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ challenge_token: challengeToken })
+      }).done(function (resp) {
+        navigator.credentials.get({ publicKey: transformRequestOptions(resp.options.publicKey) })
+          .then(function (cred) {
+            var trust = $('#verify-trust-device').is(':checked');
+            return $.ajax({
+              url: '/api/v1/auth/2fa/webauthn/login/finish?challenge_token=' + encodeURIComponent(challengeToken) + '&trust_device=' + trust,
+              method: 'POST',
+              contentType: 'application/json',
+              data: JSON.stringify(credentialToJSON(cred))
+            });
+          })
+          .then(goHome)
+          .catch(function (err) {
+            showError((err && err.responseJSON && err.responseJSON.error) || (err && err.message) || 'Passkey verification failed');
+          });
+      }).fail(function (xhr) {
+        showError((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to start passkey verification');
+      });
+    }
+
+    // --- full passwordless passkey login ---
+
+    $('#passkey-login-btn').on('click', function () {
+      $('#login-error').prop('hidden', true);
+      $.ajax({ url: '/api/v1/auth/webauthn/passwordless/begin', method: 'POST' })
+        .done(function (resp) {
+          var token = resp.challenge_token;
+          navigator.credentials.get({ publicKey: transformRequestOptions(resp.options.publicKey) })
+            .then(function (cred) {
+              return $.ajax({
+                url: '/api/v1/auth/webauthn/passwordless/finish?challenge_token=' + encodeURIComponent(token),
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(credentialToJSON(cred))
+              });
+            })
+            .then(goHome)
+            .catch(function (err) {
+              showError((err && err.responseJSON && err.responseJSON.error) || (err && err.message) || 'Passkey login failed');
+            });
+        })
+        .fail(function (xhr) {
+          showError((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to start passkey login');
+        });
     });
   </script>
 </body>
