@@ -83,17 +83,19 @@ func Snippet(body string) string {
 
 // creatorNameExpr renders display_name with an email fallback; u is the
 // users table joined on created_by (or the subquery form for UPDATE's
-// RETURNING, which can't reference a join).
+// RETURNING, which can't reference a join). The subquery form is
+// NULL-safe: a deleted creator yields an empty name, matching the ON
+// DELETE SET NULL rule on journal_notes.created_by.
 const creatorNameExpr = `COALESCE(NULLIF(display_name, ''), email)`
 
 // noteCore is the plain journal_notes column list (table aliased n).
-// CreatorName is appended per call site: a users join for SELECTs, or a
-// scalar subquery for INSERT/UPDATE RETURNING.
+// CreatorName is appended per call site: a scalar subquery everywhere
+// (INSERT/UPDATE RETURNING can't reference a join).
 const noteCore = `n.id, n.project_id, n.body_html, n.commit_sha, n.commit_subject,
 	n.commit_author, n.commit_datetime, n.created_by, n.created_at, n.updated_at`
 
 const noteColumns = noteCore + `,
-	` + creatorNameExpr
+	COALESCE((SELECT COALESCE(NULLIF(display_name, ''), email) FROM users WHERE id = n.created_by), '')`
 
 func scanNote(row pgx.Row) (Note, error) {
 	var n Note
@@ -141,7 +143,7 @@ func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID string, l
 	}
 
 	rows, err := pool.Query(ctx, `SELECT `+noteColumns+`
-		FROM journal_notes n JOIN users u ON u.id = n.created_by
+		FROM journal_notes n
 		WHERE n.project_id = $1 ORDER BY n.created_at DESC LIMIT $2 OFFSET $3`,
 		projectID, limit, offset)
 	if err != nil {
@@ -166,7 +168,7 @@ func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID string, l
 // responsible for authorizing access to the result.
 func Get(ctx context.Context, pool *pgxpool.Pool, id string) (Note, error) {
 	n, err := scanNote(pool.QueryRow(ctx, `SELECT `+noteColumns+`
-		FROM journal_notes n JOIN users u ON u.id = n.created_by WHERE n.id = $1`, id))
+		FROM journal_notes n WHERE n.id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Note{}, ErrNotFound
 	}

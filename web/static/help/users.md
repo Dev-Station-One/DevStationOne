@@ -29,13 +29,16 @@ account's identity.
 
 - You cannot demote or delete **your own** account.
 - The **last remaining administrator** cannot be demoted or deleted.
-- A user who still owns projects or runtimes cannot be deleted — the
-  delete error opens their **Owned resources** panel, where each project
-  and runtime can be reassigned to another user (or everything at once
-  with "Reassign everything"). A runtime transfer only changes its owner;
-  its enrollment and connection are untouched.
-- Deleting a user removes their sign-in sessions immediately; audit history
-  is kept.
+- A user who still owns projects, runtimes, backup schedules, or database
+  connections cannot be deleted — the delete error names what's in the
+  way, and the **Owned resources** panel lets each project and runtime be
+  reassigned to another user (or everything at once with "Reassign
+  everything"). A runtime transfer only changes its owner; its enrollment
+  and connection are untouched.
+- Deleting a user removes their sign-in sessions immediately. Their past
+  activity — terminal sessions, journal notes, quick-command runs,
+  backups — survives, shown without a creator name; audit history is
+  kept.
 
 ## Two-factor authentication
 

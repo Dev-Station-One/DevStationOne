@@ -46,7 +46,7 @@ type Session struct {
 	RenderMode   string
 }
 
-const sessionColumns = `id, project_id, name, status, cols, rows, exit_code, error_message, created_by, created_at, updated_at, closed_at, render_mode`
+const sessionColumns = `id, project_id, name, status, cols, rows, exit_code, error_message, COALESCE(created_by::text, '') AS created_by, created_at, updated_at, closed_at, render_mode`
 
 func scanSession(row pgx.Row) (Session, error) {
 	var s Session

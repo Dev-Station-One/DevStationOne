@@ -57,7 +57,7 @@ const runCore = `r.id, r.project_id, r.command_id, r.name, r.command_text, r.ses
 // runColumns appends the runner's display name (email fallback), matching
 // internal/journal's creatorNameExpr.
 const runColumns = runCore + `,
-	COALESCE(NULLIF(u.display_name, ''), u.email) AS run_by_name`
+	COALESCE((SELECT COALESCE(NULLIF(display_name, ''), email) FROM users WHERE id = r.run_by), '') AS run_by_name`
 
 func scanRun(row pgx.Row) (Run, error) {
 	var run Run
@@ -139,7 +139,7 @@ func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID, commandI
 	}
 
 	rows, err := pool.Query(ctx, `SELECT `+runColumns+`
-		FROM command_runs r JOIN users u ON u.id = r.run_by
+		FROM command_runs r
 		`+where+` ORDER BY r.started_at DESC LIMIT $`+fmtIt(len(args)+1)+` OFFSET $`+fmtIt(len(args)+2),
 		append(args, limit, offset)...)
 	if err != nil {
@@ -162,7 +162,7 @@ func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID, commandI
 // GetForProject looks up one run and verifies it belongs to projectID.
 func GetForProject(ctx context.Context, pool *pgxpool.Pool, projectID, id string) (Run, error) {
 	run, err := scanRun(pool.QueryRow(ctx, `SELECT `+runColumns+`
-		FROM command_runs r JOIN users u ON u.id = r.run_by
+		FROM command_runs r
 		WHERE r.id = $1 AND r.project_id = $2`, id, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Run{}, ErrNotFound

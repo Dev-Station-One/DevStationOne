@@ -36,7 +36,7 @@ type Fields struct {
 	SortOrder int
 }
 
-const commandColumns = `id, project_id, name, command, sort_order, created_by, created_at, updated_at`
+const commandColumns = `id, project_id, name, command, sort_order, COALESCE(created_by::text, '') AS created_by, created_at, updated_at`
 
 func scanCommand(row pgx.Row) (Command, error) {
 	var c Command

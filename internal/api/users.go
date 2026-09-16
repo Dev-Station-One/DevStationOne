@@ -232,18 +232,35 @@ func deleteUserHandler(db *database.DB) http.HandlerFunc {
 		}
 
 		// Ownership blocks the FK: the caller cleans up first, and the
-		// error names what's in the way.
-		var projects, runtimes int
+		// error names what's in the way. History rows (terminal_sessions,
+		// journal_notes, project_commands, command_runs, backups) no longer
+		// block — migration 0022 made those FKs ON DELETE SET NULL.
+		var projects, runtimes, backupSchedules, dbConnections int
 		if err := db.Pool.QueryRow(r.Context(),
-			`SELECT (SELECT count(*) FROM projects WHERE created_by = $1),
-			        (SELECT count(*) FROM runtimes  WHERE created_by = $1)`, id,
-		).Scan(&projects, &runtimes); err != nil {
+			`SELECT (SELECT count(*) FROM projects             WHERE created_by = $1),
+			        (SELECT count(*) FROM runtimes              WHERE created_by = $1),
+			        (SELECT count(*) FROM backup_schedules      WHERE created_by = $1),
+			        (SELECT count(*) FROM database_connections  WHERE created_by = $1)`, id,
+		).Scan(&projects, &runtimes, &backupSchedules, &dbConnections); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to check ownership"})
 			return
 		}
-		if projects > 0 || runtimes > 0 {
+		var owned []string
+		if projects > 0 {
+			owned = append(owned, "projects")
+		}
+		if runtimes > 0 {
+			owned = append(owned, "runtimes")
+		}
+		if backupSchedules > 0 {
+			owned = append(owned, "backup schedules")
+		}
+		if dbConnections > 0 {
+			owned = append(owned, "database connections")
+		}
+		if len(owned) > 0 {
 			writeJSON(w, http.StatusBadRequest, map[string]string{
-				"error": "user still owns resources: delete or reassign their projects and runtimes first",
+				"error": "user still owns resources: delete or reassign their " + strings.Join(owned, ", ") + " first",
 			})
 			return
 		}

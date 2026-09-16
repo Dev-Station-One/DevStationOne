@@ -39,7 +39,7 @@ type Backup struct {
 	CreatedAt    time.Time
 }
 
-const backupColumns = `id, kind, connection_id, project_id, runtime_id, file_name, size_bytes, trigger, state, COALESCE(error, ''), created_by, created_at`
+const backupColumns = `id, kind, connection_id, project_id, runtime_id, file_name, size_bytes, trigger, state, COALESCE(error, ''), COALESCE(created_by::text, '') AS created_by, created_at`
 
 func scanBackup(row pgx.Row) (Backup, error) {
 	var b Backup

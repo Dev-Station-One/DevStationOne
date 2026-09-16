@@ -1787,3 +1787,39 @@ predecessors called out for the pre-embed default (`noCache` middleware,
 `internal/api/middleware.go`, stays applied to both branches for that
 reason) — acceptable for a dev-only opt-in, not reintroduced as the
 production default.
+
+## ADR-049 — User deletion: history rows are anonymized, active resources stay guarded
+
+Deleting a user whose PTY history referenced them failed with an opaque
+500: `deleteUserHandler`'s ownership pre-check counted only projects and
+runtimes, but seven more `NO ACTION` FKs pointed at `users` — so
+`DELETE FROM users` could hit `terminal_sessions.created_by_fkey` (and
+five siblings) and surface as a bare 500 "failed to delete user". The
+existing `audit_events` precedent (nullable `actor_user_id`, `ON DELETE
+SET NULL`) already encoded the right semantics; this ADR generalizes it.
+
+1. **Migration 0022 splits the referencing tables by meaning.** Pure
+   history (who did something) — `terminal_sessions.created_by`,
+   `command_runs.run_by`, `journal_notes.created_by`,
+   `project_commands.created_by`, `backups.created_by` — becomes `ON
+   DELETE SET NULL` (columns made nullable). Deleting a user keeps their
+   historical rows with the creator anonymized, exactly like audit
+   events. Active resources — `projects`, `runtimes`,
+   `backup_schedules`, `database_connections` — keep `NO ACTION`.
+2. **The ownership pre-check is extended to every remaining `NO ACTION`
+   table and names the blockers** (`"user still owns resources: delete
+   or reassign their projects, runtimes, backup schedules first"`), so
+   the residual FK cases surface as an actionable 400 instead of a 500.
+   The guard lists only tables actually owned — not a fixed message.
+3. **NULL creators render as empty strings.** Every read of the five
+   columns COALESCEs to `''` where the scan target is a string
+   (`sessionColumns`, `commandColumns`, `backupColumns`), and the
+   journal/command-run creator-name lookups switch from an INNER JOIN on
+   users to a NULL-safe scalar subquery — an INNER JOIN would have
+   silently dropped a deleted creator's notes and run-history rows from
+   every list. UUID columns need the explicit `::text` cast before
+   COALESCE to `''`.
+4. **`DeleteUser` itself is unchanged** — plain `DELETE FROM users`, now
+   unblockable by history rows; the cascading identity tables (sessions,
+   notifications, 2FA state, `project_editor_state`) keep their existing
+   CASCADE rules.
