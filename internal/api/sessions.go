@@ -93,7 +93,7 @@ func listTermSessionsHandler(db *database.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		list, err := sessions.ListForProject(r.Context(), db.Pool, project.ID)
+		list, err := sessions.ListInteractiveForProject(r.Context(), db.Pool, project.ID)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list sessions"})
 			return

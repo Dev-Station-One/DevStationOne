@@ -1368,6 +1368,11 @@ paths:
   /api/v1/projects/{projectID}/sessions:
     get:
       summary: List a project's terminal sessions
+      description: |
+        Excludes command-run sessions (Quick Commands, ADR-045): those back
+        run history rows and are never attached to by a browser, so they
+        never appear as Terminal-tab tabs. They remain reachable by ID and
+        via DELETE (the run-history Stop control uses it).
       tags: [Sessions]
       operationId: listProjectSessions
       security:

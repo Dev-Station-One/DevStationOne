@@ -422,3 +422,72 @@ func TestSessionHTTP_OwnershipEnforced(t *testing.T) {
 		t.Fatalf("bob list sessions for admin's project: status = %d, want 200", listRec.Code)
 	}
 }
+
+// A Quick Command run's session (ADR-045) must never appear in the
+// project's session list — the Terminal tab would otherwise show every run
+// as a (disconnected) tab. Direct lookups and DELETE still work.
+func TestSessionHTTP_CommandRunSessionsHiddenFromList(t *testing.T) {
+	router, _, cookie, projectID, _ := sessionsTestSetup(t)
+
+	cmdBody, _ := json.Marshal(map[string]any{"name": "build", "command": "echo done"})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/commands", bytes.NewReader(cmdBody))
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create command: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var cmd struct{ ID string }
+	if err := json.NewDecoder(rec.Body).Decode(&cmd); err != nil {
+		t.Fatalf("decode command: %v", err)
+	}
+
+	runReq := httptest.NewRequest(http.MethodPost, "/api/v1/projects/"+projectID+"/commands/"+cmd.ID+"/run", nil)
+	runReq.AddCookie(cookie)
+	runRec := httptest.NewRecorder()
+	router.ServeHTTP(runRec, runReq)
+	if runRec.Code != http.StatusCreated {
+		t.Fatalf("run command: status = %d, body = %s", runRec.Code, runRec.Body.String())
+	}
+	var runSess termSessionResponse
+	if err := json.NewDecoder(runRec.Body).Decode(&runSess); err != nil {
+		t.Fatalf("decode run session: %v", err)
+	}
+	pollUntil(t, 5*time.Second, func() bool {
+		getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+runSess.ID, nil)
+		getReq.AddCookie(cookie)
+		getRec := httptest.NewRecorder()
+		router.ServeHTTP(getRec, getReq)
+		var got termSessionResponse
+		json.NewDecoder(getRec.Body).Decode(&got)
+		return got.Status == "exited"
+	})
+
+	plain := createSession(t, router, cookie, projectID, "bash")
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/v1/projects/"+projectID+"/sessions", nil)
+	listReq.AddCookie(cookie)
+	listRec := httptest.NewRecorder()
+	router.ServeHTTP(listRec, listReq)
+	var list []termSessionResponse
+	if err := json.NewDecoder(listRec.Body).Decode(&list); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	for _, s := range list {
+		if s.ID == runSess.ID {
+			t.Fatalf("command-run session %s leaked into the session list", s.ID)
+		}
+	}
+	if len(list) != 1 || list[0].ID != plain.ID {
+		t.Fatalf("list = %d sessions, want only the plain session %s", len(list), plain.ID)
+	}
+
+	// The hidden session is still reachable by ID (the Stop control uses DELETE).
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v1/sessions/"+runSess.ID, nil)
+	getReq.AddCookie(cookie)
+	getRec := httptest.NewRecorder()
+	router.ServeHTTP(getRec, getReq)
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("get hidden session: status = %d", getRec.Code)
+	}
+}

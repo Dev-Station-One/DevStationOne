@@ -75,7 +75,21 @@ func Create(ctx context.Context, pool *pgxpool.Pool, projectID, name string, col
 
 // ListForProject returns a project's sessions, most recently created first.
 func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID string) ([]Session, error) {
-	rows, err := pool.Query(ctx, `SELECT `+sessionColumns+` FROM terminal_sessions WHERE project_id = $1 ORDER BY created_at DESC`, projectID)
+	return list(ctx, pool, ` WHERE project_id = $1`, projectID)
+}
+
+// ListInteractiveForProject is ListForProject minus command-run sessions
+// (ADR-045): those back Quick Command runs, never attach to a browser, and
+// must not appear as Terminal-tab tabs — while closeProjectSessions (backup
+// restore) still has to see and close them, so it keeps using ListForProject.
+func ListInteractiveForProject(ctx context.Context, pool *pgxpool.Pool, projectID string) ([]Session, error) {
+	return list(ctx, pool,
+		` WHERE project_id = $1 AND NOT EXISTS (SELECT 1 FROM command_runs cr WHERE cr.session_id = terminal_sessions.id)`,
+		projectID)
+}
+
+func list(ctx context.Context, pool *pgxpool.Pool, where string, args ...any) ([]Session, error) {
+	rows, err := pool.Query(ctx, `SELECT `+sessionColumns+` FROM terminal_sessions`+where+` ORDER BY created_at DESC`, args...)
 	if err != nil {
 		return nil, err
 	}

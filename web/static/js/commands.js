@@ -160,10 +160,6 @@
     showOutput(run.id);
   }
 
-  function onSession(info) {
-    if (state.onSession) state.onSession(info);
-  }
-
   // --- history ---
 
   function loadHistory($details) {
@@ -186,6 +182,12 @@
         if (run.finished_at) {
           $item.append('<span class="text-secondary" style="min-width: 3em;">' + esc(duration(run.started_at, run.finished_at)) + '</span>');
           $item.append('<button type="button" class="btn btn-sm ds-cmd-out" data-id="' + run.id + '">Output</button>');
+        }
+        // A running entry backs a real PTY session (ADR-045): offer Stop —
+        // the DELETE /sessions handler terminates the process and finalizes
+        // the run row with "session closed".
+        if (!run.finished_at && run.session_id) {
+          $item.append('<button type="button" class="btn btn-sm btn-outline-danger ds-cmd-stop" data-session="' + esc(run.session_id) + '">Stop</button>');
         }
         if (run.error) {
           $item.append('<span class="text-danger small text-truncate" title="' + esc(run.error) + '">' + esc(run.error) + '</span>');
@@ -420,6 +422,13 @@
       remove($(this).closest('.list-group-item').data('cmd'));
     }).on('click', '.ds-cmd-out', function () {
       showOutput($(this).data('id'));
+    }).on('click', '.ds-cmd-stop', async function () {
+      if (!(await DS.confirm('Stop this command? The process will be terminated.'))) return;
+      var $stop = $(this);
+      $.ajax({ url: '/api/v1/sessions/' + $stop.data('session'), method: 'DELETE' }).always(function () {
+        var $details = $stop.closest('.ds-cmd-history');
+        if ($details.length) loadHistory($details);
+      });
     });
 
     load();

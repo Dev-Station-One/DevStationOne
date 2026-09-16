@@ -195,7 +195,11 @@ runtime. All routes require an authenticated session and are authorized the
 same way as Projects (`authorizedTermSession` resolves the session's
 Project through `authorizedProject` — any authenticated user may use any
 project's sessions, `404` on unknown project). Opening a session stamps the
-project's `last_accessed_at`.
+project's `last_accessed_at`. The project list route excludes command-run
+sessions (Quick Commands, ADR-045) — they back run-history rows and are
+never browser-attached, so the Terminal tab must not show them; individual
+lookups and DELETE still work (the Commands history Stop control uses
+DELETE to stop a hung run).
 
 `POST /api/v1/projects/{projectID}/sessions` creates the row, then
 synchronously sends `session.open` to the Project's runtime over its
@@ -1125,7 +1129,10 @@ creating sessions.
   rows carry the runner, timing, exit code/error, and never the output
   tail) and `GET .../command-runs/{runID}` (adds `output_tail`: the last
   full output of the run's PTY output (capped at 100 MiB), ANSI-stripped, captured at session exit —
-  ADR-045). Deleting a project deletes its history (FK CASCADE).
+  ADR-045). Deleting a project deletes its history (FK CASCADE). A running
+  run's `session_id` is stoppable via `DELETE /api/v1/sessions/{sessionID}`
+  (the Commands history row's Stop control): the close path terminates the
+  PTY and finalizes the run row with the "session closed" error.
 - `POST .../commands/import` — one-shot scan of the project directory via
   the runtime's file RPC: Makefile targets (`make <target>`), `package.json`
   `scripts` (`npm run <key>`), and executable files in `scripts/`

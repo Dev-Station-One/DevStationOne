@@ -261,3 +261,50 @@ func TestGet_NotFound(t *testing.T) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
 }
+
+func TestListInteractiveForProject_ExcludesCommandRuns(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	projectID, userID := testProject(t, pool)
+
+	plain, err := Create(ctx, pool, projectID, "bash", 80, 24, userID, "xterm")
+	if err != nil {
+		t.Fatalf("create plain session: %v", err)
+	}
+	runSess, err := Create(ctx, pool, projectID, "build", 80, 24, userID, "xterm")
+	if err != nil {
+		t.Fatalf("create command-run session: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO project_commands (project_id, name, command, created_by)
+		VALUES ($1, 'build', 'make', $2)`, projectID, userID); err != nil {
+		t.Fatalf("insert command: %v", err)
+	}
+
+	// Raw SQL: commandruns imports sessions, so a test import would cycle.
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO command_runs (project_id, command_id, name, command_text, run_by, session_id)
+		VALUES ($1,
+			(SELECT id FROM project_commands WHERE project_id = $1 LIMIT 1),
+			'build', 'make', $2, $3)`,
+		projectID, userID, runSess.ID); err != nil {
+		t.Fatalf("insert command run: %v", err)
+	}
+
+	all, err := ListForProject(ctx, pool, projectID)
+	if err != nil {
+		t.Fatalf("ListForProject: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("ListForProject returned %d sessions, want 2 (backup restore must still see command runs)", len(all))
+	}
+
+	inter, err := ListInteractiveForProject(ctx, pool, projectID)
+	if err != nil {
+		t.Fatalf("ListInteractiveForProject: %v", err)
+	}
+	if len(inter) != 1 || inter[0].ID != plain.ID {
+		t.Fatalf("ListInteractiveForProject = %v, want only the plain session %s", inter, plain.ID)
+	}
+}

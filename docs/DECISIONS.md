@@ -1615,6 +1615,18 @@ CASCADE` (and removes any orphaned rows already created under the old
 behavior). Deleting a command is now the same "gone, history and all"
 model as deleting a project.
 
+### ADR-045 addendum — command-run sessions are invisible to the Terminal tab
+
+The fire-and-collect session rows were still returned by the project's
+session list, so every run left an "Exited" tab in the Terminal tab strip
+that only a manual close removed. Fix: `GET /projects/{projectID}/sessions`
+(now `sessions.ListInteractiveForProject`) excludes sessions that back a
+`command_runs` row; backup-restore's `closeProjectSessions` keeps using the
+unfiltered list so a restore still closes a command mid-run. Consequence: a
+hung command is no longer stoppable from the Terminal tab, so a running
+history row carries a Stop button that calls `DELETE /sessions/{id}` (the
+existing close path already finalizes the run row with "session closed").
+
 ## ADR-046 — Git pull/push: ambient auth only, merge not rebase, conflict is a result not an error
 
 The Source Control tab's `git.command` RPC (ADR-028) gains `pull` and
