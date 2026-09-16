@@ -37,6 +37,21 @@
     @media (max-width: 768px) {
       #code-tree { width: 11rem !important; }
     }
+    /* Quick Commands: Run button's icon while a run is in flight
+       (web/static/js/commands.js, ADR-045). */
+    @keyframes ds-run-bounce {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-2px) rotate(-8deg); }
+      50% { transform: translateY(0) rotate(0deg); }
+      75% { transform: translateY(-1px) rotate(8deg); }
+    }
+    .ds-run-icon {
+      display: inline-block;
+      animation: ds-run-bounce .6s ease-in-out infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .ds-run-icon { animation: none; }
+    }
     /* Terminal session tabs and app tabs scroll horizontally instead of
        wrapping, per docs/WEB_UI_DESIGN.md "Mobile" and
        VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md mobile terminal priority. */

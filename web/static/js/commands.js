@@ -97,37 +97,67 @@
 
   // --- run ---
 
+  // Swaps a row's Run button between idle (▶ Run) and in-flight
+  // (person-running, "Running…", disabled) states in place — no full-list
+  // rebuild, so other rows/open History panels are untouched.
+  function setButtonRunning($btn, running) {
+    $btn.prop('disabled', running);
+    if (running) {
+      $btn.html('<i class="fa-solid fa-person-running me-1 ds-run-icon" aria-hidden="true"></i>Running…');
+    } else {
+      $btn.html('<i class="fa-solid fa-play me-1" aria-hidden="true"></i>Run');
+    }
+  }
+
   function run(c, $btn) {
-    $btn.prop('disabled', true);
+    setButtonRunning($btn, true);
     // Fire-and-collect (ADR-045): the run's session is created server-side
-    // but the browser never attaches — the 2s poll below refetches the row
-    // (and then the list) once the session.exit finalize lands.
+    // but the browser never attaches — the 2s poll below refetches the run
+    // row until session.exit finalizes it.
     $.ajax({ url: apiBase() + '/commands/' + c.id + '/run', method: 'POST' }).done(function () {
-      $btn.prop('disabled', false);
-      pollRun(c.id);
+      pollRun(c, $btn);
     }).fail(function (xhr) {
-      $btn.prop('disabled', false);
+      setButtonRunning($btn, false);
       DS.error((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to run command.');
     });
   }
 
-  var pollTimer = null;
+  // One poll timer per in-flight command (keyed by command id), so running
+  // two different commands at once animates each button independently.
+  var pollTimers = {};
 
-  function pollRun(commandID) {
-    if (pollTimer) return; // one watcher at a time; Refresh covers the rest
-    pollTimer = setInterval(function () {
-      $.get(apiBase() + '/command-runs?command_id=' + encodeURIComponent(commandID) + '&limit=1').done(function (res) {
+  function pollRun(c, $btn) {
+    if (pollTimers[c.id]) return; // already polling this command
+    pollTimers[c.id] = setInterval(function () {
+      $.get(apiBase() + '/command-runs?command_id=' + encodeURIComponent(c.id) + '&limit=1').done(function (res) {
         var run = res.runs[0];
         if (!run || run.finished_at) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-          load();
+          clearInterval(pollTimers[c.id]);
+          delete pollTimers[c.id];
+          setButtonRunning($btn, false);
+          if (run) onRunFinished($btn, run);
         }
       }).fail(function () {
-        clearInterval(pollTimer);
-        pollTimer = null;
+        clearInterval(pollTimers[c.id]);
+        delete pollTimers[c.id];
+        setButtonRunning($btn, false);
       });
     }, 2000);
+  }
+
+  // Reveals a just-finished run's result without waiting for a manual
+  // click: expands (or refreshes, if already open) that command's History
+  // panel and opens the Output modal on the run itself.
+  function onRunFinished($btn, run) {
+    var $details = $btn.closest('.list-group-item').find('.ds-cmd-history');
+    // Set loaded before opening: the native `toggle` event fires when
+    // .prop('open', true) flips a closed panel, and loadHistory() below
+    // already covers that fetch — this just stops the toggle handler from
+    // firing a second, redundant one.
+    $details.each(function () { this.dataset.loaded = '1'; });
+    $details.prop('open', true);
+    loadHistory($details);
+    showOutput(run.id);
   }
 
   function onSession(info) {
