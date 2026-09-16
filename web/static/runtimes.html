@@ -261,14 +261,22 @@ DEVSTATION_RUNTIME_TOKEN=<span id="register-token-inline"></span></pre>
           $body.empty().append($('<div class="text-danger small">').text((xhr.responseJSON && xhr.responseJSON.error) || 'Failed to load services.'));
         });
       }
+      // The help icon lives in `title`, not `html` — load() empties and
+      // rebuilds the whole html container (Swal.getHtmlContainer()) on
+      // every open and every start/stop/restart reload, which would wipe
+      // an icon placed there right back out.
       var dark = document.documentElement.getAttribute('data-bs-theme') !== 'light';
       Swal.fire({
         theme: dark ? 'dark' : 'light',
-        title: 'Services — ' + runtimeName,
+        title: 'Services — ' + escapeHtml(runtimeName)
+          + ' <button type="button" class="icon-btn align-middle" data-help="services" aria-label="Help: Services" title="Help: Services"><i class="fa-solid fa-circle-question" aria-hidden="true"></i></button>',
         html: '<div class="text-start"></div>',
         width: 640,
         confirmButtonText: 'Close',
-        didOpen: load
+        didOpen: function () {
+          if (window.DSHelp) window.DSHelp.initIcons(Swal.getPopup().querySelectorAll('[data-help]'));
+          load();
+        }
       });
     }
 

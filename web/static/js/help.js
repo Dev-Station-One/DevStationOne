@@ -64,8 +64,13 @@
     return window.Popover || null;
   }
 
-  function initHelpIcons() {
-    var icons = document.querySelectorAll('[data-help]');
+  // Attaches a contextual popover to each data-help icon in the given list
+  // (a NodeList, array, or single Element). Shared by the page-load scan
+  // below and by content injected later outside the normal DOM lifecycle
+  // (e.g. a SweetAlert2 modal's body, which doesn't exist at DOMContentLoaded).
+  function initPopovers(icons) {
+    if (icons instanceof Element) icons = [icons];
+    icons = Array.prototype.filter.call(icons, function (el) { return el; });
     if (!icons.length) return;
     var Ctor = popoverCtor();
     if (!Ctor) return;
@@ -91,6 +96,10 @@
         });
       }
     });
+  }
+
+  function initHelpIcons() {
+    initPopovers(document.querySelectorAll('[data-help]'));
   }
 
   // ---- Full manual page (help.html only) ----
@@ -159,6 +168,7 @@
   // values present in the DOM at page load, which is just whichever tab
   // starts active.
   window.DSHelp = {
-    ensureTopics: function (ids) { ids.forEach(loadTopic); }
+    ensureTopics: function (ids) { ids.forEach(loadTopic); },
+    initIcons: initPopovers
   };
 })();
