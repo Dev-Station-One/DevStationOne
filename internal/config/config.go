@@ -23,6 +23,7 @@ type Server struct {
 	SMTPUsername       string
 	SMTPPassword       string
 	SMTPFrom           string
+	SMTPStream         string
 	WebAuthnRPID       string
 	WebAuthnRPOrigin   string
 	DevStatic          bool
@@ -51,6 +52,7 @@ func LoadServer() (Server, error) {
 		SMTPUsername:       getenv("DEVSTATIONONE_SMTP_USERNAME", ""),
 		SMTPPassword:       getenv("DEVSTATIONONE_SMTP_PASSWORD", ""),
 		SMTPFrom:           getenv("DEVSTATIONONE_SMTP_FROM", ""),
+		SMTPStream:         getenv("DEVSTATIONONE_SMTP_STREAM", ""),
 		WebAuthnRPID:       getenv("DEVSTATIONONE_WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPOrigin:   getenv("DEVSTATIONONE_WEBAUTHN_RP_ORIGIN", "http://localhost:8080"),
 		DevStatic:          getenv("DEVSTATIONONE_DEV_STATIC", "") != "",

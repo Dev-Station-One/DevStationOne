@@ -43,6 +43,11 @@ embedded copy — which only changes when the binary is rebuilt.
 | `DEVSTATIONONE_TURNSTILE_SITE_KEY` | no (default unset — disabled) | Cloudflare Turnstile bot-check on login (docs/DECISIONS.md ADR-044). From the Cloudflare dashboard: Turnstile → Add widget → this server's domain → copy the Site Key. Must be set together with `..._SECRET_KEY`, or not at all — one without the other is a startup config error. |
 | `DEVSTATIONONE_TURNSTILE_SECRET_KEY` | no (default unset — disabled) | Paired secret key for the site key above. |
 | `DEVSTATIONONE_DEV_STATIC` | no (default unset — serves the embedded web UI) | Any non-empty value serves `web/static/`/`assets/` from disk instead (dev only — see "Build" above). |
+| `DEVSTATIONONE_SMTP_HOST` | no (default unset — email disabled) | SMTP relay for 2FA email codes and account-recovery mail (ADR-047). Setting it plus any of the other `SMTP_*` values enables email; with no relay configured, email factors are enrollable but codes can't be sent (login then falls back to other factors). |
+| `DEVSTATIONONE_SMTP_PORT` | no (default `587`) | SMTP relay port; STARTTLS used automatically when the server advertises it. |
+| `DEVSTATIONONE_SMTP_USERNAME` / `DEVSTATIONONE_SMTP_PASSWORD` | no | Relay credentials (e.g. a Postmark Server Token). Never logged. |
+| `DEVSTATIONONE_SMTP_FROM` | no | Sender address — for Postmark it must be a verified sender signature for the account's server token. |
+| `DEVSTATIONONE_SMTP_STREAM` | no (default unset) | Provider message stream, sent as `X-PM-Message-Stream` (Postmark). |
 
 See `internal/config` for the authoritative list.
 

@@ -10,12 +10,15 @@ import (
 
 // Config holds SMTP server settings and the From address. A zero Host means
 // mail sending is disabled (docs/SECURITY.md: credentials never logged).
+// Stream optionally names the provider message stream, sent as the
+// X-PM-Message-Stream header (Postmark).
 type Config struct {
 	Host     string
 	Port     int
 	Username string
 	Password string
 	From     string
+	Stream   string
 }
 
 // Enabled reports whether SMTP is configured.
@@ -36,8 +39,11 @@ func Send(cfg Config, to, subject, body string) error {
 		auth = smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)
 	}
 
-	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n%s\r\n",
-		cfg.From, to, subject, body)
+	headers := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n", cfg.From, to, subject)
+	if cfg.Stream != "" {
+		headers += fmt.Sprintf("X-PM-Message-Stream: %s\r\n", cfg.Stream)
+	}
+	msg := headers + "\r\n" + body + "\r\n"
 
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	return smtp.SendMail(addr, auth, cfg.From, []string{to}, []byte(msg))

@@ -74,6 +74,7 @@ func run() error {
 			Username: cfg.SMTPUsername,
 			Password: cfg.SMTPPassword,
 			From:     cfg.SMTPFrom,
+			Stream:   cfg.SMTPStream,
 		},
 		WebAuthnRPID:     cfg.WebAuthnRPID,
 		WebAuthnRPOrigin: cfg.WebAuthnRPOrigin,
