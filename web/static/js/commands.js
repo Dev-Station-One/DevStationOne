@@ -370,6 +370,12 @@
     // appendChild per modal root (wrap holds three siblings).
     while (wrap.firstElementChild) document.body.appendChild(wrap.firstElementChild);
 
+    // The only bindings for these modal buttons — this function's own
+    // injection guard (the early return above) makes it run once ever, so
+    // this is safe from the double-submit trap render() hit: these
+    // elements live outside #commands-panel (appended to <body> once),
+    // so binding them again from render() — which reruns on every visit
+    // to the Commands tab — stacked one more click handler per visit.
     document.getElementById('command-form-close').addEventListener('click', function () { modal('command-form-modal').hide(); });
     document.getElementById('command-form-cancel').addEventListener('click', function () { modal('command-form-modal').hide(); });
     document.getElementById('command-form-save').addEventListener('click', save);
@@ -403,7 +409,6 @@
     $('#commands-add-btn').on('click', function () { openEditor(null); });
     $('#commands-import-btn').on('click', openImport);
     $('#commands-refresh-btn').on('click', load);
-    $('#command-form-save').on('click', save);
 
     $('#commands-rows').on('click', '.ds-cmd-run', function () {
       var id = $(this).data('id');
