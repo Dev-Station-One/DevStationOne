@@ -134,6 +134,49 @@ func TestTwoFactor_MandatoryEnrollmentAndMethods(t *testing.T) {
 	}
 }
 
+// TestTwoFactor_AddFactorWhileSignedIn covers the account-settings path of
+// the dual-subject endpoints: with a session cookie and no challenge token,
+// totp/setup, totp/confirm, email/enable, and webauthn/register/begin must
+// resolve the caller from the session (resolveTwoFactorSubject), not 401.
+func TestTwoFactor_AddFactorWhileSignedIn(t *testing.T) {
+	db := testDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	if _, err := auth.CreateUser(t.Context(), db.Pool, "addfactor@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	cookie, _ := enrollTOTP(t, router, "addfactor@example.com", "password123")
+
+	// Email codes, no challenge token — the request the Account page sends.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/2fa/email/enable", bytes.NewReader([]byte("{}")))
+	req.AddCookie(cookie)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("email/enable with session: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// A second TOTP setup must also resolve the session user.
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/2fa/totp/setup", bytes.NewReader([]byte("{}")))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("totp/setup with session: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+
+	// WebAuthn registration begin likewise (the browser ceremony itself is
+	// not exercised here — only that begin resolves the session subject).
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/2fa/webauthn/register/begin", bytes.NewReader([]byte(`{"resident_key":true}`)))
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("webauthn/register/begin with session: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTwoFactor_LastFactorCannotBeRemoved(t *testing.T) {
 	db := testDB(t)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))

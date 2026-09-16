@@ -27,6 +27,15 @@ func resolveTwoFactorSubject(r *http.Request, db *database.DB, challengeToken st
 	if user, ok := userFromContext(r.Context()); ok {
 		return user, true
 	}
+	// These handlers are registered without requireSession (they also serve
+	// the login-gate path, where no session exists yet), so requireSession
+	// never populated the context: resolve the session cookie directly for
+	// calls from account settings (adding a factor while signed in).
+	if cookie, err := r.Cookie(auth.CookieName); err == nil {
+		if _, user, err := auth.SessionAndUser(r.Context(), db.Pool, cookie.Value); err == nil {
+			return user, true
+		}
+	}
 	challenge, ok := auth.GetChallenge(challengeToken)
 	if !ok {
 		return auth.User{}, false

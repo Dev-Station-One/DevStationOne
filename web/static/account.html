@@ -105,6 +105,31 @@
             </div>
           </div>
 
+          <div class="card mb-4">
+            <div class="card-body">
+              <h3 class="card-title">Sign-in &amp; security</h3>
+              <p class="text-secondary mb-3">Every account requires a second sign-in factor (enrolled at first sign-in). Add or remove methods here.</p>
+              <div id="tf-status" class="list-group list-group-flush mb-3"></div>
+              <div class="d-flex gap-2 flex-wrap">
+                <button type="button" id="tf-add-totp" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-mobile-screen me-1" aria-hidden="true"></i> Add authenticator app</button>
+                <button type="button" id="tf-add-passkey" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-key me-1" aria-hidden="true"></i> Add passkey</button>
+                <button type="button" id="tf-add-email" class="btn btn-outline-primary btn-sm"><i class="fa-solid fa-envelope me-1" aria-hidden="true"></i> Add email codes</button>
+              </div>
+              <div id="tf-totp-panel" hidden>
+                <p class="small mt-3 mb-1">Enter this setup key in your authenticator app (or scan its link), then confirm with the 6-digit code it generates:</p>
+                <code id="tf-totp-uri" style="word-break: break-all;"></code>
+                <div class="row g-2 align-items-end mt-2">
+                  <div class="col-auto">
+                    <input id="tf-totp-code" class="form-control" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6-digit code">
+                  </div>
+                  <div class="col-auto">
+                    <button type="button" id="tf-totp-confirm" class="btn btn-primary btn-sm">Confirm</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <h3 class="mb-3">Active sessions</h3>
           <div class="card">
             <div class="table-responsive">
@@ -293,8 +318,136 @@
       $.ajax({ url: '/api/v1/auth/sessions/' + id, method: 'DELETE' }).always(loadSessions);
     });
 
+    // --- Sign-in & security (2FA/passkey management, ADR-047) ---
+
+    function tf2err(xhr, fallback) {
+      DS.error((xhr.responseJSON && xhr.responseJSON.error) || fallback);
+    }
+
+    function load2FA() {
+      $.get('/api/v1/auth/2fa/methods').done(function (m) {
+        var $list = $('#tf-status').empty();
+        function row(icon, title, sub, removeId) {
+          var btn = removeId
+            ? '<button type="button" class="icon-btn text-danger tf-remove" data-id="' + removeId + '" data-kind="' + removeId + '" aria-label="Remove" title="Remove"><i class="fa-solid fa-trash" aria-hidden="true"></i></button>'
+            : '';
+          return '<div class="list-group-item d-flex align-items-center py-2">' +
+            '<span class="me-2 text-secondary"><i class="fa-solid ' + icon + '" aria-hidden="true"></i></span>' +
+            '<div class="flex-grow-1"><div>' + title + '</div>' +
+            (sub ? '<div class="text-secondary small">' + sub + '</div>' : '') + '</div>' + btn + '</div>';
+        }
+        if (m.totp_confirmed) {
+          $list.append(row('fa-mobile-screen', 'Authenticator app', '6-digit codes from your authenticator app', 'totp'));
+        }
+        if (m.email_enabled) {
+          $list.append(row('fa-envelope', 'Email codes', 'One-time code sent to your account email', 'email'));
+        }
+        (m.webauthn_credentials || []).forEach(function (c) {
+          var sub = 'Added ' + new Date(c.created_at).toLocaleDateString();
+          if (c.resident_key) sub += ' · can sign in without a password';
+          if (c.last_used_at) sub += ' · last used ' + new Date(c.last_used_at).toLocaleDateString();
+          $list.append(row('fa-key', escapeHtml(c.name), sub, 'passkey:' + encodeURIComponent(c.id)));
+        });
+        $list.append(row('fa-life-ring', 'Backup codes', m.backup_codes_remaining + ' unused — each works once'));
+        $list.append('<div class="list-group-item py-2"><button type="button" id="tf-regen-backup" class="btn btn-outline-secondary btn-sm">Regenerate backup codes</button></div>');
+      }).fail(function () {
+        window.location.href = '/login.html';
+      });
+    }
+
+    function showBackupCodes(codes) {
+      if (!codes || !codes.length) return;
+      Swal.fire({
+        title: 'Backup codes',
+        html: '<p class="text-start small">Save these somewhere safe — each works once if you lose access to your other sign-in method, and they are shown only this once.</p><pre class="bg-secondary-lt p-2 rounded text-start" style="user-select:all">' + codes.map(escapeHtml).join('\n') + '</pre>',
+        confirmButtonColor: 'var(--ds-primary)'
+      });
+    }
+
+    $('#tf-status').on('click', '.tf-remove', async function () {
+      var kind = $(this).data('id');
+      if (!(await DS.confirm('Remove this sign-in method?'))) return;
+      var url = kind === 'totp' ? '/api/v1/auth/2fa/totp'
+        : kind === 'email' ? '/api/v1/auth/2fa/email'
+        : '/api/v1/auth/2fa/webauthn/' + kind.slice('passkey:'.length);
+      $.ajax({ url: url, method: 'DELETE' }).done(load2FA).fail(function (xhr) {
+        tf2err(xhr, 'Failed to remove sign-in method.');
+      });
+    });
+
+    $('#tf-status').on('click', '#tf-regen-backup', function () {
+      $.post('/api/v1/auth/2fa/backup-codes/regenerate').done(function (resp) {
+        showBackupCodes(resp.backup_codes);
+      }).fail(function (xhr) {
+        tf2err(xhr, 'Failed to regenerate backup codes.');
+      });
+    });
+
+    $('#tf-add-email').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/email/enable', method: 'POST', contentType: 'application/json', data: '{}'
+      }).done(function (resp) {
+        load2FA();
+        showBackupCodes(resp.backup_codes);
+      }).fail(function (xhr) {
+        tf2err(xhr, 'Failed to enable email codes.');
+      });
+    });
+
+    $('#tf-add-totp').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/totp/setup', method: 'POST', contentType: 'application/json', data: '{}'
+      }).done(function (resp) {
+        $('#tf-totp-uri').text(resp.otpauth_url);
+        $('#tf-totp-code').val('');
+        $('#tf-totp-panel').prop('hidden', false);
+      }).fail(function (xhr) {
+        tf2err(xhr, 'Failed to start authenticator setup.');
+      });
+    });
+
+    $('#tf-totp-confirm').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/totp/confirm', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ code: $('#tf-totp-code').val() })
+      }).done(function (resp) {
+        $('#tf-totp-panel').prop('hidden', true);
+        load2FA();
+        showBackupCodes(resp.backup_codes);
+      }).fail(function (xhr) {
+        tf2err(xhr, 'Invalid code.');
+      });
+    });
+
+    $('#tf-add-passkey').on('click', function () {
+      $.ajax({
+        url: '/api/v1/auth/2fa/webauthn/register/begin', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({ challenge_token: '', resident_key: true })
+      }).done(function (resp) {
+        var ceremonyToken = resp.challenge_token;
+        navigator.credentials.create({ publicKey: DSWebAuthn.transformCreationOptions(resp.options.publicKey) })
+          .then(function (cred) {
+            return $.ajax({
+              url: '/api/v1/auth/2fa/webauthn/register/finish?challenge_token=' + encodeURIComponent(ceremonyToken) + '&resident_key=true',
+              method: 'POST', contentType: 'application/json',
+              data: JSON.stringify(DSWebAuthn.credentialToJSON(cred))
+            });
+          })
+          .then(function (resp2) {
+            load2FA();
+            showBackupCodes(resp2.backup_codes);
+          })
+          .catch(function (err) {
+            DS.error((err && err.message) || 'Passkey setup failed');
+          });
+      }).fail(function (xhr) {
+        tf2err(xhr, 'Failed to start passkey setup.');
+      });
+    });
+
     loadAccount();
     loadSessions();
+    load2FA();
   </script>
   <script type="module">
     import CM6 from '/vendor/codemirror6/cm6.bundle.js';

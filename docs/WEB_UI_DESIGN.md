@@ -312,3 +312,20 @@ modal: Name + Command (textarea, monospace). Empty state: "No commands yet.
 Add one by hand or import from a Makefile, package.json, or the scripts/
 folder." A run opens the PTY session's terminal tab (switching to Terminal)
 named after the command; rows stack full-width as tap targets on mobile.
+
+## Account page — Sign-in & security
+
+A card between the profile and preference cards (`account.html`, ADR-047):
+a `list-group` of the account's second factors loaded from
+`GET /api/v1/auth/2fa/methods` — authenticator app, email codes, one row
+per passkey (name, added date, "can sign in without a password" when
+resident, last-used date), and a backup-codes row with a remaining count.
+Row removal is a `text-danger` trash icon behind a `DS.confirm`; the last
+remaining factor is refused by the server (409) and surfaced as an error
+dialog. Below the list, three outline buttons add a method: authenticator
+app (inline setup panel: otpauth key + code input), passkey (WebAuthn
+ceremony via the shared `/js/webauthn.js` helpers, same code login.html
+uses for enrollment/passwordless), and email codes (single POST). Fresh
+backup codes — from a first factor or the Regenerate button — surface in a
+SweetAlert2 dialog with a `user-select:all` `<pre>` so the one-time codes
+can be copied before the dialog closes.

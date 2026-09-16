@@ -57,6 +57,12 @@ Right after you confirm your first method, you get 10 **backup codes** —
 save them somewhere safe. Each works once, in place of your normal second
 factor, if you don't have access to your usual method.
 
+You can manage your methods any time from the Account page's **Sign-in &
+security** section: add another method (e.g. a passkey on top of an
+authenticator app), remove one you no longer use, or regenerate backup
+codes — regenerating replaces every existing code. Your last remaining
+method can't be removed while two-factor is mandatory.
+
 On the sign-in prompt, checking **"Trust this device for 30 days"** skips
 the second factor on that browser until it expires or you're signed out;
 your password is still always required. Lost your second factor entirely?
