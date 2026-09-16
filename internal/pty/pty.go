@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"strings"
 	"syscall"
 
 	creackpty "github.com/creack/pty"
@@ -122,10 +123,29 @@ func (s *Session) Close() error {
 }
 
 func mergeEnv(base []string, extra map[string]string) []string {
-	out := make([]string, 0, len(base)+len(extra))
+	out := make([]string, 0, len(base)+len(extra)+2)
 	out = append(out, base...)
 	for k, v := range extra {
 		out = append(out, k+"="+v)
 	}
+	// Color/TUI apps key off TERM/COLORTERM; the runtime runs as a systemd
+	// user service where neither is set, so sessions would start colorless.
+	// xterm.js matches these capabilities exactly. An explicit TERM (Project
+	// environment) wins untouched. Duplicate keys resolve last-wins in
+	// os/exec, so the extra map always wins over base.
+	_, inExtra := extra["TERM"]
+	if !inExtra && !hasEnvKey(base, "TERM") {
+		out = append(out, "TERM=xterm-256color", "COLORTERM=truecolor")
+	}
 	return out
+}
+
+func hasEnvKey(env []string, key string) bool {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return true
+		}
+	}
+	return false
 }

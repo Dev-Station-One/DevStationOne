@@ -2,6 +2,7 @@ package pty
 
 import (
 	"bytes"
+	"os"
 	"os/user"
 	"syscall"
 	"testing"
@@ -90,6 +91,66 @@ func TestSession_Signal(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("process did not exit after SIGKILL")
 	}
+}
+
+// unsetTermEnv removes TERM from the test process's environment, matching
+// the real runtime deployment (a systemd user service, which has no TERM).
+func unsetTermEnv(t *testing.T) {
+	t.Helper()
+	old, had := os.LookupEnv("TERM")
+	os.Unsetenv("TERM")
+	if had {
+		t.Cleanup(func() { os.Setenv("TERM", old) })
+	}
+}
+
+// Sessions must start with color-capable TERM/COLORTERM defaults so TUI
+// apps render color: the runtime (systemd user service) provides neither.
+func TestStart_SetsColorTerminalDefaults(t *testing.T) {
+	unsetTermEnv(t)
+
+	s, err := Start(Options{Shell: "/bin/sh", Cols: 80, Rows: 24})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	if _, err := s.Write([]byte("echo $TERM; echo $COLORTERM\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	out := readUntil(t, s, "xterm-256color", 5*time.Second)
+	if !bytes.Contains([]byte(out), []byte("truecolor")) {
+		// Split across PTY reads; both values arrive back-to-back if so.
+		readUntil(t, s, "truecolor", 5*time.Second)
+	}
+	s.Write([]byte("exit\n"))
+	s.Wait()
+}
+
+// An explicit TERM from the Project's environment wins over the defaults,
+// COLORTERM included — respect the user's terminal choice as given.
+func TestStart_RespectsExplicitTerm(t *testing.T) {
+	unsetTermEnv(t)
+
+	s, err := Start(Options{
+		Shell: "/bin/sh",
+		Env:   map[string]string{"TERM": "screen-256color"},
+		Cols:  80, Rows: 24,
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	defer s.Close()
+
+	if _, err := s.Write([]byte("echo $TERM; echo ${COLORTERM:-unset}\n")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	out := readUntil(t, s, "screen-256color", 5*time.Second)
+	if !bytes.Contains([]byte(out), []byte("unset")) {
+		t.Fatalf("COLORTERM was set to %q; explicit TERM must not add it", out)
+	}
+	s.Write([]byte("exit\n"))
+	s.Wait()
 }
 
 func TestStart_RejectsMismatchedOSUser(t *testing.T) {

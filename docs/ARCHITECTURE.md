@@ -197,6 +197,11 @@ Runtime creates:
 - correct user context
 - terminal size
 
+The runtime guarantees a color-capable terminal: sessions whose environment
+does not define `TERM` (the systemd user service provides none) receive
+`TERM=xterm-256color` and `COLORTERM=truecolor` defaults, matching xterm.js's
+capabilities. An explicit `TERM` in the Project environment wins untouched.
+
 The client cannot replace the authoritative cwd.
 
 ## Files
