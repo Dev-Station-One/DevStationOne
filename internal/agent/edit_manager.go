@@ -307,6 +307,12 @@ func (m *editManager) recordAndPush(root, path string, entry editEntry, deleted 
 		m.mu.Unlock()
 		return
 	}
+	if m.watched[root] == nil {
+		// Root was unwatched between the poll snapshot and now; the
+		// watcher no longer exists, so there is nothing to record.
+		m.mu.Unlock()
+		return
+	}
 	m.watched[root][path] = entry
 	sender := m.sender
 	// Only paths we have actually observed a stat for (or observed deleted)
