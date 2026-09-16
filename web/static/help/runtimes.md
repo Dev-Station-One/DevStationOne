@@ -13,9 +13,10 @@ services, and database connectors for the projects that use it.
 ## Registering a runtime
 
 Click **Register a new runtime**, give it a name, and you'll get a one-time
-enrollment token. Set `DEVSTATION_SERVER_URL` and `DEVSTATION_RUNTIME_TOKEN`
-on the target machine and start the runtime binary — it will enroll and
-appear here as **pending**, then **online** once connected.
+enrollment token. Set `DEVSTATIONONE_SERVER_URL` and
+`DEVSTATIONONE_RUNTIME_TOKEN` on the target machine and start the runtime
+binary — it will enroll and appear here as **pending**, then **online**
+once connected.
 
 ## Status meanings
 

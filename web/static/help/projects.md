@@ -31,8 +31,8 @@ accessed" shows when a terminal session was last opened on the project.
 
 ## Managing projects
 
-Click a project row to open its workspace (Terminal, Files, Code, Source
-Control, Databases, Services, Journal). Only the project's owner (or an
+Click a project row to open its workspace (Terminal, Commands, Files, Code,
+Source Control, Databases, Backups, Docker, Journal). Only the project's owner (or an
 administrator) sees the edit and delete buttons — edit opens the same modal
 used for creating, delete removes the project record and its sessions but
 does not touch files on disk.
