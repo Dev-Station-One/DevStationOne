@@ -16,16 +16,20 @@ go build -o devstationone-admin ./cmd/devstationone-admin
 SQL migrations (`migrations/*.sql`) are embedded in the binary
 (`migrations/embed.go`, `go:embed`) — no separate migration step.
 
-**Static assets are not embedded.** `web/static/` and `assets/` are served
-straight from disk at request time (`http.Dir`, `internal/api/server.go`
-`NewRouter`/`GET /`, `GET /assets/`), resolved relative to the server
-process's working directory. They must ship alongside the binary and stay
-in sync with it — a binary-only update (copying just
-`devstationone-server` without also updating `web/static/`/`assets/` in
-that working directory) silently serves stale HTML/JS/CSS while every API
-endpoint runs the new code. There is no cache-busting or version check to
-catch this; it looks fine until a feature that changed the frontend
-doesn't show up.
+**The web UI is embedded too** (ADR-048): `web/static/` (`web/embed.go`)
+and `assets/` (`assets/embed.go`) are compiled into the binary via
+`go:embed`, so `devstationone-server` is self-contained — no separate
+`web/static/`/`assets/` directory needs to ship or stay in sync with it.
+`web/static/vendor/codemirror6/node_modules` (build tooling, ~102MB, never
+served) is deliberately excluded from the embed; only `cm6.bundle.js`,
+`chunks/`, `entry.js` are included.
+
+For local development, `DEVSTATIONONE_DEV_STATIC=1` switches
+`internal/api/server.go`'s `NewRouter` back to serving `web/static/` and
+`assets/` straight from disk (`http.Dir`, resolved relative to the process's
+working directory — run from the repo root), so an edited file is visible
+on refresh with no rebuild. Unset (the production default), it serves the
+embedded copy — which only changes when the binary is rebuilt.
 
 ### Configuration (environment variables)
 
@@ -38,6 +42,7 @@ doesn't show up.
 | `DEVSTATIONONE_ENV` | no (default `development`) | `development`\|`production` (informational, logged at startup) |
 | `DEVSTATIONONE_TURNSTILE_SITE_KEY` | no (default unset — disabled) | Cloudflare Turnstile bot-check on login (docs/DECISIONS.md ADR-044). From the Cloudflare dashboard: Turnstile → Add widget → this server's domain → copy the Site Key. Must be set together with `..._SECRET_KEY`, or not at all — one without the other is a startup config error. |
 | `DEVSTATIONONE_TURNSTILE_SECRET_KEY` | no (default unset — disabled) | Paired secret key for the site key above. |
+| `DEVSTATIONONE_DEV_STATIC` | no (default unset — serves the embedded web UI) | Any non-empty value serves `web/static/`/`assets/` from disk instead (dev only — see "Build" above). |
 
 See `internal/config` for the authoritative list.
 
@@ -71,13 +76,10 @@ Two supported paths:
   `devstationone` system account (`useradd --system --no-create-home`) and
   auto-generates `DEVSTATIONONE_DB_ENCRYPTION_KEY` on first install. See
   README.md "Installing the Control Server" — the recommended path for a
-  real deployment. The release tarball
-  (`.github/workflows/release.yml`) bundles `web/static/`/`assets/`
-  alongside the three binaries; `install.sh` places them at
-  `/usr/local/share/devstationone/` (replacing them wholesale on every
-  reinstall/upgrade, so a file removed upstream doesn't linger) and the
-  unit sets `WorkingDirectory=/usr/local/share/devstationone` so the
-  `http.Dir` calls above resolve there.
+  real deployment. The release tarball (`.github/workflows/release.yml`)
+  bundles just the three binaries — the web UI is embedded in
+  `devstationone-server` (see "Build" above), so there's nothing else to
+  install or keep in sync.
 - **Manual, user-level (below)** — for building from source and running
   under your own account (e.g. a personal homelab instance), no root
   required at all:
@@ -175,21 +177,17 @@ dashboard.
 
 1. Back up PostgreSQL first — see docs/BACKUPS.md.
 2. Stop the running server.
-3. Replace the binary with the new build. On a manual/user-level
-   deployment (not `install.sh`), also sync `web/static/` and `assets/`
-   in the unit's `WorkingDirectory` to match — they're not embedded (see
-   "Build" above), and a binary-only update silently leaves the old
-   frontend in place while every API endpoint runs new code.
+3. Replace the binary with the new build — the web UI is embedded in it
+   (ADR-048), so there's nothing else to sync.
 4. Start it — migrations run automatically before it starts serving.
 5. Confirm `/healthz` and `/readyz` both answer `ok`, and that a changed
-   page (e.g. one with new frontend markup) actually reflects it — a
-   stale `web/static/` won't show up in either health check.
+   page (e.g. one with new frontend markup) actually reflects it.
 
-Static-only changes (HTML/CSS/JS/JSON under `web/static/` or `assets/`, no
-Go code touched) skip steps 1–4 entirely: `rsync`/`scp` the changed files
-into the unit's `WorkingDirectory` and they're live immediately — both are
-served straight from disk via `http.FileServer`, not embedded in the
-binary, and the running process needs no restart to pick them up.
+Any change under `web/static/` or `assets/` — including static-only
+HTML/CSS/JS/JSON edits — now requires a rebuild and restart to take
+effect, since it's compiled into the binary rather than read from disk.
+`DEVSTATIONONE_DEV_STATIC=1` opts back into disk-serving for local
+development (see "Build" above) where a restart isn't wanted.
 
 Migrations are additive/forward-only in normal operation
 (`database.Migrate`, `internal/database/database.go`, only ever runs "up").

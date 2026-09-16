@@ -1727,3 +1727,63 @@ nothing server-side blocks other endpoints until they re-enroll — the
 account settings page showing `enrolled: false` is the only nudge back into
 the gate. A hard block would require touching `requireSession` globally for
 an edge case; left as a follow-up if it proves to matter in practice.
+
+## ADR-048 — Web UI embedded into the server binary via go:embed
+
+`web/static/` and `assets/` were served straight from disk (`http.Dir`,
+resolved relative to the process's working directory) — a deliberate
+choice at the time, but one that made every deploy two artifacts kept in
+sync by convention rather than one self-contained binary: `install.sh`
+copied them into `/usr/local/share/devstationone/` on every reinstall, the
+release tarball bundled them alongside the three binaries, and a
+binary-only update could silently leave stale frontend files in place
+(docs/DEPLOYMENT.md "Upgrading", pre-ADR-048 wording). This ADR switches
+the default to embedding both trees into `devstationone-server` via
+`go:embed`, following the same pattern `migrations/embed.go` already used
+for SQL migrations.
+
+1. **Two small embed packages, not a root-level one.** `go:embed` patterns
+   resolve relative to the `.go` file's own directory and cannot reach
+   above it (no `../`), and `web/static/` and `assets/` are separate
+   top-level directories — so `web/embed.go` (`package web`) embeds
+   `static/...` and `assets/embed.go` (`package assets`) embeds `*`,
+   rather than introducing an unfamiliar package rooted at the repo root.
+2. **`web/embed.go` lists explicit subdirectory globs, not a single
+   recursive `static/*`.** `go:embed` has no exclude syntax, and
+   `web/static/vendor/codemirror6/node_modules` (~102MB, build tooling,
+   never requested by a browser) sits inside the tree that must be
+   embedded. Enumerating each served subdirectory (`static/vendor/xterm`,
+   `static/vendor/bootstrap`, …, and only
+   `codemirror6/{cm6.bundle.js,chunks,entry.js}` from that one vendor dir)
+   keeps the binary's static payload at ~9MB instead of ~111MB, without
+   restructuring the repo to work around the syntax gap.
+3. **`NewRouter`'s existing `staticDir string` parameter gained a meaning
+   for `""` instead of gaining a new parameter.** `internal/api/server.go`
+   `NewRouter` already took a disk path for `web/static/` (`assets/` was
+   always a hardcoded relative literal inside it, never a parameter); empty
+   string now selects the embedded `web.Static()`/`assets.FS` (the
+   production default), non-empty still selects `os.DirFS` on that path
+   exactly as before. This kept all ~27 existing `NewRouter(...)` call
+   sites in `internal/api/*_test.go` — which pass `t.TempDir()`, never
+   empty — completely unchanged; they keep exercising the disk-serving
+   branch, which remains real production code (not test-only), just no
+   longer the default.
+4. **`DEVSTATIONONE_DEV_STATIC` (any non-empty value) opts back into
+   disk-serving** for local development, so an edited file under
+   `web/static/`/`assets/` is visible on browser refresh with no rebuild —
+   the one capability lost by embedding by default. `cmd/devstationone-server/main.go`
+   maps this to `staticDir = "web/static"` (repo-relative; the dev server
+   is always run from the repo root — no configurable path added, since
+   nothing in this codebase runs it otherwise).
+5. **`install.sh` and the release tarball (`.github/workflows/release.yml`)
+   now ship binaries only.** The `WorkingDirectory=/usr/local/share/devstationone`
+   line in the generated systemd unit is dropped along with the
+   copy-into-share_dir step it existed for — nothing else in the server
+   depends on its working directory.
+
+Known limitation, not fixed in this slice: `DEVSTATIONONE_DEV_STATIC`'s
+disk-serving path still carries the same no-cache-busting risk ADR
+predecessors called out for the pre-embed default (`noCache` middleware,
+`internal/api/middleware.go`, stays applied to both branches for that
+reason) — acceptable for a dev-only opt-in, not reintroduced as the
+production default.

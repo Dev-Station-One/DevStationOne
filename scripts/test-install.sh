@@ -22,8 +22,7 @@ CGO_ENABLED=0 go build -o "$WORK/build/" \
 mkdir -p "$WORK/dist"
 TARBALL="$WORK/dist/devstationone_0.0.0-test_linux_amd64.tar.gz"
 tar -czf "$TARBALL" -C "$WORK/build" \
-  devstationone-server devstationone-runtime devstationone-admin \
-  -C "$ROOT_DIR" web/static assets
+  devstationone-server devstationone-runtime devstationone-admin
 
 echo "--- install.sh --server ---"
 SERVER_ROOT="$WORK/server-root"
@@ -36,22 +35,18 @@ assert_file "$SERVER_ROOT/etc/devstationone/server.env"
 assert_file "$SERVER_ROOT/etc/systemd/system/devstationone-server.service"
 assert_contains "$SERVER_ROOT/etc/systemd/system/devstationone-server.service" "ExecStart=/usr/local/bin/devstationone-server"
 assert_contains "$SERVER_ROOT/etc/systemd/system/devstationone-server.service" "User=devstationone"
-assert_contains "$SERVER_ROOT/etc/systemd/system/devstationone-server.service" "WorkingDirectory=/usr/local/share/devstationone"
 grep -q "^DEVSTATIONONE_DB_ENCRYPTION_KEY=.\+" "$SERVER_ROOT/etc/devstationone/server.env" ||
   fail "server.env missing a generated DEVSTATIONONE_DB_ENCRYPTION_KEY"
 
-echo "static assets land where WorkingDirectory expects them..."
-assert_file "$SERVER_ROOT/usr/local/share/devstationone/web/static/login.html"
-assert_file "$SERVER_ROOT/usr/local/share/devstationone/assets/logo/devstationone-top-logo.png"
+echo "no static assets are installed — the web UI is embedded in the binary (ADR-048)..."
+[ ! -d "$SERVER_ROOT/usr/local/share/devstationone" ] ||
+  fail "install.sh must not create usr/local/share/devstationone anymore: $SERVER_ROOT/usr/local/share/devstationone"
 
-echo "reinstall keeps an edited env file, and replaces stale static assets..."
+echo "reinstall keeps an edited env file..."
 echo "CUSTOM_MARKER=1" >>"$SERVER_ROOT/etc/devstationone/server.env"
-STALE="$SERVER_ROOT/usr/local/share/devstationone/web/static/stale-from-old-release.html"
-touch "$STALE"
 DEVSTATIONONE_INSTALL_ROOT="$SERVER_ROOT" DEVSTATIONONE_TARBALL_URL="file://$TARBALL" \
   bash "$ROOT_DIR/install.sh" --server
 assert_contains "$SERVER_ROOT/etc/devstationone/server.env" "CUSTOM_MARKER=1"
-[ ! -f "$STALE" ] || fail "reinstall must not leave stale static assets from a prior release: $STALE"
 
 echo "--- install.sh --runtime ---"
 RUNTIME_ROOT="$WORK/runtime-root"

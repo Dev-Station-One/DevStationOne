@@ -78,7 +78,13 @@ func run() error {
 		WebAuthnRPID:     cfg.WebAuthnRPID,
 		WebAuthnRPOrigin: cfg.WebAuthnRPOrigin,
 	}
-	handler, hub, bus, _, registry := api.NewRouter(db, logger, "web/static", cfg.DBEncryptionKey, cfg.TurnstileSiteKey, cfg.TurnstileSecretKey, twoFactorCfg)
+	// "" selects NewRouter's embedded web UI (ADR-048); DEVSTATIONONE_DEV_STATIC
+	// switches to serving web/static straight from disk for edit-and-refresh.
+	staticDir := ""
+	if cfg.DevStatic {
+		staticDir = "web/static"
+	}
+	handler, hub, bus, _, registry := api.NewRouter(db, logger, staticDir, cfg.DBEncryptionKey, cfg.TurnstileSiteKey, cfg.TurnstileSecretKey, twoFactorCfg)
 	go idleNotifyLoop(ctx, hub, db, bus, logger, time.Duration(cfg.IdleNotifySeconds)*time.Second)
 	go commandruns.RecoverLoop(ctx, db.Pool, hub, logger)
 	go backups.RunScheduler(ctx, db.Pool, registry, cfg.DBEncryptionKey, logger)

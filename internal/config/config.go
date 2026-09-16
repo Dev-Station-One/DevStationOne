@@ -25,6 +25,7 @@ type Server struct {
 	SMTPFrom           string
 	WebAuthnRPID       string
 	WebAuthnRPOrigin   string
+	DevStatic          bool
 }
 
 // Runtime holds configuration for the devstationone-runtime binary.
@@ -52,6 +53,7 @@ func LoadServer() (Server, error) {
 		SMTPFrom:           getenv("DEVSTATIONONE_SMTP_FROM", ""),
 		WebAuthnRPID:       getenv("DEVSTATIONONE_WEBAUTHN_RP_ID", "localhost"),
 		WebAuthnRPOrigin:   getenv("DEVSTATIONONE_WEBAUTHN_RP_ORIGIN", "http://localhost:8080"),
+		DevStatic:          getenv("DEVSTATIONONE_DEV_STATIC", "") != "",
 	}
 	if (cfg.TurnstileSiteKey == "") != (cfg.TurnstileSecretKey == "") {
 		return Server{}, fmt.Errorf("DEVSTATIONONE_TURNSTILE_SITE_KEY and DEVSTATIONONE_TURNSTILE_SECRET_KEY must both be set, or both unset")

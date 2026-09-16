@@ -2,12 +2,15 @@
 package api
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"golang.org/x/time/rate"
 
+	"devstationone/assets"
 	"devstationone/internal/audit"
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
@@ -17,6 +20,7 @@ import (
 	"devstationone/internal/protocol"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
+	"devstationone/web"
 )
 
 // TwoFactorConfig bundles the mandatory-2FA/passkey settings NewRouter needs
@@ -38,6 +42,10 @@ type TwoFactorConfig struct {
 // without a second, disconnected instance.
 // dbEncryptionKey decrypts stored database connection credentials
 // (docs/SECURITY.md) — see internal/dbconnections.
+// staticDir selects the source for the web UI and /assets/ (ADR-048): "" (the
+// production default) serves the binary's embedded web.StaticFS/assets.FS;
+// a non-empty path serves web/static and assets straight from disk instead,
+// so DEVSTATIONONE_DEV_STATIC edits are visible on refresh with no rebuild.
 func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncryptionKey []byte, turnstileSiteKey, turnstileSecretKey string, twoFactorCfg TwoFactorConfig) (http.Handler, *sessions.Hub, *events.Bus, *editor.Hub, *runtimes.Registry) {
 	mux := http.NewServeMux()
 	registry := runtimes.NewRegistry()
@@ -273,11 +281,18 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/notifications/{id}/read", requireSession(db, markNotificationReadHandler(db)))
 	mux.HandleFunc("POST /api/v1/notifications/read-all", requireSession(db, markAllNotificationsReadHandler(db)))
 
-	// StripPrefix: FileServer maps the full URL path under the root dir, so
-	// /assets/x must lose the /assets/ prefix before hitting http.Dir.
-	mux.Handle("GET /assets/", noCache(http.StripPrefix("/assets/", http.FileServer(http.Dir("assets")))))
+	var staticFS, assetsFS fs.FS
+	if staticDir == "" {
+		staticFS, assetsFS = web.Static(), assets.FS
+	} else {
+		staticFS, assetsFS = os.DirFS(staticDir), os.DirFS("assets")
+	}
 
-	mux.Handle("GET /", noCache(http.FileServer(http.Dir(staticDir))))
+	// StripPrefix: FileServer maps the full URL path under the root dir, so
+	// /assets/x must lose the /assets/ prefix before hitting the FS.
+	mux.Handle("GET /assets/", noCache(http.StripPrefix("/assets/", http.FileServer(http.FS(assetsFS)))))
+
+	mux.Handle("GET /", noCache(http.FileServer(http.FS(staticFS))))
 
 	var handler http.Handler = mux
 	handler = rateLimitAPI(apiRateLimit, handler)
