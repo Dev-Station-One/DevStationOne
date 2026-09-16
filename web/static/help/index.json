@@ -12,6 +12,7 @@
   "code",
   "source-control",
   "databases",
+  "backups",
   "services",
   "docker",
   "journal"
