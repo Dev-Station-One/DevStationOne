@@ -167,13 +167,23 @@ func TestTwoFactor_AddFactorWhileSignedIn(t *testing.T) {
 	}
 
 	// WebAuthn registration begin likewise (the browser ceremony itself is
-	// not exercised here — only that begin resolves the session subject).
+	// not exercised here — only that begin resolves the session subject and
+	// mints a ceremony token for the subsequent finish call).
 	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/2fa/webauthn/register/begin", bytes.NewReader([]byte(`{"resident_key":true}`)))
 	req.AddCookie(cookie)
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("webauthn/register/begin with session: status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var beginResp struct {
+		ChallengeToken string `json:"challenge_token"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&beginResp); err != nil {
+		t.Fatalf("decode webauthn begin: %v", err)
+	}
+	if beginResp.ChallengeToken == "" {
+		t.Fatal("webauthn/register/begin with session returned an empty challenge_token — the finish call could never resolve the ceremony")
 	}
 }
 

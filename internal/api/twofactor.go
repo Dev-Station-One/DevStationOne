@@ -17,6 +17,23 @@ import (
 	"devstationone/internal/mail"
 )
 
+// sessionUserFromRequest resolves the caller's session cookie directly.
+// The dual-subject 2FA handlers are registered without requireSession (they
+// also serve the login-gate path, where no session exists yet), so
+// requireSession never populated the context for calls from account
+// settings (adding a factor while signed in).
+func sessionUserFromRequest(r *http.Request, db *database.DB) (auth.User, bool) {
+	cookie, err := r.Cookie(auth.CookieName)
+	if err != nil {
+		return auth.User{}, false
+	}
+	_, user, err := auth.SessionAndUser(r.Context(), db.Pool, cookie.Value)
+	if err != nil {
+		return auth.User{}, false
+	}
+	return user, true
+}
+
 // resolveTwoFactorSubject returns the user a 2FA setup/enrollment request
 // applies to: the authenticated session if one exists, otherwise the
 // pending login identified by challengeToken. The mandatory-enrollment gate
@@ -27,14 +44,8 @@ func resolveTwoFactorSubject(r *http.Request, db *database.DB, challengeToken st
 	if user, ok := userFromContext(r.Context()); ok {
 		return user, true
 	}
-	// These handlers are registered without requireSession (they also serve
-	// the login-gate path, where no session exists yet), so requireSession
-	// never populated the context: resolve the session cookie directly for
-	// calls from account settings (adding a factor while signed in).
-	if cookie, err := r.Cookie(auth.CookieName); err == nil {
-		if _, user, err := auth.SessionAndUser(r.Context(), db.Pool, cookie.Value); err == nil {
-			return user, true
-		}
+	if user, ok := sessionUserFromRequest(r, db); ok {
+		return user, true
 	}
 	challenge, ok := auth.GetChallenge(challengeToken)
 	if !ok {
@@ -75,6 +86,10 @@ func finishFactorSetup(w http.ResponseWriter, r *http.Request, db *database.DB, 
 
 	resp := factorAddedResponse{BackupCodes: backupCodes}
 	if _, hadSession := userFromContext(r.Context()); hadSession {
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	if _, hadSession := sessionUserFromRequest(r, db); hadSession {
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
@@ -405,6 +420,11 @@ func webauthnRegisterBeginHandler(db *database.DB, wa *webauthnlib.WebAuthn) htt
 			// progress to reuse, mint a throwaway token to hold ceremony
 			// state between begin and finish.
 			if token, err = auth.NewChallenge(user.ID, false); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start passkey registration"})
+				return
+			}
+		} else if user2, ok := sessionUserFromRequest(r, db); ok {
+			if token, err = auth.NewChallenge(user2.ID, false); err != nil {
 				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to start passkey registration"})
 				return
 			}
