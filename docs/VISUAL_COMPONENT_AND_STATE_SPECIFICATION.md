@@ -163,8 +163,12 @@ Modified files must be visibly marked and closing an unsaved editor requires exp
 Desktop:
 
 ```text
+Header: branch badge | Pull | Push | Refresh
 Changed Files (Staged / Unstaged) | Diff | Commit box
 ```
+
+The header row is outside the clean/dirty toggle below it — it never hides,
+including when the changed-file list collapses to the clean state.
 
 Changed-file list states:
 
@@ -174,8 +178,10 @@ Changed-file list states:
 - runtime offline
 
 Each entry shows its status code (modified, added, deleted, renamed —
-with its original path, untracked) and stage/unstage actions. Diff view
-states: no selection, loading, loaded, diff too large/binary.
+with its original path, untracked, conflict) and stage/unstage actions. A
+conflicted entry (from a `pull` result) shows the same "Conflict" status
+label as an ordinary unmerged path. Diff view states: no selection,
+loading, loaded, diff too large/binary.
 
 Commit box states:
 
@@ -184,6 +190,32 @@ Commit box states:
 - committing
 - committed (brief confirmation, list refreshes)
 - commit failed
+
+Branch badge states:
+
+- no remote (Pull/Push disabled, tooltip explains why, badge text empty)
+- remote present, no upstream yet ("no tracking branch" text)
+- remote present, tracking, up to date (no ahead/behind text)
+- remote present, tracking, diverged (`↑<ahead> ↓<behind>`, either half
+  omitted when zero)
+
+Pull button states:
+
+- disabled (no remote)
+- idle (enabled)
+- pulling (disabled while in flight)
+- pull failed (inline alert, e.g. no remote reachable/auth failure)
+- pull conflicted (inline alert naming conflicted paths, pointing at the
+  Terminal tab; changed-file list refreshes to show the conflicted entries)
+
+Push button states:
+
+- disabled (no remote)
+- idle (enabled)
+- pushing (disabled while in flight)
+- push failed (inline alert)
+- pushed (list/badge refresh; no separate "published new branch"
+  confirmation beyond the badge gaining an upstream)
 
 ## Journal Components
 

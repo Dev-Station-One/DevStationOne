@@ -170,7 +170,7 @@ programmatically, not via `data-bs-toggle`.
 
 A Project is the primary UI context. Show:
 
-`project · runtime · user · working directory`
+`project · runtime · user · working directory` (working directory hidden under 767px — full path stays in the title tooltip)
 
 Application tabs:
 
@@ -209,14 +209,27 @@ The editor supports syntax highlighting, search/replace, save state, Markdown pr
 ## Source Control
 
 Source Control is a VSCode-style panel scoped to status, diff,
-stage/unstage, and commit — branch/push/pull, history graph, and
-merge/rebase/stash are separate later features.
+stage/unstage, commit, and pull/push on the current branch — branch
+switching, a history graph, and merge/rebase/stash UI are separate later
+features.
 
 Show the changed-file list split into Staged and Unstaged groups, each
 entry carrying its status code (modified, added, deleted, renamed,
 untracked). Selecting an entry shows its diff. Stage/unstage per entry and
 in bulk; a commit message box and Commit button are disabled until the
 staged group is non-empty and a message is entered.
+
+The panel's header row — current-branch badge, Pull, Push, Refresh — sits
+above the changed-file list and stays visible regardless of the panel's
+clean/dirty state; it does not disappear when the tree is clean, so
+pull/push stay reachable right after a commit. The badge shows ahead/behind
+counts against the branch's upstream when one is set. Pull/Push are
+disabled (with a tooltip) when the repository has no remote at all. Pull
+acts on the current branch's upstream; a resulting merge conflict is shown
+as an inline banner naming the conflicted paths, pointing at the Terminal
+tab to resolve — this panel does not offer in-browser conflict resolution.
+Push targets only the current branch, never forces, and auto-publishes a
+branch with no upstream yet on first push.
 
 ## Databases
 

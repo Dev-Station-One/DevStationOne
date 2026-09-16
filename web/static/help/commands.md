@@ -30,6 +30,6 @@ Missing files are normal — the scan simply offers nothing for that source.
 
 Clicking **Run** opens a new terminal tab running the command (multiple
 simultaneous runs of the same command are fine). Every run is recorded —
-who ran it, when, how long, the exit code — with the last 64 KiB of output
-captured at exit (ADR-045). Expand **History** under a command to see its
+who ran it, when, how long, the exit code — with the full output captured
+at exit, up to a 100 MiB safety cap per run (ADR-045). Expand **History** under a command to see its
 last runs and open the captured output of any finished one.
