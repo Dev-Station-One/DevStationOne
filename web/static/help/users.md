@@ -36,3 +36,10 @@ account's identity.
   its enrollment and connection are untouched.
 - Deleting a user removes their sign-in sessions immediately; audit history
   is kept.
+
+## Two-factor authentication
+
+Every account, including ones created here, must set up a second sign-in
+factor the first time it's used — there's no separate step for you to
+enable it. See [Account](/help.html#account) "Two-factor authentication"
+for what a user is walked through.

@@ -1,7 +1,7 @@
 ---
 id: account
 title: Account
-summary: Your profile, display name, fonts, Code tab languages, theme, and active login sessions.
+summary: Your profile, display name, fonts, Code tab languages, theme, active login sessions, and two-factor authentication.
 ---
 # Account
 
@@ -35,3 +35,30 @@ logged in somewhere, or suspect a session was stolen.
 Theme (light/dark) is also an account-level preference, changed from the
 sidebar's theme toggle, so it follows you across devices instead of being
 stored per-browser.
+
+## Two-factor authentication
+
+Every account must have a second sign-in factor. The first time you sign in
+with your password, you're walked through setting one up before you can
+reach the rest of the app — there's nothing to turn on separately.
+
+Choose one of:
+
+- **Authenticator app** — enter the shown setup key into an app like Google
+  Authenticator, Authy, or 1Password, then enter the 6-digit code it
+  generates.
+- **Passkey** — use your device's built-in biometric/PIN unlock or a
+  security key. A passkey can also sign you in on its own afterward, with
+  no password step at all ("Sign in with a passkey" on the login page).
+- **Email codes** — a one-time code is sent to your account email each time
+  you sign in.
+
+Right after you confirm your first method, you get 10 **backup codes** —
+save them somewhere safe. Each works once, in place of your normal second
+factor, if you don't have access to your usual method.
+
+On the sign-in prompt, checking **"Trust this device for 30 days"** skips
+the second factor on that browser until it expires or you're signed out;
+your password is still always required. Lost your second factor entirely?
+Use a backup code, or ask an administrator to reset your two-factor setup —
+either puts you straight back through the setup above on your next sign-in.
