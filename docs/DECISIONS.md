@@ -1894,3 +1894,76 @@ runtime connection and the terminal Hub. The decisions taken:
 7. **Data-browser commits are atomic.** `buildAndExecCommit` wraps its
    edit loop in one transaction; a mid-loop failure rolls back all edits
    instead of leaving a partial write.
+
+## ADR-051 — Native desktop client via energye/energy Webview path
+
+The MVP client is the browser, but a dedicated desktop client was wanted for
+three things a browser tab cannot do: system tray, native notifications, and
+real local downloads. Decisions (requirements: docs/CLIENT_REQUIREMENTS.md,
+design: docs/NATIVE_CLIENT_DESIGN.md):
+
+1. **Stack: energye/energy v3, Webview path (WebKit2GTK), not CEF.** CEF was
+   rejected: ~200MB bundle, X11-only on Linux (Wayland crash, energy#59),
+   and proprietary-codec/unrar licensing friction — none of which buy
+   anything for a client that wraps an existing web UI. WebKit2GTK handles
+   both Wayland and X11; no bundled Chromium.
+2. **Client scope is the three native extras, nothing more.** No own
+   connection layer, no port forwarding, no custom auth: the client loads the
+   Control Server URL and reuses web login. If a PWA tab plus tray would do
+   better, we were wrong to build the app.
+3. **Tray is energy's pure-DBus `platform/linux/systray`** (StatusNotifierItem
+   + dbusmenu, godbus) — no LCL/GTK tray needed, so the OQ-1 "does tray force
+   LCL" risk from requirements is closed.
+4. **Notifications and downloads ride the wv `window.energy` JS bridge.**
+   Energy's webkit2gtk wrapper binds no download signals, so native download
+   interception is impossible; instead the web UI detects the client, and
+   downloads proceed as a client-side authenticated HTTP fetch using a new
+   one-time, short-lived download token endpoint (`POST /api/downloads/tokens`)
+   — no cookie sharing between WebKit and the client's HTTP code.
+5. **Platform: Linux x86 only, self/internal distribution.** Windows (WebView2)
+   is the plausible later addition; macOS is out.
+6. **Client treats all bridge traffic as untrusted web content**: whitelisted
+   event types only, server-side token authorization, no local path acceptance.
+
+## ADR-052 — Client pivots off energye/energy to direct GTK3+WebKit2GTK
+
+ADR-051 chose energye/energy's Webview path for the native client
+(`DevStationClient` repo). Slice A implementation hit a hard blocker:
+
+- Every energy v3 release that compiles against the public `energye/wv`
+  source is incompatible with the only public `libenergy` runtime binary
+  (hosted in the `energye/designer` repo's `resources/frameworks/lib/linux`,
+  last rebuilt 2026-04-12). Releases v3.0.9 through v3.0.16 require a
+  `TWkLoader_Webkit2Version` symbol the binary predates — fatal at dlopen.
+  v3.0.8, from the same era as that binary, does not compile on Linux: its
+  paired `energye/wv` v1.0.5 has a `windowParent` field on Windows only,
+  and energy's `wv/browser_linux.go` references it unconditionally.
+- `energye/liblcl` (the Pascal/Lazarus source `libenergy` builds from) was
+  last pushed 2025-06, well before the `wk`-prefixed v3 API the current wv
+  bindings call. Building from source would not reproduce the missing
+  symbols. No path to a working matching binary was found.
+
+Decision: drop energye/energy. Rebuilt the client directly on GTK3 +
+WebKit2GTK-4.1 via cgo (`gtk+-3.0 webkit2gtk-4.1` pkg-config, both already
+present as system runtime deps per ADR-051's NFR-4). This is a strictly
+smaller dependency surface — energy's only contribution to slice A was "a
+GTK window with a WebKit view in it," which is ~100 lines of cgo. All other
+ADR-051 decisions are unaffected:
+
+- Tray still uses a pure-DBus StatusNotifierItem implementation (either
+  vendor `energye/systray` standalone — it has no libenergy dependency — or
+  a from-scratch godbus implementation; decide in slice B).
+- Notifications and downloads no longer ride an energy-provided JS bridge;
+  the client injects its own minimal `window.webkit.messageHandlers` bridge
+  via `WebKitUserContentManager` (a real, bound WebKit2GTK API — unlike
+  energy's wrapper, direct WebKit2GTK bindings **do** expose
+  `webkit_web_view_download_uri` / `download-started`, so native download
+  interception, ruled out in ADR-051 D-3, is available after all and should
+  be reconsidered in slice D).
+- Linux x86 only, self/internal distribution, untrusted-bridge treatment:
+  unchanged.
+
+Slice A (window + config + reachability check) is complete and verified:
+builds clean (`CGO_ENABLED=1`, `go vet` clean, `gofmt` clean), and a
+headless (Xvfb) smoke test against the live dev Control Server renders the
+real login page correctly.
