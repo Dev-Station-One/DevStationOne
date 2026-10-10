@@ -1,0 +1,262 @@
+package api
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"devstationone/internal/auth"
+	"devstationone/internal/database"
+	"devstationone/internal/devices"
+)
+
+// signedRequest builds and sends one request authenticated as a paired
+// device. host and uri must match what the handler sees (httptest keeps
+// both identical to the target string).
+func signedRequest(t *testing.T, key devices.KeyPair, deviceID, method, uri string, body []byte) *http.Request {
+	t.Helper()
+	hdr, err := devices.Sign(key, deviceID, method, "example.com", uri, time.Now())
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	r := httptest.NewRequest(method, "http://example.com"+uri, bytes.NewReader(body))
+	r.Header.Set("Authorization", hdr)
+	return r
+}
+
+func TestDevicePairAndUse(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	user, err := auth.CreateUser(ctx, db.Pool, "device@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	code, err := devices.CreatePairingCode(ctx, db.Pool, user.ID, "Pixel")
+	if err != nil {
+		t.Fatalf("CreatePairingCode: %v", err)
+	}
+	key, err := devices.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	// Pair: code + pubkey → device ID.
+	body, _ := json.Marshal(map[string]string{"code": code, "public_key": key.PublicB64})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/devices/pair", bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("pair: got %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+	var paired struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &paired)
+	if paired.ID == "" {
+		t.Fatal("pair returned no device id")
+	}
+
+	// Reusing the code fails.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/devices/pair", bytes.NewReader(body)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("reused pair code: got %d, want 400", rec.Code)
+	}
+
+	// A non-SPKI key is refused (and leaves its code unburned).
+	code2, _ := devices.CreatePairingCode(ctx, db.Pool, user.ID, "Spare")
+	bad, _ := json.Marshal(map[string]string{"code": code2, "public_key": "AAAA-not-a-valid-der"})
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/devices/pair", bytes.NewReader(bad)))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("bad pubkey: got %d, want 400", rec.Code)
+	}
+
+	// Signed request lists the user's devices.
+	uri := "/api/v1/auth/devices"
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, key, paired.ID, http.MethodGet, uri, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("signed list: got %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	var list []deviceResponse
+	json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list) != 1 || list[0].Name != "Pixel" {
+		t.Fatalf("device list wrong: %+v", list)
+	}
+
+	// A request with no signature is rejected.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com"+uri, nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("unsigned request: got %d, want 401", rec.Code)
+	}
+
+	// Replay of the same header is rejected on the second send.
+	req := signedRequest(t, key, paired.ID, http.MethodGet, uri, nil)
+	hdrReplay := req.Header.Get("Authorization")
+	for i := 0; i < 2; i++ {
+		r2 := httptest.NewRequest(http.MethodGet, "http://example.com"+uri, nil)
+		r2.Header.Set("Authorization", hdrReplay)
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, r2)
+	}
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("replayed header: got %d, want 401", rec.Code)
+	}
+
+	// Method coverage is verified in devices' unit test (the mux rejects
+	// a method-mismatched request with 405 before auth middleware runs).
+
+	// Stale timestamp is rejected before any device lookup.
+	staleHdr, _ := devices.Sign(key, paired.ID, "GET", "example.com", uri, time.Now().Add(-5*time.Minute))
+	r4 := httptest.NewRequest(http.MethodGet, "http://example.com"+uri, nil)
+	r4.Header.Set("Authorization", staleHdr)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, r4)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("stale ts: got %d, want 401", rec.Code)
+	}
+
+	// Revoke ends access.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, key, paired.ID, http.MethodDelete, "/api/v1/auth/devices/"+paired.ID, nil))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("revoke: got %d, want 204: %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, key, paired.ID, http.MethodGet, uri, nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("post-revoke request: got %d, want 401", rec.Code)
+	}
+}
+
+func TestDeviceAuthorization(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	owner, _ := auth.CreateUser(ctx, db.Pool, "owner@example.com", "password123", false)
+	stranger, _ := auth.CreateUser(ctx, db.Pool, "stranger@example.com", "password123", false)
+	admin, _ := auth.CreateUser(ctx, db.Pool, "admin@example.com", "password123", true)
+
+	keyOwner, _ := devices.GenerateKey()
+	keyStranger, _ := devices.GenerateKey()
+	keyAdmin, _ := devices.GenerateKey()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	uri := "/api/v1/auth/devices/pair"
+	pair := func(t *testing.T, router http.Handler, code string, key devices.KeyPair) string {
+		t.Helper()
+		body, _ := json.Marshal(map[string]string{"code": code, "public_key": key.PublicB64})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "http://example.com"+uri, bytes.NewReader(body)))
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("pair %s: %d %s", code, rec.Code, rec.Body.String())
+		}
+		var p struct {
+			ID string
+		}
+		json.Unmarshal(rec.Body.Bytes(), &p)
+		return p.ID
+	}
+
+	dOwner := pair(t, router, pairingCode(ctx, t, db, owner.ID, "Owner phone"), keyOwner)
+	dStranger := pair(t, router, pairingCode(ctx, t, db, stranger.ID, "Stranger phone"), keyStranger)
+
+	// An owner's device sees only its own devices.
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodGet, "/api/v1/auth/devices", nil))
+	list := []deviceResponse{}
+	json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list) != 1 || list[0].Name != "Owner phone" {
+		t.Fatalf("owner device list: %+v", list)
+	}
+
+	// A device cannot revoke another user's device.
+	otherURI := "/api/v1/auth/devices/" + dStranger
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodDelete, otherURI, nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("cross-user revoke: got %d, want 403", rec.Code)
+	}
+
+	// A device identity carries the pairing user's admin flag: an admin's
+	// device revokes anyone's, a non-admin's cannot.
+	adminID := pair(t, router, pairingCode(ctx, t, db, admin.ID, "Admin phone"), keyAdmin)
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyAdmin, adminID, http.MethodDelete, otherURI, nil))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("admin cross-user revoke: got %d, want 204: %s", rec.Code, rec.Body.String())
+	}
+
+	// Revocation is visible through the admin view — the revoked device
+	// itself, of course, can no longer authenticate.
+	uriS := "/api/v1/users/" + stranger.ID + "/devices"
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyAdmin, adminID, http.MethodGet, uriS, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin view of stranger devices: got %d", rec.Code)
+	}
+	var stList []deviceResponse
+	json.Unmarshal(rec.Body.Bytes(), &stList)
+	if len(stList) != 1 || stList[0].RevokedAt == nil {
+		t.Fatalf("expected revoked state on stranger's device: %+v", stList)
+	}
+
+	// Admin API lists a user's devices.
+	uri2 := "/api/v1/users/" + owner.ID + "/devices"
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyAdmin, adminID, http.MethodGet, uri2, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin user devices: got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "Owner phone") {
+		t.Fatalf("admin user devices missing owner device: %s", rec.Body.String())
+	}
+
+	// Non-admin access to the admin API is denied.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodGet, uri2, nil))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("non-admin user devices: got %d, want 403", rec.Code)
+	}
+}
+
+// pairingCode mints a fresh pairing code for userID.
+func pairingCode(ctx context.Context, t *testing.T, db *database.DB, userID, name string) string {
+	t.Helper()
+	code, err := devices.CreatePairingCode(ctx, db.Pool, userID, name)
+	if err != nil {
+		t.Fatalf("CreatePairingCode: %v", err)
+	}
+	return code
+}
+
+// pairCode drives one full pairing exchange through the router and returns
+// the new device ID.
+func pairCode(t *testing.T, router http.Handler, code string, key devices.KeyPair) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"code": code, "public_key": key.PublicB64})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "http://example.com/api/v1/auth/devices/pair", bytes.NewReader(body)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("pair: %d %s", rec.Code, rec.Body.String())
+	}
+	var p struct {
+		ID string
+	}
+	json.Unmarshal(rec.Body.Bytes(), &p)
+	return p.ID
+}

@@ -14,6 +14,7 @@ import (
 	"devstationone/internal/audit"
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
+	"devstationone/internal/devices"
 	"devstationone/internal/editor"
 	"devstationone/internal/events"
 	"devstationone/internal/mail"
@@ -112,6 +113,16 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/auth/2fa/recover/confirm", rateLimit(loginRateLimit, recoveryConfirmHandler(db)))
 	mux.HandleFunc("POST /api/v1/users/{userID}/2fa/reset", requireAdmin(db, adminResetTwoFactorHandler(db)))
 
+	// Paired native-client devices (ADR-053). Pairing is unauthenticated
+	// but code-gated and rate-limited; device identity rides requireIdentity
+	// on the routes the Android client calls.
+	deviceAuth = devices.NewAuthenticator(db.Pool)
+	pairRateLimit := newIPLimiter(rate.Limit(10.0/900.0), 10) // 10 attempts per 15 min per IP
+	mux.HandleFunc("POST /api/v1/auth/devices/pair", rateLimit(pairRateLimit, pairDeviceHandler(db)))
+	mux.HandleFunc("GET /api/v1/auth/devices", requireIdentity(db, listDevicesHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/auth/devices/{deviceID}", requireIdentity(db, revokeDeviceHandler(db)))
+	mux.HandleFunc("GET /api/v1/users/{userID}/devices", requireAdmin(db, listUserDevicesHandler(db)))
+
 	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
 	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
@@ -134,13 +145,13 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/services/{unit}/disable", requireSession(db, serviceActionHandler(db, registry, "disable")))
 
 	mux.HandleFunc("POST /api/v1/projects", requireSession(db, createProjectHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects", requireSession(db, listProjectsHandler(db)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}", requireSession(db, getProjectHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects", requireIdentity(db, listProjectsHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}", requireIdentity(db, getProjectHandler(db)))
 	mux.HandleFunc("PATCH /api/v1/projects/{projectID}", requireSession(db, patchProjectHandler(db, registry)))
 	mux.HandleFunc("DELETE /api/v1/projects/{projectID}", requireSession(db, deleteProjectHandler(db)))
 
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/sessions", requireSession(db, listTermSessionsHandler(db)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/sessions", requireSession(db, createTermSessionHandler(db, registry, hub)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/sessions", requireIdentity(db, listTermSessionsHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/sessions", requireIdentity(db, createTermSessionHandler(db, registry, hub)))
 
 	// Quick Commands (ADR-045): per-project click-to-run CLI commands, each
 	// opening a real PTY session, with run history under command-runs.
@@ -157,14 +168,14 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/editor/state", requireSession(db, getEditorStateHandler(db)))
 	mux.HandleFunc("PUT /api/v1/projects/{projectID}/editor/state", requireSession(db, putEditorStateHandler(db)))
 
-	mux.HandleFunc("GET /api/v1/sessions/{sessionID}", requireSession(db, getTermSessionHandler(db)))
-	mux.HandleFunc("PATCH /api/v1/sessions/{sessionID}", requireSession(db, patchTermSessionHandler(db)))
-	mux.HandleFunc("DELETE /api/v1/sessions/{sessionID}", requireSession(db, deleteTermSessionHandler(db, registry, hub)))
-	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/attach", requireSession(db, attachTermSessionHandler(db)))
-	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/detach", requireSession(db, detachTermSessionHandler(db, hub)))
-	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/resize", requireSession(db, resizeTermSessionHandler(db, registry)))
-	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/signal", requireSession(db, signalTermSessionHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/sessions/{sessionID}/stream", requireSession(db, termSessionStreamHandler(db, registry, hub, bus, logger)))
+	mux.HandleFunc("GET /api/v1/sessions/{sessionID}", requireIdentity(db, getTermSessionHandler(db)))
+	mux.HandleFunc("PATCH /api/v1/sessions/{sessionID}", requireIdentity(db, patchTermSessionHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/sessions/{sessionID}", requireIdentity(db, deleteTermSessionHandler(db, registry, hub)))
+	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/attach", requireIdentity(db, attachTermSessionHandler(db)))
+	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/detach", requireIdentity(db, detachTermSessionHandler(db, hub)))
+	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/resize", requireIdentity(db, resizeTermSessionHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/sessions/{sessionID}/signal", requireIdentity(db, signalTermSessionHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/sessions/{sessionID}/stream", requireIdentity(db, termSessionStreamHandler(db, registry, hub, bus, logger)))
 	mux.HandleFunc("GET /api/v1/events/stream", requireSession(db, eventsStreamHandler(bus)))
 
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/docker", requireSession(db, getDockerStatusHandler(db, registry)))

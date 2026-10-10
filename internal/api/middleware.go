@@ -16,6 +16,7 @@ import (
 
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
+	"devstationone/internal/devices"
 )
 
 // wsAcceptOptions is shared by both WebSocket upgrade points (runtime
@@ -61,10 +62,40 @@ func requireSession(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// requireAdmin builds on requireSession, additionally rejecting the request
-// with 403 if the authenticated user is not an administrator.
+// deviceAuth is the shared signature verifier all routes registered through
+// requireIdentity use. Constructed by NewRouter into this package var: the
+// package-level var (not a param on every requireIdentity call site) exists
+// so route registrations read like the others. The nonce cache is
+// per-process by design (devices.sig.go — ADR-012-style single-process
+// state); a new router in the same process shares it, which is correct for
+// replay protection, not a leak.
+var deviceAuth *devices.Authenticator
+
+// requireIdentity authenticates via a paired device's Sig header (ADR-053)
+// or falls back to the session cookie — for routes the native Android
+// client calls. A device resolves to its pairing user, so RBAC and
+// requireAdmin compose unchanged.
+func requireIdentity(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.Header.Get("Authorization"), devices.Scheme+" ") {
+			_, user, err := deviceAuth.Authenticate(r.Context(), r)
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "device authentication failed"})
+				return
+			}
+			ctx := context.WithValue(r.Context(), userContextKey, user)
+			next(w, r.WithContext(ctx))
+			return
+		}
+		requireSession(db, next)(w, r)
+	}
+}
+
+// requireAdmin builds on requireIdentity (session cookie or paired-device
+// signature), additionally rejecting the request with 403 if the
+// authenticated user is not an administrator.
 func requireAdmin(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
-	return requireSession(db, func(w http.ResponseWriter, r *http.Request) {
+	return requireIdentity(db, func(w http.ResponseWriter, r *http.Request) {
 		user, _ := userFromContext(r.Context())
 		if !user.IsAdmin {
 			writeJSON(w, http.StatusForbidden, map[string]string{"error": "administrator access required"})

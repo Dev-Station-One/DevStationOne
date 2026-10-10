@@ -1967,3 +1967,43 @@ Slice A (window + config + reachability check) is complete and verified:
 builds clean (`CGO_ENABLED=1`, `go vet` clean, `gofmt` clean), and a
 headless (Xvfb) smoke test against the live dev Control Server renders the
 real login page correctly.
+
+## ADR-053 — Native Android client with ECDSA device-signature authentication
+
+A DevStation Android client (fork of the muxalot app's proven patterns:
+WebView-rendered xterm.js, fully native input/keyboard handling, terminal-
+tab UX with per-tab colors) needs to authenticate against the Control
+Server without a browser session cookie and without shipping password or
+2FA flows into the app.
+
+1. **Device credentials are ECDSA P-256 signature pairs, not bearer tokens.**
+   The phone generates the keypair in the Android Keystore (private key
+   never leaves it); only the public key (X.509 SPKI) reaches the server.
+   Every request — WebSocket upgrades included — carries
+   `Authorization: Sig id, ts, nonce, sig` over
+   `devstationone-v1\nMETHOD\nHOST\nREQUEST_URI\nts\nnonce`. Timestamps
+   within 60 s both directions; nonces single-use (in-memory cache).
+   Nothing to steal: a captured header is stale in 60 s and replay-dead
+   immediately. Chosen over bearer device tokens deliberately — the project
+   already has the token-hash pattern for runtimes/sessions, but a phone's
+   long-lived stored token is a higher-value theft target per-request than
+   a fresh signature, and the team maintains the identical muxalot scheme
+   in production.
+2. **Pairing: `devstationone-admin pair --email --name --url` prints a QR +
+   one-time code** (`devstation://pair?url=…&code=…`; skip2/go-qrcode for
+   rendering). Codes are hashed at rest (SHA-256, like every other
+   credential in this codebase), single-use, 10-minute TTL; the exchange
+   endpoint is IP-rate-limited 10/15 min. Pairing binds the device to one
+   account; there is no in-app login and hence no Turnstile/2FA surface —
+   an account's devices are extensions of that account's session, created
+   by the person who already holds shell-admin or web access to that
+   account. Revocation is the trust revocation.
+3. **Device identity resolves to its pairing user and rides one middleware
+   (`requireIdentity`) on the routes the client calls** (projects read,
+   project/session CRUD + stream, device management); admin pages and every
+   other surface stay cookie-only. RBAC composes unchanged — an admin's
+   paired device is an admin's session. Device management UI extends the
+   existing Settings (own devices) and Users (per-user, admin) pages rather
+   than a new page.
+4. **Host/URI are signed as received** — same proxy constraint muxalot
+   documents: the fronting proxy must not rewrite path or Host.

@@ -358,6 +358,33 @@ paths:
           description: Administrator access required
         "404":
           description: Source or target user not found
+  /api/v1/users/{userID}/devices:
+    get:
+      summary: List a user's paired devices (administrator only)
+      description: Backs the Users manager's per-user device view (ADR-053).
+      tags: [Users]
+      operationId: listUserDevices
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The user's devices, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+        "401":
+          description: Not authenticated
+        "403":
+          description: Administrator access required
   /api/v1/auth/sessions:
     get:
       summary: List active sessions for the current user
@@ -830,6 +857,77 @@ paths:
           description: Revoked
         "404":
           description: Trusted device not found
+  /api/v1/auth/devices/pair:
+    post:
+      summary: Exchange a one-time pairing code for a device registration
+      description: |
+        The phone POSTs the raw code printed by `devstationone-admin pair`
+        and its ECDSA P-256 public key (base64 X.509 SPKI). Single use per
+        code, 10-minute TTL, rate-limited to 10 attempts per 15 min per IP.
+        The device authenticates with the deviceSig scheme from then on.
+      tags: [Auth]
+      operationId: pairDevice
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DevicePairRequest"
+      responses:
+        "201":
+          description: Device registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Device"
+        "400":
+          description: Invalid, expired, or already-used code, or malformed public key
+        "429":
+          description: Rate limit exceeded
+  /api/v1/auth/devices:
+    get:
+      summary: List the current user's paired devices
+      tags: [Auth]
+      operationId: listDevices
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      responses:
+        "200":
+          description: Paired devices, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Device"
+        "401":
+          description: Not authenticated
+  /api/v1/auth/devices/{deviceID}:
+    delete:
+      summary: Revoke a paired device
+      description: Users revoke their own devices; administrators revoke anyone's.
+      tags: [Auth]
+      operationId: revokeDevice
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      parameters:
+        - name: deviceID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          description: Not authenticated
+        "403":
+          description: Not the device owner
+        "404":
+          description: Device not found
   /api/v1/auth/2fa/recover/request:
     post:
       summary: Request a 2FA recovery link by email
@@ -5174,6 +5272,19 @@ components:
       type: apiKey
       in: cookie
       name: devstationone_session
+    deviceSig:
+      type: http
+      description: |
+        Paired native-client device authentication (ADR-053): every request
+        carries `Authorization: Sig id="<device id>", ts="<unix seconds>",
+        nonce="<12 random bytes, base64url>", sig="<ECDSA P-256 ASN.1 DER,
+        base64>"` over the byte string
+        `devstationone-v1\nMETHOD\nHOST\nREQUEST_URI\nts\nnonce`.
+        Timestamps must be within 60 s in both directions; each nonce is
+        accepted once. The signature scheme is described under scheme "sig"
+        but is a custom ECDSA header, not JWT — clients must implement
+        docs/API.md "Device authentication" exactly.
+      scheme: sig
   schemas:
     Backup:
       type: object
@@ -5483,6 +5594,37 @@ components:
         expires_at:
           type: string
           format: date-time
+    Device:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        revoked_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+    DevicePairRequest:
+      type: object
+      required: [code, public_key]
+      properties:
+        code:
+          type: string
+          description: The raw one-time code printed by `devstationone-admin pair`.
+        public_key:
+          type: string
+          description: The device's ECDSA P-256 public key as base64 X.509 SubjectPublicKeyInfo.
     RuntimeCapabilities:
       type: object
       properties:

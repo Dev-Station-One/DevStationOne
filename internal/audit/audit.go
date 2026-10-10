@@ -36,6 +36,10 @@ const (
 	EventTrustedDeviceAdded     = "auth.trusted_device_added"
 	EventTrustedDeviceRevoked   = "auth.trusted_device_revoked"
 
+	EventDevicePaired             = "device.paired"
+	EventDevicePairingCodeCreated = "device.pairing_code_created"
+	EventDeviceRevoked            = "device.revoked"
+
 	EventRuntimeDeleted     = "runtime.deleted"
 	EventRuntimeRegistered  = "runtime.registered"
 	EventRuntimeRevoked     = "runtime.revoked"

@@ -146,6 +146,24 @@
               </table>
             </div>
           </div>
+
+          <h3 class="mb-3">Paired devices</h3>
+          <div class="card">
+            <div class="table-responsive">
+              <table class="table card-table table-vcenter">
+                <thead>
+                  <tr>
+                    <th>Device</th>
+                    <th>Paired</th>
+                    <th>Last used</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="devices-body"></tbody>
+              </table>
+            </div>
+          </div>
+          <p class="text-secondary small">Pair a phone with <code>devstationone-admin pair --email &lt;you&gt; --name &lt;device&gt; --url &lt;server&gt;</code> and scan the QR; a revoked device is refused at its next request.</p>
         </div>
       </div>
     </div>
@@ -319,6 +337,28 @@
       $.ajax({ url: '/api/v1/auth/sessions/' + id, method: 'DELETE' }).always(loadSessions);
     });
 
+    function loadDevices() {
+      $.get('/api/v1/auth/devices').done(function (devices) {
+        var $body = $('#devices-body').empty();
+        devices.forEach(function (d) {
+          var revokeBtn = d.revoked_at
+            ? '<span class="badge bg-red-lt">revoked</span>'
+            : '<button class="icon-btn text-danger device-revoke-btn" data-id="' + d.id + '" aria-label="Revoke device" title="Revoke device"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>';
+          $body.append(
+            '<tr><td>' + escapeHtml(d.name) + '</td>' +
+            '<td>' + new Date(d.created_at).toLocaleString() + '</td>' +
+            '<td>' + (d.last_used_at ? new Date(d.last_used_at).toLocaleString() : 'never') + '</td>' +
+            '<td>' + revokeBtn + '</td></tr>'
+          );
+        });
+      });
+    }
+
+    $('#devices-body').on('click', '.device-revoke-btn', function () {
+      var id = $(this).data('id');
+      $.ajax({ url: '/api/v1/auth/devices/' + id, method: 'DELETE' }).always(loadDevices);
+    });
+
     // --- Sign-in & security (2FA/passkey management, ADR-047) ---
 
     function tf2err(xhr, fallback) {
@@ -448,6 +488,7 @@
 
     loadAccount();
     loadSessions();
+    loadDevices();
     load2FA();
   </script>
   <script type="module">

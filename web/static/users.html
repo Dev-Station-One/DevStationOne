@@ -186,6 +186,23 @@
       </div>
     </div>
 
+    <div class="modal modal-blur fade" id="devices-modal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="devices-modal-title">Paired devices</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <ul id="user-devices" class="list-group"></ul>
+            <div id="devices-empty" class="empty py-3" hidden>
+              <div class="empty-subtitle text-secondary">No paired devices.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="/vendor/jquery/jquery.min.js"></script>
     <script src="/vendor/tabler/js/tabler.min.js"></script>
     <script src="/js/app.js"></script>
@@ -285,6 +302,7 @@
               "<td>" + lastAccessed + "</td>" +
               "<td>" + new Date(u.created_at).toLocaleDateString() + "</td>" +
               '<td><button class="icon-btn resources-btn" data-id="' + u.id + '" aria-label="Owned resources" title="Owned resources"><i class="fa-solid fa-boxes-stacked" aria-hidden="true"></i></button> ' +
+              '<button class="icon-btn devices-btn" data-id="' + u.id + '" data-name="' + escapeHtml(u.display_name || u.email) + '" aria-label="Paired devices" title="Paired devices"><i class="fa-solid fa-mobile-screen" aria-hidden="true"></i></button> ' +
               '<button class="icon-btn edit-btn" data-id="' + u.id + '" aria-label="Edit user" title="Edit user"><i class="fa-solid fa-pen" aria-hidden="true"></i></button> ' +
               '<button class="icon-btn text-danger delete-btn" data-id="' + u.id + '" aria-label="Delete user" title="Delete user"><i class="fa-solid fa-trash" aria-hidden="true"></i></button></td></tr>',
           );
@@ -324,6 +342,49 @@
       // ---- Owned resources + reassignment (ADR-038) ----
 
       var resourcesUserID = null;
+
+      // ---- Paired devices (ADR-053) ----
+
+      var devicesUserID = null;
+
+      function openDevices(u) {
+        devicesUserID = u.id;
+        $("#devices-modal-title").text("Paired devices — " + (u.display_name || u.email));
+        loadUserDevices();
+        new Modal(document.getElementById("devices-modal")).show();
+      }
+
+      function loadUserDevices() {
+        $.get("/api/v1/users/" + devicesUserID + "/devices")
+          .done(function (list) {
+            $("#devices-empty").prop("hidden", list.length > 0);
+            $("#user-devices").empty().html(
+              list.map(function (d) {
+                var badge = d.revoked_at
+                  ? '<span class="badge bg-red-lt ms-2">revoked</span>'
+                  : "";
+                var btn = d.revoked_at
+                  ? ""
+                  : '<button type="button" class="icon-btn text-danger user-device-revoke" data-id="' + d.id + '" aria-label="Revoke device" title="Revoke device"><i class="fa-solid fa-ban" aria-hidden="true"></i></button>';
+                return '<li class="list-group-item d-flex align-items-center py-2">' +
+                  '<div class="flex-grow-1"><div>' + escapeHtml(d.name) + badge + '</div>' +
+                  '<div class="text-secondary small">last used ' + (d.last_used_at ? new Date(d.last_used_at).toLocaleString() : "never") + '</div></div>' +
+                  btn + '</li>';
+              }).join(""),
+            );
+          })
+          .fail(function (xhr) {
+            DS.error((xhr.responseJSON && xhr.responseJSON.error) || "Failed to load devices.");
+          });
+      }
+
+      $("#user-devices").on("click", ".user-device-revoke", function () {
+        var id = $(this).data("id");
+        DS.confirm("Revoke this device? It is refused at its next request.").then(function (ok) {
+          if (!ok) return;
+          $.ajax({ url: "/api/v1/auth/devices/" + id, method: "DELETE" }).always(loadUserDevices);
+        });
+      });
 
       function targetOptionsHTML(excludeID) {
         return allUsers
@@ -392,6 +453,12 @@
         var id = $(this).data("id");
         var u = allUsers.find(function (x) { return x.id === id; });
         if (u) openResources(u);
+      });
+
+      $("#users-body").on("click", ".devices-btn", function () {
+        var id = $(this).data("id");
+        var u = allUsers.find(function (x) { return x.id === id; });
+        if (u) openDevices(u);
       });
 
       $("#reassign-all-btn").on("click", function () {

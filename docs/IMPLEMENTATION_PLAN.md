@@ -1439,3 +1439,42 @@ outside the login flow) expose their endpoints but have no dedicated UI in
 this slice — only the login-time flows got one.
 
 **Status: Complete** (2026-09-15).
+
+## Slice 24: Android native client — device authentication (ADR-053), server half
+
+**Goal**: paired phones authenticate to the Control Server with per-request
+ECDSA signatures and manage their devices; the pairing QR is minted from the
+admin CLI.
+
+**Implemented**: migration 0023 (`devices`, `device_pairing_codes`);
+`internal/devices` (pairing-code lifecycle with FOR UPDATE single-use
+consume, device CRUD, Sig-scheme parse/verify with 60 s both-direction ts
+window, single-use nonce cache, SPKI P-256 key handling, Sign helper);
+`internal/api` `requireIdentity` (device or session-cookie identity, device
+resolves to pairing user so `requireAdmin` composes) adopted on the
+Android-facing routes (projects read, project/session endpoints incl.
+stream, device management; everything else stays cookie-only);
+`POST /api/v1/auth/devices/pair` (code-gated, 10/15 min IP rate limit),
+`GET /api/v1/auth/devices`, `DELETE /api/v1/auth/devices/{id}`,
+`GET /api/v1/users/{userID}/devices` (admin); audit events
+`device.paired` / `device.pairing_code_created` / `device.revoked`;
+`devstationone-admin pair --email --name --url` prints the
+`devstation://pair` QR (skip2/go-qrcode) plus the code; Settings page gains
+a Paired-devices table and Users manager gains a per-user devices modal;
+openapi.yaml (deviceSig scheme, four paths, Device/DevicePairRequest
+schemas), API.md "Device authentication", ADR-053.
+
+**Tests**: devices package unit (header parse, signed-message
+method/URI coverage, nonce cache mark/fresh/prune, per-request signature
+uniqueness); API integration against the real test Postgres (pair end to
+end, code reuse rejection, malformed-key rejection with code left burnable,
+signed list, unsigned 401, header replay 401, stale ts 401, revoke → 204 →
+401, cross-user revoke 403, admin cross-user revoke 204, admin per-user
+device view, non-admin 403).
+
+**Known limitation**: the nonce cache is per-process (ADR-012 scale note) —
+a Control Server restart within the 60 s ts window is the replay bound. The
+Android app itself is a follow-on slice in this pass's plan; the web UI and
+API are complete for it to consume.
+
+**Status: Complete** (2026-10-10).

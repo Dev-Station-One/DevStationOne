@@ -1033,6 +1033,37 @@ Runtime device authentication: a bearer token issued at enrollment (`POST
 `/api/v1/runtimes/connect` WebSocket upgrade. The server stores only a
 SHA-256 hash of the token, the same pattern as browser sessions.
 
+### Device authentication (native clients, docs/DECISIONS.md ADR-053)
+
+A paired phone authenticates without any stored secret: the device holds an
+ECDSA P-256 private key (Android Keystore) and signs every request over
+
+```
+devstationone-v1\nMETHOD\nHOST\nREQUEST_URI\nts\nnonce
+```
+
+presenting `Authorization: Sig id="<device id>", ts="<unix seconds>",
+nonce="<12 random bytes, base64url>", sig="<ASN.1 DER signature, base64>"`.
+Timestamps must be within 60 s in both directions; each nonce is accepted
+exactly once (in-memory cache — server restart briefly relies on the 60 s
+window alone). **HOST and REQUEST_URI are the exact strings the server
+receives** — a reverse proxy must not rewrite the path or Host header, same
+constraint the signed runtime/browsing flows already imply for muxalot-style
+proxying.
+
+Pairing: `devstationone-admin pair --email <account> --name <device> --url
+<server base URL>` prints a QR (`devstation://pair?url=…&code=…`) plus the
+code. The phone scans it and calls the code-gated, rate-limited
+`POST /api/v1/auth/devices/pair` with the code and its public key (base64
+X.509 SPKI); codes are single-use with a 10-minute TTL. Device identity
+resolves to the pairing user — RBAC and admin checks compose unchanged —
+and is accepted on the routes the Android client calls (`GET /api/v1/projects`,
+project/session endpoints, session stream, device management) via
+`requireIdentity`; everything else stays browser-session-only. Revoke via
+`DELETE /api/v1/auth/devices/{id}` (own, or anyone's for admins) — the
+device fails its next signed request. Audited as `device.paired`,
+`device.pairing_code_created`, `device.revoked`.
+
 Optional Cloudflare Turnstile challenge on login (docs/DECISIONS.md
 ADR-044). `GET /api/v1/auth/turnstile-config` (unauthenticated) returns
 `{"enabled": bool, "site_key": string}`; the login page renders the widget
