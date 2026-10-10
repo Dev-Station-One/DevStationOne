@@ -1,0 +1,168 @@
+package dev.devstationone.net
+
+import android.util.Base64
+import dev.devstationone.data.DeviceKey
+import dev.devstationone.data.Server
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
+import org.json.JSONObject
+import java.security.SecureRandom
+import java.util.concurrent.TimeUnit
+
+/**
+ * Signed-request auth for the DevStation Control Server (ADR-053): every
+ * request carries
+ * `Authorization: Sig id="<device>", ts="<unix>", nonce="<b64url>", sig="<b64 DER>"`
+ * signed over "devstationone-v1\nMETHOD\nHOST\nREQUEST_URI\nts\nnonce".
+ * The phone clock must be within 60s of the server's.
+ */
+object Auth {
+    private val rnd = SecureRandom()
+
+    fun header(server: Server, method: String, url: HttpUrl): String {
+        val host = if (url.port == HttpUrl.defaultPort(url.scheme)) url.host else "${url.host}:${url.port}"
+        val uri = url.encodedPath + (url.encodedQuery?.let { "?$it" } ?: "")
+        val ts = (System.currentTimeMillis() / 1000).toString()
+        val nonce = Base64.encodeToString(
+            ByteArray(12).also { rnd.nextBytes(it) },
+            Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
+        )
+        val msg = "devstationone-v1\n$method\n$host\n$uri\n$ts\n$nonce".toByteArray()
+        val sig = Base64.encodeToString(DeviceKey.sign(server.deviceId, msg), Base64.NO_WRAP)
+        return "Sig id=\"${server.deviceId}\", ts=\"$ts\", nonce=\"$nonce\", sig=\"$sig\""
+    }
+}
+
+@Serializable
+data class ProjectInfo(val id: String, val name: String)
+
+@Serializable
+data class SessionInfo(
+    val id: String,
+    val name: String = "",
+    val status: String = "requested",
+    val cols: Int = 80,
+    val rows: Int = 24,
+)
+
+class ApiException(val code: Int, message: String) : Exception(message)
+
+class Api(private val server: Server) {
+    private val base = server.url.trimEnd('/').toHttpUrl()
+
+    companion object {
+        private val json = Json { ignoreUnknownKeys = true }
+        private val jsonMime = "application/json".toMediaType()
+        val client: OkHttpClient = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .build()
+        val wsClient: OkHttpClient = client.newBuilder()
+            .readTimeout(0, TimeUnit.MILLISECONDS)
+            .pingInterval(20, TimeUnit.SECONDS)
+            .build()
+
+        /** Exchanges a pairing code + the device's public key for a device id. */
+        fun pair(baseUrl: String, code: String, pubKey: String): String {
+            val url = baseUrl.trimEnd('/').toHttpUrl().newBuilder().addPathSegments("api/v1/auth/devices/pair").build()
+            val body = buildJsonObject {
+                put("code", code)
+                put("public_key", pubKey)
+            }.toString().toRequestBody(jsonMime)
+            client.newCall(Request.Builder().url(url).post(body).build()).execute().use { r ->
+                val text = r.body?.string().orEmpty()
+                if (!r.isSuccessful) throw ApiException(r.code, text.trim().ifEmpty { "HTTP ${r.code}" })
+                return JSONObject(text).getString("id")
+            }
+        }
+    }
+
+    fun url(vararg segs: String): HttpUrl =
+        base.newBuilder().apply { segs.forEach { addPathSegment(it) } }.build()
+
+    private fun request(method: String, url: HttpUrl, body: RequestBody? = null): Request =
+        Request.Builder().url(url).method(method, body)
+            .header("Authorization", Auth.header(server, method, url)).build()
+
+    private fun bodyOf(vararg pairs: Pair<String, String>): RequestBody =
+        buildJsonObject { pairs.forEach { (k, v) -> put(k, v) } }.toString().toRequestBody(jsonMime)
+
+    private fun Response.jsonText(): String = body?.string().orEmpty()
+
+    private fun check(r: Response, want: IntRange = 200..299) {
+        if (r.code !in want) throw ApiException(r.code, r.jsonText().trim().ifEmpty { "HTTP ${r.code}" })
+    }
+
+    // ---- projects (read-only; creation stays on the web) ----
+
+    fun projects(): List<ProjectInfo> {
+        client.newCall(request("GET", url("api", "v1", "projects"))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    // ---- terminal sessions ----
+
+    /** All project sessions, including exited ones (tabs filter terminal states out). */
+    fun sessions(projectID: String): List<SessionInfo> {
+        client.newCall(request("GET", url("api", "v1", "projects", projectID, "sessions"))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    fun session(id: String): SessionInfo {
+        client.newCall(request("GET", url("api", "v1", "sessions", id))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    fun createSession(projectID: String, name: String, cols: Int, rows: Int): SessionInfo {
+        val body = """{"name":"$name","cols":$cols,"rows":$rows}""".toRequestBody(jsonMime)
+        client.newCall(request("POST", url("api", "v1", "projects", projectID, "sessions"), body)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** Renames the session; the server answers 400 on a blank name. */
+    fun rename(id: String, to: String) {
+        client.newCall(request("PATCH", url("api", "v1", "sessions", id), bodyOf("name" to to))).execute().use { check(it) }
+    }
+
+    /** Ends the session's PTY and its process. */
+    fun kill(id: String) {
+        client.newCall(request("DELETE", url("api", "v1", "sessions", id))).execute().use { check(it) }
+    }
+
+    fun attach(id: String) {
+        client.newCall(request("POST", url("api", "v1", "sessions", id, "attach"))).execute().use { check(it) }
+    }
+
+    /** Mark the session detached; its process keeps running. */
+    fun detach(id: String) {
+        client.newCall(request("POST", url("api", "v1", "sessions", id, "detach"))).execute().use { check(it) }
+    }
+
+    fun resize(id: String, cols: Int, rows: Int) {
+        val body = """{"cols":$cols,"rows":$rows}""".toRequestBody(jsonMime)
+        client.newCall(request("POST", url("api", "v1", "sessions", id, "resize"), body)).execute().use { check(it) }
+    }
+
+    fun signal(id: String, name: String) {
+        client.newCall(request("POST", url("api", "v1", "sessions", id, "signal"), bodyOf("signal" to name))).execute().use { check(it) }
+    }
+}

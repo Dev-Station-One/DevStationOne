@@ -1478,3 +1478,43 @@ Android app itself is a follow-on slice in this pass's plan; the web UI and
 API are complete for it to consume.
 
 **Status: Complete** (2026-10-10).
+
+## Slice 25: Android native client — the app (ADR-053)
+
+**Goal**: DevStationOne.apk — paired-device terminal client for Android,
+muxalot's proven UX running against DevStation's session model and the
+Slice 24 device-signature auth.
+
+**Implemented**: `android/` (Gradle/AGP 8.7.2, Kotlin 2.0.21, minSdk 26,
+compose BOM 2024.10.01 — the exact proven pair muxalot ships): pairing
+screen with zxing QR scan + `devstation://pair` deep link (idle-only
+handling) and https-only enforcement; multi-server store; projects list;
+terminal workspace with the full muxalot port — LazyRow session chips with
+client-side per-tab colors, state dots, long-press tab menu (rename/color/
+bulk close), detach-vs-kill close dialog, per-session WebSocket streams
+binary both ways with Sig-authenticated upgrades, native KeyCaptureView +
+InputEncoder input stack (sticky modifiers, bracketed paste w/ ESC strip,
+app-cursor mode reporting), touch layer (swipe scroll incl. SGR wheel
+translation in mouse-tracking apps, long-press select, tap-to-keyboard),
+OSC 52 confirm + OSC 8 http(s)-only confirm, 8 ms flush batching with the
+server's scrollback-replay-aware `tty.reset()`, reconnect backoff + kick on
+network change, exited-session detection via REST status check,
+ShortcutDock + fan groups + user macro editor with on-device shortcut
+store, app lock (cold start/screen-off/60 s grace) + FLAG_SECURE.
+
+**Deviations from the muxalot source, all deliberate**: sessions are
+UUID-keyed REST resources (name = label) instead of tmux names; resize/
+signal/detach ride REST, not WS JSON ctl; `clip_set`/`clip_get` (tmux
+buffer) dropped — OSC 52 passthrough covers clipboard; muxalot's
+tmux-new-session dialog becomes the REST session-create dialog; Files
+screen dropped (web owns files by design); Pro/Edition gating removed
+(themes + backup always on).
+
+**Build verification**: `assembleDebug` compiles and links clean —
+`android/app/build/outputs/apk/debug/app-debug.apk` (11.5 MB). No emulator
+or device is attached to this dev machine, so the on-device E2E (pair →
+open session → type → detach → reattach) is pending a physical install;
+every server-side behavior it depends on is covered by the Slice 24 API
+and live-smoke tests.
+
+**Status: Complete (build); on-device verification pending** (2026-10-10).
