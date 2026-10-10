@@ -45,3 +45,7 @@ android/*.iml
 # Throwaway HTML mockups (keep real web UI html under web/static)
 /*.html
 /docs/*.html
+
+# Android release signing (never commit)
+android/keystore.properties
+android/keystore/
