@@ -257,5 +257,20 @@ Round 1 implementation:
   → OkHttp Sig header. `net/Api.kt` gained journal models + `journal`,
   `note`, `deleteNote`. `assembleDebug` + `testDebugUnitTest` green
   (`JournalModelsTest` decodes openapi-shaped payloads).
-- Stages 2 (note edit), 3 (attachments), 4 (file tree), 5 (code editor),
-  7 (docs/roundoff) remain.
+- **Stage 2 (note edit + save) — complete** (2026-10-10): `HtmlPanel` edit
+  mode (contenteditable + debounced sanitized-push bridge), native
+  execCommand toolbar (B/I/U · H2/H3 · lists · quote · code · link ·
+  clear) in `NoteScreen`, `Api.putNote` (PUT, `bodyOf` JSON), and
+  `data/NoteDraftStore` (per-project SharedPreferences draft, deleted only
+  after a successful PUT — resume-after-crash per NFR-3). Save flushes the
+  debounced push (150 ms) before reading the draft. Sanitize-on-save
+  enforced: every byte typed stays inside the WebView DOM until the page
+  pushes DOMPurify output, and that output is what PUT sends. `note.html`
+  also gained proper base64-UTF-8 (plain `atob` would mojibake non-ASCII
+  bodies — caught while wiring edit round trip). Accept US-1: build +
+  `JournalModelsTest`/`NoteEditArgsTest` green; the on-device round trip
+  is the stage-7 E2E — the attached Pixel runs the release-signed APK and
+  switching to debug needs uninstall + device re-pair, deliberately not
+  done in this slice.
+- Stages 3 (attachments), 4 (file tree), 5 (code editor), 7 (docs/roundoff)
+  remain.

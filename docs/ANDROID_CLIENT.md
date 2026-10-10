@@ -24,10 +24,11 @@ stored token, nothing to steal.
   modifiers, ctrl combos, F-keys, navigation, user-defined shortcut
   macros), ported from muxalot in full.
 - **Round 1 under way** (2026-10-10): the project screen is a tabbed
-  **Workspace** — Terminal + Journal so far; note reading with
-  DOMPurify-rendered bodies works, note editing and the Files/Code editor
-  follow (docs/DESIGN_ANDROID_PARITY.md). Everything in the next line stays
-  web-only except what those docs move into the app.
+  **Workspace** — Terminal + Journal so far; note reading (DOMPurify
+  bodies), in-place note editing with a native ExecCommand toolbar and
+  crash-resilient drafts (NFR-3) work; attachments and the Files/Code
+  editor follow (docs/DESIGN_ANDROID_PARITY.md). Everything in the next
+  line stays web-only except what those docs move into the app.
 
 ## Auth (ADR-053)
 

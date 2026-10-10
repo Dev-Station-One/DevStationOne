@@ -245,6 +245,14 @@ class Api(private val server: Server) {
         }
     }
 
+    /** Overwrites the note body; caller sends DOMPurify output, echoing the web client. */
+    fun putNote(projectID: String, noteID: String, bodyHTML: String): JournalNote {
+        client.newCall(request("PUT", url("api", "v1", "projects", projectID, "journal", "notes", noteID), bodyOf("body_html" to bodyHTML))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
     fun deleteNote(projectID: String, noteID: String) {
         client.newCall(request("DELETE", url("api", "v1", "projects", projectID, "journal", "notes", noteID))).execute().use { check(it) }
     }

@@ -9,9 +9,11 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -24,10 +26,19 @@ import java.io.ByteArrayInputStream
 
 private const val NOTE_PAGE = "file:///android_asset/note.html"
 
+/** Quotes a Kotlin string for the one-line JS commands the native toolbar sends. */
+internal fun jsString(s: String): String =
+    s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+
 /**
- * Renders one note's `body_html` in a WebView. The note page sanitizes with
- * the same DOMPurify file the web client vendors — output is never trusted
- * by the app.
+ * Renders one note's `body_html` in a WebView, or edits it ([editing] = true).
+ * The note page sanitizes with the same DOMPurify file the web client vendors
+ * — output is never trusted by the app.
+ *
+ * In edit mode the page pushes a debounced sanitized snapshot of the
+ * contenteditable body through [onHtml]; the caller treats it both as the
+ * draft (NFR-3) and as the HTML to save. Anything the app ever sends to the
+ * server therefore passed DOMPurify, matching web-client behavior.
  *
  * Images inside the body reference server URLs (`/api/v1/...`) by absolute
  * path. Browser clients ride session cookies; this app signs every request
@@ -36,10 +47,19 @@ private const val NOTE_PAGE = "file:///android_asset/note.html"
  * beyond that surface (file asset loads only otherwise).
  */
 @Composable
-fun HtmlPanel(server: Server, html: String, modifier: Modifier = Modifier) {
+fun HtmlPanel(
+    server: Server,
+    html: String,
+    modifier: Modifier = Modifier,
+    editing: Boolean = false,
+    onHtml: ((String) -> Unit)? = null,
+    webViewRef: MutableState<WebView?>? = null,
+) {
     val base = remember(server.id) { server.url.trimEnd('/').toHttpUrl() }
     var ready by remember { mutableStateOf(false) }
     var rendered by remember { mutableStateOf("") }
+    var editingOn by remember { mutableStateOf(false) }
+    val latestOnHtml by rememberUpdatedState(onHtml)
 
     AndroidView(
         modifier = modifier,
@@ -83,16 +103,40 @@ fun HtmlPanel(server: Server, html: String, modifier: Modifier = Modifier) {
                     fun ready() {
                         Handler(Looper.getMainLooper()).post { ready = true }
                     }
+
+                    /** Sanitized-edit snapshot pushed by the page; UTF-8 HTML in base64. */
+                    @android.webkit.JavascriptInterface
+                    fun html(b64: String) {
+                        if (onHtml == null) return
+                        val text = String(Base64.decode(b64, Base64.NO_WRAP), Charsets.UTF_8)
+                        Handler(Looper.getMainLooper()).post { latestOnHtml?.invoke(text) }
+                    }
                 }, "Android")
                 loadUrl(NOTE_PAGE)
             }
         },
         update = { v ->
-            if (ready && html != rendered) {
-                rendered = html
+            if (webViewRef != null) webViewRef.value = v
+            if (ready) {
+                when {
+                    editing && !editingOn -> {
+                        editingOn = true
+                        if (html != rendered) {
+                            rendered = html
+                            v.evaluateJavascript("setBody('${Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)}')", null)
+                        }
+                        v.evaluateJavascript("editOn()", null)
+                    }
+                    !editing && editingOn -> {
+                        editingOn = false
+                        rendered = "" // discard pending edits in the DOM: re-render below
+                    }
+                }
                 // base64 keeps quotes/HTML out of the JS string
-                val b64 = Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)
-                v.evaluateJavascript("setBody('$b64')", null)
+                if (html != rendered && !editingOn) {
+                    rendered = html
+                    v.evaluateJavascript("setBody('${Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)}')", null)
+                }
             }
         },
         onRelease = { it.destroy() },
