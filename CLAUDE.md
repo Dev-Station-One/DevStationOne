@@ -146,6 +146,26 @@ For runtime:
 - Only one SDK location may be set: use `ANDROID_SDK_ROOT=/home/btafoya/android_sdk` —
   setting ANDROID_HOME to `/home/btafoya/Android/Sdk` at the same time fails the build.
 
+### Android release signing
+
+- `android/keystore.properties` + `android/keystore/release.jks` (gitignored) sign release builds;
+  `gradle :app:assembleRelease`, verify with `apksigner verify --print-certs`.
+- Switching an installed debug build to release needs `adb uninstall` (signature mismatch), which
+  wipes the Android-Keystore device key — the phone must re-pair afterward (`devstationone-admin
+  pair`). Back up the keystore; it is permanent.
+
+### Phone E2E
+
+- Pixel 8a attached over TLS adb (`adb devices`). `adb exec-out screencap` returns black
+  (FLAG_SECURE) — drive UI with `adb shell uiautomator dump /sdcard/ui.xml` (extract text/bounds,
+  then `adb shell input tap`) and confirm behavior via `adb logcat`, not screenshots.
+
+### Compose note
+
+- Compose: `Modifier.size(0)` / `clipToBounds` does not reliably hide composed content (children
+  keep real bounds; drawing/semantics leak). Hide composed-but-alive subtrees by measuring
+  full-size and never placing them — `Modifier.layout`, see `ui/Workspace.kt hiddenOther`.
+
 ### Security
 
 Treat terminal, process, filesystem, database, and service operations as high-impact capabilities.
