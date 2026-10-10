@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -106,7 +107,7 @@ fun TerminalScreen(server: Server, projectID: String, projectName: String, onSho
     BackHandler(onBack = onBack)
 
     Scaffold { pad ->
-        Column(Modifier.padding(pad).imePadding().fillMaxSize()) {
+        Column(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize()) {
             ScreenHeader(
                 title = projectName,
                 onBack = onBack,
