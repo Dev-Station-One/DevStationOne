@@ -15,6 +15,8 @@ import (
 	"devstationone/internal/auth"
 	"devstationone/internal/database"
 	"devstationone/internal/devices"
+	"devstationone/internal/projects"
+	"devstationone/internal/runtimes"
 )
 
 // signedRequest builds and sends one request authenticated as a paired
@@ -259,4 +261,103 @@ func pairCode(t *testing.T, router http.Handler, code string, key devices.KeyPai
 	}
 	json.Unmarshal(rec.Body.Bytes(), &p)
 	return p.ID
+}
+
+// TestDeviceJournalAuth proves the journal routes accept the paired-device
+// Sig header (ADR-053) while keeping cookie sessions working and project
+// visibility intact — the Android client reads/edits notes this way.
+func TestDeviceJournalAuth(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	owner, err := auth.CreateUser(ctx, db.Pool, "journal-owner@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	stranger, err := auth.CreateUser(ctx, db.Pool, "journal-stranger@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create stranger: %v", err)
+	}
+
+	keyOwner, _ := devices.GenerateKey()
+	keyStranger, _ := devices.GenerateKey()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	dOwner := pairCode(t, router, pairingCode(ctx, t, db, owner.ID, "Journal owner phone"), keyOwner)
+	dStranger := pairCode(t, router, pairingCode(ctx, t, db, stranger.ID, "Journal stranger phone"), keyStranger)
+
+	rt, _, err := runtimes.Create(ctx, db.Pool, "journal-auth-runtime", owner.ID)
+	if err != nil {
+		t.Fatalf("create runtime: %v", err)
+	}
+	proj, err := projects.Create(ctx, db.Pool, projects.Fields{
+		Name:             "journal-auth-project",
+		RuntimeID:        rt.ID,
+		WorkingDirectory: "/tmp",
+		Shell:            "/bin/bash",
+	}, owner.ID)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	projURI := "/api/v1/projects/" + proj.ID + "/journal"
+
+	// The owner's device creates a note and reads the list through the Sig header.
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodPost, projURI, []byte(`{"body_html":"<p>device note</p>"}`)))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("device create note: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodGet, projURI+"?limit=25&offset=0", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("device list journal: %d %s", rec.Code, rec.Body.String())
+	}
+	var page struct {
+		Total int `json:"total"`
+		Notes []struct {
+			ID      string `json:"id"`
+			Snippet string `json:"snippet"`
+		} `json:"notes"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &page); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if page.Total != 1 || len(page.Notes) != 1 {
+		t.Fatalf("device list journal: total=%d notes=%d", page.Total, len(page.Notes))
+	}
+
+	// The same note is readable by the device by id.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodGet, projURI+"/notes/"+page.Notes[0].ID, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("device get note: %d %s", rec.Code, rec.Body.String())
+	}
+	var note struct {
+		BodyHTML string `json:"body_html"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &note)
+	if !strings.Contains(note.BodyHTML, "device note") {
+		t.Fatalf("note body: %q", note.BodyHTML)
+	}
+
+	// A stranger's device sees nothing: project-level visibility holds.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyStranger, dStranger, http.MethodGet, projURI, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("stranger device list journal: got %d, want 404", rec.Code)
+	}
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, signedRequest(t, keyStranger, dStranger, http.MethodDelete, projURI+"/notes/"+page.Notes[0].ID, nil))
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("stranger device delete note: got %d, want 404", rec.Code)
+	}
+
+	// With no Sig header and no cookie the route still 401s.
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com"+projURI, nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous list journal: got %d, want 401", rec.Code)
+	}
 }

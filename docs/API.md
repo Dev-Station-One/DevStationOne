@@ -386,7 +386,10 @@ GET    /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachme
 ```
 
 The canonical request/response shapes are `docs/openapi.yaml` (tag
-`Journal`).
+`Journal`). Every journal route accepts the paired-device signature header
+in addition to the session cookie (`requireIdentity`, "Device
+authentication") — the Android client reads, creates, and deletes notes
+with it.
 
 ## Databases
 

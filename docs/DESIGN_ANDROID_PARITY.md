@@ -231,6 +231,20 @@ integration tests.
 
 ## 10. Status
 
+### Deviation (documented, 2026-10-10)
+
+The requirements' "no server changes" assumption broke on first on-device
+use: the journal routes were `requireSession` (cookie-only), so every
+device-signed request 401'd (exactly `docs/REQUIREMENTS_ANDROID_PARITY.md`
+NFR-6's predicted case). Fixed per the requirements' escape hatch —
+ADR-053 addendum: all 8 journal routes use `requireIdentity` (Sig header
+or cookie fallback, web unchanged), `deviceSig` security entries added in
+openapi.yaml (tag Journal), `TestDeviceJournalAuth` proves owner device
+access + stranger isolation + anonymous 401. Redeployed to the dev
+instance and to prod (`dev.brian.one`, ds.premadev.com). Later parity
+stages hitting cookie-only routes (the Files/code-editor routes for
+stages 4–5) will need the same one-line route switch in their slice.
+
 Round 1 implementation:
 - **Stage 1 (journal list + note view, workspace tab bar) — complete** (2026-10-10):
   `Screen.Term` became `Screen.Workspace` (`ui/Workspace.kt`) with a

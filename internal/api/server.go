@@ -229,13 +229,16 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/pull", requireSession(db, gitPullHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/git/push", requireSession(db, gitPushHandler(db, registry)))
 
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal", requireSession(db, listJournalNotesHandler(db)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal", requireSession(db, createJournalNoteHandler(db)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}", requireSession(db, getJournalNoteHandler(db)))
-	mux.HandleFunc("PUT /api/v1/projects/{projectID}/journal/notes/{noteID}", requireSession(db, updateJournalNoteHandler(db)))
-	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/journal/notes/{noteID}", requireSession(db, deleteJournalNoteHandler(db)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments", requireSession(db, uploadJournalAttachmentHandler(db)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachmentID}", requireSession(db, downloadJournalAttachmentHandler(db)))
+	// Journal routes accept the paired-device Sig header as well (ADR-053):
+	// the Android client reads/edits project notes, and requireIdentity
+	// falls back to the session cookie so browser behavior is unchanged.
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal", requireIdentity(db, listJournalNotesHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal", requireIdentity(db, createJournalNoteHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}", requireIdentity(db, getJournalNoteHandler(db)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/journal/notes/{noteID}", requireIdentity(db, updateJournalNoteHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/journal/notes/{noteID}", requireIdentity(db, deleteJournalNoteHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments", requireIdentity(db, uploadJournalAttachmentHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachmentID}", requireIdentity(db, downloadJournalAttachmentHandler(db)))
 
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireSession(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireSession(db, listDatabaseConnectionsHandler(db)))

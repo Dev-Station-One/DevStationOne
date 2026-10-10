@@ -3088,6 +3088,7 @@ paths:
       operationId: listJournalNotes
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3136,6 +3137,7 @@ paths:
       operationId: createJournalNote
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3168,6 +3170,7 @@ paths:
       operationId: getJournalNote
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3197,6 +3200,7 @@ paths:
       operationId: updateJournalNote
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3233,6 +3237,7 @@ paths:
       operationId: deleteJournalNote
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3259,6 +3264,7 @@ paths:
       operationId: createJournalAttachment
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3302,6 +3308,7 @@ paths:
       operationId: downloadJournalAttachment
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
