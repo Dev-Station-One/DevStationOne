@@ -241,6 +241,14 @@ class Api(private val server: Server) {
         }
     }
 
+    /** Creates a note. The server rejects an empty body_html, so the seed is a blank paragraph. */
+    fun createNote(projectID: String): JournalNote {
+        client.newCall(request("POST", url("api", "v1", "projects", projectID, "journal"), bodyOf("body_html" to "<p></p>"))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
     fun note(projectID: String, noteID: String): JournalNote {
         client.newCall(request("GET", url("api", "v1", "projects", projectID, "journal", "notes", noteID))).execute().use {
             check(it)

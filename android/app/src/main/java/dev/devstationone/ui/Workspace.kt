@@ -58,6 +58,7 @@ fun WorkspaceScreen(
     val shortcuts = remember { ShortcutStore(ctx).load() }
     var tab by remember { mutableIntStateOf(0) }
     var noteID by remember { mutableStateOf<String?>(null) }
+    var noteStartEdit by remember { mutableStateOf(false) }
 
     DisposableEffect(ctrl) {
         ctrl.load()
@@ -90,13 +91,16 @@ fun WorkspaceScreen(
                         TerminalBodyContent(ctrl, active = tab == 0, shortcuts, onShortcuts)
                     }
                     Box(Modifier.fillMaxSize().hiddenOther(tab != 1)) {
-                        JournalScreen(server, projectID, onOpen = { n -> noteID = n.id })
+                        JournalScreen(server, projectID, onOpen = { n, startEdit ->
+                            noteID = n.id
+                            noteStartEdit = startEdit
+                        })
                     }
                 }
             }
             // Full-screen overlay: reading or editing a note while the workspace stays alive.
             noteID?.let { id ->
-                NoteScreen(server, projectID, projectName, id, onBack = { noteID = null })
+                NoteScreen(server, projectID, projectName, id, startEdit = noteStartEdit, onBack = { noteID = null })
             }
         }
     }

@@ -33,6 +33,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -124,10 +125,12 @@ private fun Tool(label: String, onClick: () -> Unit) {
 /**
  * The project Journal tab: a paged list of the project's notes. Rows carry
  * the server-provided snippet (HTML stripped server-side), the update time,
- * the attachment count and the linked commit when present.
+ * the attachment count and the linked commit when present. [onOpen] hands the
+ * tapped note to the workspace; [onOpen] with `startEdit = true` (a newly
+ * created note) opens it straight into edit mode.
  */
 @Composable
-fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary) -> Unit) {
+fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary, Boolean) -> Unit) {
     val scope = rememberCoroutineScope()
     val api = remember { Api(server) }
     var notes by remember { mutableStateOf<List<JournalNoteSummary>>(emptyList()) }
@@ -153,7 +156,26 @@ fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary
     }
     LaunchedEffect(projectID) { loadMore() }
 
-    Column(Modifier.fillMaxSize()) {
+    fun create() {
+        if (busy) return
+        busy = true
+        scope.launch {
+            try {
+                val n = withContext(Dispatchers.IO) { api.createNote(projectID) }
+                val s = JournalNoteSummary(id = n.id)
+                notes = listOf(s) + notes
+                total += 1
+                error = null
+                onOpen(s, true)
+            } catch (e: Exception) {
+                error = "Create failed: ${e.message?.take(200)}"
+            }
+            busy = false
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
         Text(
             "Journal · ${if (total > 0) total else ""}",
             style = MaterialTheme.typography.labelLarge,
@@ -168,7 +190,7 @@ fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary
                 item { CircularProgressIndicator(Modifier.padding(top = 24.dp)) }
             }
             items(notes, key = { it.id }) { n ->
-                MuxCard(onClick = { onOpen(n) }) {
+                MuxCard(onClick = { onOpen(n, false) }) {
                     Column(Modifier.padding(16.dp)) {
                         Text(
                             n.snippet.ifBlank { "(empty note)" },
@@ -207,6 +229,11 @@ fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary
                 item { Text("No notes yet.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp)) }
             }
         }
+        }
+        ExtendedFloatingActionButton(
+            onClick = { create() },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) { Text("New note") }
     }
 }
 
@@ -217,7 +244,7 @@ fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary
  */
 @OptIn(ExperimentalFoundationApi::class) // combinedClickable on attachment chips
 @Composable
-fun NoteScreen(server: Server, projectID: String, projectName: String, noteID: String, onBack: () -> Unit) {
+fun NoteScreen(server: Server, projectID: String, projectName: String, noteID: String, startEdit: Boolean = false, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val api = remember { Api(server) }
     val ctx = LocalContext.current
@@ -343,6 +370,7 @@ fun NoteScreen(server: Server, projectID: String, projectName: String, noteID: S
             val n = withContext(Dispatchers.IO) { api.note(projectID, noteID) }
             note = n
             draft = drafts.load(noteID)
+            if (startEdit) editing = true
         } catch (e: Exception) {
             error = "Note failed to load: ${e.message?.take(200)}"
         }

@@ -293,4 +293,13 @@ Round 1 implementation:
   green; the photo→web round trip is the stage-7 on-device E2E (Pixel runs
   the release-signed APK; debug switch needs uninstall + re-pair,
   deliberately not done in this slice — same as stages 1–2).
+
+  Follow-up found during the on-device pass (same day): the Journal tab
+  had no way to create a note — added the `New note` FAB to
+  `JournalScreen`, `Api.createNote` (POST /journal with a blank-paragraph
+  seed body, since the server rejects an empty `body_html`) opening
+  `NoteScreen` straight into edit mode via a `startEdit` flag threaded
+  through Workspace. The created note is prepended to the list at once;
+  flagging: notes deleted from `NoteScreen` still linger in the list
+  until the tab is reloaded — wire a list refresh when that bites.
 - Stages 4 (file tree), 5 (code editor), 7 (docs/roundoff) remain.
