@@ -336,6 +336,8 @@ Round 1 implementation:
   Accept (US navigation half): unit `FileTreePathsTest` (crumbs/subPath/
   dirsFirst/glyphs), `make test` green with the test DB actually
   attached, `assembleDebug`/`assembleRelease` green; on-device
-  drill-in/search E2E pending — dev instance (192.168.25.165:18091 /
-  ds1.premadev.com) already runs the route switch; prod
-  (dev.brian.one) not touched this slice.
+  drill-in/search E2E on the Pixel 8a confirmed working by the user
+  2026-10-10 — required deploying the route switch to prod
+  (`dev.brian.one` via `scripts/deploy-to-prod.sh`): the phone pairs to
+  ds.premadev.com, so the dev-instance-only deploy left its Files tab
+  401-ing "not authenticated" until prod shipped the same binary.
