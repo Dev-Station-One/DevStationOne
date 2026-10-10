@@ -1543,10 +1543,79 @@ No server changes expected.
 **Stages**: design doc §8 (1 journal list/view, 2 note edit, 3 attachments,
 4 file tree, 5 code editor, 7 docs/roundoff).
 
-**Status: In progress — stage 1 complete** (2026-10-10): `Screen.Workspace`
-with Terminal/Journal top tab bar (tab content stays composed when hidden —
-no reattach), `JournalScreen` paged list, `NoteScreen` view mode with
-`HtmlPanel` (DOMPurify-sanitized body_html, Sig-header request
-interception), `net/Api.kt` journal models + list/get/delete,
-`JournalModelsTest` decode tests. `assembleDebug` + `testDebugUnitTest`
-green. Note edit/attachments/Files/Code = stages 2-5.
+**Status: Complete — all round-1 stages shipped, on-device verified** (2026-10-10).
+
+Per stage (each committed with its tests, docs, CodeGraph sync, and — where
+server routes changed — a prod deploy):
+
+1. `Screen.Workspace` Terminal/Journal tab bar (content stays composed when
+   hidden), JournalScreen list, NoteScreen view with `HtmlPanel`
+   (DOMPurify + Sig-header interception). Tests: `JournalModelsTest`.
+2. Note edit: contenteditable + native execCommand toolbar, `Api.putNote`,
+   `NoteDraftStore` (draft removed only after a successful PUT),
+   sanitize-on-save. Tests: `NoteEditArgsTest`.
+3. Attachments: multipart upload (camera via FileProvider + document
+   picker), tap chip = download+share, long-press = save to Downloads
+   (API 29+), 25 MB/10-per-note client limits, inline `body_html` images
+   riding the existing request bridge. Tests: `AttachmentNamesTest`.
+   Found during the device pass: no note-creation path — added the
+   `New note` FAB (`Api.createNote`, blank-paragraph seed since the
+   server rejects empty `body_html`, opens NoteScreen straight in edit
+   mode).
+4. Files tab: breadcrumb drill-in over `GET /files`, name search over
+   `GET /files/search`, dirs-first listing. Tests: `FileTreePathsTest`.
+   Server: the two list/search routes switched to `requireIdentity`
+   (ADR-053 addendum), `deviceSig` entries in openapi.yaml,
+   `TestDeviceFilesAuth` added. While validating with the test DB
+   actually attached (it is the only way these tests run):
+   `signedRequest` now sends origin-form targets (absolute-form made
+   `r.RequestURI` mismatch the signed string), and the stranger-isolation
+   assertions were corrected to the shared-projects model — every
+   authenticated user sees every project by design.
+5. sora-editor 0.24.6 CodeEditor + TextMate (20 grammars from npm
+   `tm-grammars` 1.32.22 MIT + darcula theme; extension→scope map
+   unit-tested), stat/content GET+PUT switched to `requireIdentity`
+   (same test extended), the §4 collision flow (stat baseline, >4 MB
+   refusal, >1 MB soft warn, NUL-sniff binary refusal, put/reload/conflict
+   decisions unit-tested), §6 dirty-buffer drafts
+   (`cacheDir/editor-store`, path-hashed, saved on back-nav and ON_STOP).
+   Kotlin toolchain 2.0.21 → 2.3.10 for sora's 2.3-metadata modules. Found
+   on device and fixed: a load-vs-factory race that blanked the editor.
+   Same-day follow-ups from the user: word-wrap + font-size pills
+   in the editor header (persisted via AppSettings, applied live; the
+   interim Settings-screen rows were removed), and a sanitized View/Edit
+   preview for markdown/HTML files (marked 12.0.2 vendored from the web
+   client, DOMPurify whole-document mode for HTML, relative refs
+   rewritten to `files/content` URLs through the now-shared
+   `bridgeServerResponse`; the interceptor was extracted from HtmlPanel).
+   Also found at commit time: the repo's `data/` ignore rule had been
+   silently excluding the whole Android `data` package (`Data.kt` with
+   Server/ServerStore/DeviceKey/NoteDraftStore) — anchored to `/data/`
+   and the package is now tracked; fresh clones could not have built.
+
+**On-device E2E (Pixel 8a, release-signed APK, prod ds.premadev.com) —
+recorded 2026-10-10, user-confirmed after each stage**:
+
+- Pairing/workspace: servers list → project → Workspace with Terminal,
+  Journal, Files tabs; tab switches never drop terminal or list state.
+- Journal: paged list, note view with attachments chips and inline
+  images, edit via toolbar, save, `New note` FAB → editor opens ready to
+  type, delete; crash-draft resume.
+- Attachments: camera capture and file-picker upload, limits, chip
+  download→share and long-press save; same bytes visible/downloadable
+  from the web's note view.
+- Files: breadcrumb navigation both directions, search results, empty
+  and populated directories; the phone pairs to prod so the file routes'
+  device-auth switch had to ship to prod before the tab worked (the
+  distinguishing probe: a junk Sig header gets "device authentication
+  failed" from `requireIdentity` vs "not authenticated" from the old
+  `requireSession`).
+- Editor: open → content and syntax highlight, edit, save (web observes
+  the change), reload, dirty dot; wrap/font pills apply live; View/Edit
+  preview round trip; large/binary refusals; the blank-editor race fix.
+
+Server-side/contract: no new endpoints; 7 files routes now accept device
+identity with web cookie behavior unchanged (`TestDeviceFilesAuth`,
+`TestDeviceJournalAuth` + the full `make test` suite green with the test
+DB attached). Round-2 candidates stay ranked in OQ-6 (Commands, then
+Docker logs).

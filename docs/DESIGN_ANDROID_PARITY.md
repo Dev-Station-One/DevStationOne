@@ -334,7 +334,16 @@ Round 1 implementation:
   unit tests green, `assembleDebug`/`assembleRelease` green; on-device
   edit-and-save (mtime observable on web) and the 900 KB / 40 MB paths
   await the Pixel E2E.
-- Stage 7 (docs/roundoff) remains — this stage updated its own docs.
+- **Stage 7 (docs + roundoff) — complete** (2026-10-10): round 1 closed.
+  Requirements doc marked shipped
+  (`docs/REQUIREMENTS_ANDROID_PARITY.md` "Round-1 outcome" — acceptance
+  status per US, including the one caveat: US-4's conflict dialog is
+  implemented + unit-tested but was not separately staged on device),
+  `docs/IMPLEMENTATION_PLAN.md` Slice 26 completed with the per-stage
+  log and the on-device E2E record, `docs/ANDROID_CLIENT.md` scope
+  paragraph finalized. Design doc §10 above is the per-stage history
+  (stages 1–5 + the device-pass follow-ups). OQ-6 ranks the next
+  round's candidates.
 
   On-device follow-ups the same day (user-confirmed working; commits
   48c816f and d60d728, plus the size/preview pass): the empty-editor race

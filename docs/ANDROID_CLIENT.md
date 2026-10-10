@@ -23,16 +23,17 @@ stored token, nothing to steal.
 - **Dock**: bottom bar (ESC/TAB///:/arrows) + drill-in fan (sticky
   modifiers, ctrl combos, F-keys, navigation, user-defined shortcut
   macros), ported from muxalot in full.
-- **Round 1 under way** (2026-10-10): the project screen is a tabbed
-  **Workspace** — Terminal + Journal so far; note reading (DOMPurify
-  bodies), in-place note editing with a native ExecCommand toolbar and
-  crash-resilient drafts (NFR-3) work; attachments (upload via file
-  picker or camera, share/download chips, inline images via the WebView
-  request bridge) are in, and the Files tab (breadcrumb drill-in +
-  name search over the runtime filesystem) with the sora-editor code
-  editor (TextMate highlighting over a vendored grammar subset, the
-  stat-mtime collision flow, and crash-resilient dirty-buffer drafts)
-  are in — docs/DESIGN_ANDROID_PARITY.md. Everything in the next line
+- **Round 1 shipped** (2026-10-10): the project screen is a tabbed
+  **Workspace** — Terminal + Journal + Files; note reading (DOMPurify
+  bodies), in-place note editing with a native ExecCommand toolbar,
+  crash-resilient drafts (NFR-3), attachments (upload via file picker or
+  camera, share/download chips, inline images via the WebView request
+  bridge), breadcrumb file browsing + name search, and the sora-editor
+  code editor (TextMate highlighting, stat-mtime collision flow,
+  wrap/font pills in the header, sanitized markdown/HTML View preview,
+  dirty-buffer drafts) are all in. Details:
+  docs/DESIGN_ANDROID_PARITY.md; on-device E2E recorded in
+  docs/IMPLEMENTATION_PLAN.md Slice 26. Everything in the next line
   stays web-only except what those docs move into the app.
 
 ## Auth (ADR-053)

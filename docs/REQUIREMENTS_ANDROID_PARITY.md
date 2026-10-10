@@ -1,7 +1,8 @@
 # REQUIREMENTS_ANDROID_PARITY.md — Android client feature-parity, round 1
 
-Status: requirements only (discovery complete 2026-10-10). No design
-decisions belong in this file — architecture follows in design/ADR docs.
+Status: **round 1 shipped and on-device verified** (2026-10-10; see
+"Round-1 outcome" at the bottom). Requirements text below is preserved as
+written at discovery; architecture lives in docs/DESIGN_ANDROID_PARITY.md.
 
 ## Context
 
@@ -129,3 +130,38 @@ docs/DESIGN_ANDROID_PARITY.md §1.
 Files manager operations beyond read/browse/open, Source Control, Database
 browser, Backups, Docker, Commands tab, admin pages (users/audit/runtimes
 management), password-based login in the app, realtime co-editing.
+
+## Round-1 outcome (2026-10-10)
+
+Shipped in the documented slice order (design doc §8): workspace tab bar
+(stage 1) → note view (1) → note edit + crash-resilient drafts (2) →
+journal attachments: upload (camera + file picker), share/download chips,
+25 MB/10-per-note limits (3, plus the `New note` FAB the first device pass
+demanded) → Files tab: breadcrumb drill-in + name search (4) → sora-editor
+code editor with the stat-mtime collision flow, size/binary guards, dirty
+-buffer drafts, word-wrap and font-size pills in the editor, and a
+sanitized View/Edit preview for markdown and HTML files (5, plus the
+fixes and controls the device passes demanded). One documented deviation
+from this file: NFR-6's predicted cookie-only route gap materialized as
+designed — all 8 journal routes and the 5 files list/search/stat/content
+routes now accept `requireIdentity` (ADR-053 addendum; web unchanged).
+
+Acceptance status:
+
+- **US-1** — verified on device (Pixel 8a): read, edit, save, create via
+  FAB; changes round-trip to this doc's sibling web implementation.
+- **US-2** — verified on device: photo + file picker attachments, chip
+  share/download, limits honored; the same note exposes the bytes to the
+  web (the phone pairs to prod, ds.premadev.com, so the round trip is
+  against the same server the web uses).
+- **US-3** — verified on device: file browse/search → edit → save; the
+  web side observed the same file change from its own editor.
+- **US-4** — implemented (§4 collision table of the design doc, unit
+  tested); the deliberate conflict dialog was not separately staged on
+  device — flip a web-side save while the phone holds a dirty buffer to
+  see it in one step.
+- **US-5** — verified on device for the guards that matter (large files
+  refused with the >4 MB / >1 MB notices, NUL-byte binary sniff); the
+  900 KB-fluid-scroll and 40 MB paths share the same code gate.
+
+Round-2 candidates remain as ranked in OQ-6 (Commands, then Docker logs).
