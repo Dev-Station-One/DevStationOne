@@ -109,6 +109,22 @@ data class JournalNote(
 @Serializable
 data class JournalPage(val notes: List<JournalNoteSummary>, val total: Int = 0, val limit: Int = 0, val offset: Int = 0)
 
+// ---- project files (live RPCs to the runtime; paths are project-root-relative) ----
+
+/** One filesystem entry as the runtime sees it. */
+@Serializable
+data class FileInfo(
+    val name: String,
+    val type: String = "file", // file | dir | symlink | other
+    val size: Long = 0,
+    val mode: String = "",
+    val mtime: String = "",
+    val owner: String? = null,
+    val group: String? = null,
+    val owner_id: Int = 0,
+    val group_id: Int = 0,
+)
+
 class ApiException(val code: Int, message: String) : Exception(message)
 
 class Api(private val server: Server) {
@@ -285,6 +301,29 @@ class Api(private val server: Server) {
         client.newCall(request("GET", url("api", "v1", "projects", projectID, "journal", "notes", noteID, "attachments", attachmentID))).execute().use {
             check(it)
             it.body?.byteStream()?.copyTo(out)
+        }
+    }
+
+    /** Lists one directory. [path] is project-root-relative; "." lists the project root. */
+    fun listFiles(projectID: String, path: String): List<FileInfo> {
+        val u = url("api", "v1", "projects", projectID, "files").newBuilder()
+            .addQueryParameter("path", path)
+            .build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** Case-insensitive name-substring search; returns root-relative paths. */
+    fun searchFiles(projectID: String, query: String, path: String): List<String> {
+        val u = url("api", "v1", "projects", projectID, "files", "search").newBuilder()
+            .addQueryParameter("q", query)
+            .addQueryParameter("path", path)
+            .build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
         }
     }
 }

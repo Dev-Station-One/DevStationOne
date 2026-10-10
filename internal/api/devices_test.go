@@ -20,15 +20,17 @@ import (
 )
 
 // signedRequest builds and sends one request authenticated as a paired
-// device. host and uri must match what the handler sees (httptest keeps
-// both identical to the target string).
+// device. The target is origin-form (path [+ query]) — exactly what the
+// wire carries — so r.RequestURI equals the signed requestURI, matching
+// the Android client's Auth.header. host is the httptest default
+// (example.com), the same string passed to devices.Sign.
 func signedRequest(t *testing.T, key devices.KeyPair, deviceID, method, uri string, body []byte) *http.Request {
 	t.Helper()
 	hdr, err := devices.Sign(key, deviceID, method, "example.com", uri, time.Now())
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	r := httptest.NewRequest(method, "http://example.com"+uri, bytes.NewReader(body))
+	r := httptest.NewRequest(method, uri, bytes.NewReader(body))
 	r.Header.Set("Authorization", hdr)
 	return r
 }
@@ -342,16 +344,19 @@ func TestDeviceJournalAuth(t *testing.T) {
 		t.Fatalf("note body: %q", note.BodyHTML)
 	}
 
-	// A stranger's device sees nothing: project-level visibility holds.
+	// A stranger's device rides the platform's project visibility model —
+	// every authenticated user sees every project (projects.go listProjects)
+	// — so it gets the same result as the owner, not a 404. Device pairing
+	// does not narrow authorization: it extends the pairing user's session.
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, signedRequest(t, keyStranger, dStranger, http.MethodGet, projURI, nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("stranger device list journal: got %d, want 404", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("stranger device list journal: got %d, want 200", rec.Code)
 	}
 	rec = httptest.NewRecorder()
 	router.ServeHTTP(rec, signedRequest(t, keyStranger, dStranger, http.MethodDelete, projURI+"/notes/"+page.Notes[0].ID, nil))
-	if rec.Code != http.StatusNotFound {
-		t.Fatalf("stranger device delete note: got %d, want 404", rec.Code)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("stranger device delete note: got %d, want 204", rec.Code)
 	}
 
 	// With no Sig header and no cookie the route still 401s.
@@ -359,5 +364,75 @@ func TestDeviceJournalAuth(t *testing.T) {
 	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com"+projURI, nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous list journal: got %d, want 401", rec.Code)
+	}
+}
+
+// TestDeviceFilesAuth proves the files list/search routes accept the
+// paired-device Sig header (ADR-053 addendum, Android parity stage 4)
+// while keeping cookie sessions working. No runtime is connected, so an
+// authenticated device proves it reached the handler by getting 409
+// (runtime-offline) — owner and stranger alike, because every
+// authenticated user sees every project (projects.go listProjects); the
+// 401 asserts the route stays closed to anonymous traffic.
+func TestDeviceFilesAuth(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	owner, err := auth.CreateUser(ctx, db.Pool, "files-owner@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	stranger, err := auth.CreateUser(ctx, db.Pool, "files-stranger@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create stranger: %v", err)
+	}
+
+	keyOwner, _ := devices.GenerateKey()
+	keyStranger, _ := devices.GenerateKey()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	dOwner := pairCode(t, router, pairingCode(ctx, t, db, owner.ID, "Files owner phone"), keyOwner)
+	dStranger := pairCode(t, router, pairingCode(ctx, t, db, stranger.ID, "Files stranger phone"), keyStranger)
+
+	rt, _, err := runtimes.Create(ctx, db.Pool, "files-auth-runtime", owner.ID)
+	if err != nil {
+		t.Fatalf("create runtime: %v", err)
+	}
+	proj, err := projects.Create(ctx, db.Pool, projects.Fields{
+		Name:             "files-auth-project",
+		RuntimeID:        rt.ID,
+		WorkingDirectory: "/tmp",
+		Shell:            "/bin/bash",
+	}, owner.ID)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	for _, uri := range []string{
+		"/api/v1/projects/" + proj.ID + "/files?path=.",
+		"/api/v1/projects/" + proj.ID + "/files/search?q=go&path=.",
+	} {
+		// The owner's device passes the device-signature wall and reaches
+		// the handler, which answers 409 because no runtime is connected.
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, signedRequest(t, keyOwner, dOwner, http.MethodGet, uri, nil))
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("owner device %s: got %d (%s), want 409", uri, rec.Code, rec.Body.String())
+		}
+		// A stranger's device carries its user's session the same way:
+		// same authorization surface, same 409 (see the test's comment).
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, signedRequest(t, keyStranger, dStranger, http.MethodGet, uri, nil))
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("stranger device %s: got %d, want 409", uri, rec.Code)
+		}
+		// With no Sig header and no cookie the route still 401s.
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "http://example.com"+uri, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("anonymous %s: got %d, want 401", uri, rec.Code)
+		}
 	}
 }

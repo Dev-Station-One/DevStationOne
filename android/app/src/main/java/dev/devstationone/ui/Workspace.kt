@@ -85,6 +85,7 @@ fun WorkspaceScreen(
                 TabRow(selectedTabIndex = tab) {
                     Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Terminal") })
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Journal") })
+                    Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("Files") })
                 }
                 Box(Modifier.weight(1f).fillMaxSize()) {
                     Box(Modifier.fillMaxSize().hiddenOther(tab != 0)) {
@@ -95,6 +96,9 @@ fun WorkspaceScreen(
                             noteID = n.id
                             noteStartEdit = startEdit
                         })
+                    }
+                    Box(Modifier.fillMaxSize().hiddenOther(tab != 2)) {
+                        FileTreeScreen(server, projectID)
                     }
                 }
             }

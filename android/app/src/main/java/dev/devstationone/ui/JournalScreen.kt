@@ -83,7 +83,7 @@ private fun fmt(iso: String): String = try {
     iso.take(10)
 }
 
-private fun fmtSize(n: Long): String = when {
+internal fun fmtSize(n: Long): String = when {
     n >= 1_048_576 -> "%.1f MB".format(n / 1_048_576.0)
     n >= 1024 -> "%.0f KB".format(n / 1024.0)
     else -> "$n B"

@@ -304,3 +304,38 @@ Round 1 implementation:
   flagging: notes deleted from `NoteScreen` still linger in the list
   until the tab is reloaded — wire a list refresh when that bites.
 - Stages 4 (file tree), 5 (code editor), 7 (docs/roundoff) remain.
+
+- **Stage 4 (file tree) — complete** (2026-10-10): third workspace tab
+  "Files" hosts a new `ui/FileTreeScreen.kt` — breadcrumb drill-in over
+  `GET /files?path=…` (root ".", dirs-first sort identical to the web
+  tree), a name-substring search box riding `GET /files/search?q=…`
+  scoped to the current directory, empty/huge dirs rendered lazily in a
+  `LazyColumn`, and tab-hidden content kept composed via the same
+  `hiddenOther` measure-but-not-place pattern (list state survives tab
+  switches). `net/Api.kt` gained `FileInfo`, `listFiles`, `searchFiles`;
+  `fmtSize` is shared with the journal now (`internal`). File rows are
+  tappable only for directories — opening a file is the stage-5
+  editor's surface, so file and search-result rows are inert until then
+  (deliberate scope boundary, not a stub). Server side, the ADR-053
+  addendum route switch landed for the two routes this stage calls
+  (`GET /files`, `GET /files/search` → `requireIdentity`,
+  `deviceSig` security entries in openapi.yaml, web unchanged); the
+  editor routes switch in stage 5. Two test-infrastructure bugs were
+  fixed while validating — both only visible with
+  `DEVSTATIONONE_TEST_DATABASE_URL` actually set (integration tests
+  silently skip without it, which is how the journal stage's device
+  test passed): `signedRequest` sent absolute-form targets so
+  `r.RequestURI` carried the full URL while the test signed only the
+  path (origin-form is what the wire and the Android client use — the
+  helper now sends origin-form); and the stranger-isolation assertions
+  assumed per-user project scoping that does not exist — every
+  authenticated user sees every project by design
+  (internal/api/projects.go listProjects comment), so stranger-device
+  expectations now assert the shared-visibility model (200/204/409)
+  instead of 404. `TestDeviceFilesAuth` added on the same pattern.
+  Accept (US navigation half): unit `FileTreePathsTest` (crumbs/subPath/
+  dirsFirst/glyphs), `make test` green with the test DB actually
+  attached, `assembleDebug`/`assembleRelease` green; on-device
+  drill-in/search E2E pending — dev instance (192.168.25.165:18091 /
+  ds1.premadev.com) already runs the route switch; prod
+  (dev.brian.one) not touched this slice.

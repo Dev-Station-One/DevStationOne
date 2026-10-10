@@ -2225,6 +2225,7 @@ paths:
       operationId: listFiles
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2300,6 +2301,7 @@ paths:
       operationId: searchFiles
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path

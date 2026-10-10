@@ -206,8 +206,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/backups/{backupID}/download", requireSession(db, downloadProjectBackupHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/backups/{backupID}/restore", requireSession(db, restoreProjectBackupHandler(db, registry)))
 
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/files", requireSession(db, listFilesHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/search", requireSession(db, searchFilesHandler(db, registry)))
+	// Android parity round 1 (ADR-053 addendum): list/search take a device
+	// identity; the editor routes switch when the code-editor stage lands.
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/files", requireIdentity(db, listFilesHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/search", requireIdentity(db, searchFilesHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/stat", requireSession(db, statFileHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/content", requireSession(db, readFileHandler(db, registry)))
 	mux.HandleFunc("PUT /api/v1/projects/{projectID}/files/content", requireSession(db, writeFileHandler(db, registry)))

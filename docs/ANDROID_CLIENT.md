@@ -28,9 +28,11 @@ stored token, nothing to steal.
   bodies), in-place note editing with a native ExecCommand toolbar and
   crash-resilient drafts (NFR-3) work; attachments (upload via file
   picker or camera, share/download chips, inline images via the WebView
-  request bridge) are in; the Files/Code editor follows
-  (docs/DESIGN_ANDROID_PARITY.md). Everything in the next line stays
-  web-only except what those docs move into the app.
+  request bridge) are in, and the Files tab (breadcrumb drill-in +
+  name search over the runtime filesystem, read-only) is in; the
+  code editor follows (docs/DESIGN_ANDROID_PARITY.md). Everything in
+  the next line stays web-only except what those docs move into the
+  app.
 
 ## Auth (ADR-053)
 
