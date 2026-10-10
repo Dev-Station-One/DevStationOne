@@ -144,10 +144,11 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
     val baseline = remember { mutableStateOf("") }
     val editor = remember { mutableStateOf<CodeEditor?>(null) }
 
-    fun newText(s: String) {
-        editor.value?.setText(s)
-        dirty = false
-    }
+    // Text waiting for the CodeEditor. load() can finish before AndroidView's
+    // factory has created the view (two RPCs can beat one layout pass), so it
+    // parks here and the AndroidView update() applies it once the editor exists.
+    var pendingText by remember { mutableStateOf<String?>(null) }
+    var pendingDirty by remember { mutableStateOf(false) }
 
     // ---- load (stat → guards → read → render) ----
     fun load(warnOk: Boolean = false) {
@@ -169,11 +170,8 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                             notice = "This looks like a binary file — edit it on the web instead."
                         } else {
                             val text = drafts.load(filePath) // resume a dirty draft (NFR-3) over the fetched copy
-                            newText(text ?: bytes.decodeToString())
-                            if (text != null) dirty = true
-                            grammarFor(filePath)?.let { scopeName ->
-                                editor.value?.setEditorLanguage(TextMateLanguage.create(scopeName, false))
-                            }
+                            pendingText = text ?: bytes.decodeToString()
+                            pendingDirty = text != null
                         }
                     }
                 }
@@ -280,6 +278,18 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                             // one dirty hook: every content mutation marks the buffer
                             subscribeEvent(ContentChangeEvent::class.java) { _, _ -> dirty = true }
                             editor.value = this
+                        }
+                    },
+                    update = { e ->
+                        // deliver whatever load() parked (initial load, reload, draft resume)
+                        pendingText?.let { t ->
+                            e.setText(t)
+                            dirty = pendingDirty
+                            pendingDirty = false
+                            pendingText = null
+                            grammarFor(filePath)?.let { scopeName ->
+                                e.setEditorLanguage(TextMateLanguage.create(scopeName, false))
+                            }
                         }
                     },
                     onRelease = { it.release() },
