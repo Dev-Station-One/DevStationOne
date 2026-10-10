@@ -28,7 +28,35 @@ private const val NOTE_PAGE = "file:///android_asset/note.html"
 
 /** Quotes a Kotlin string for the one-line JS commands the native toolbar sends. */
 internal fun jsString(s: String): String =
-    s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\r", "")
+    s.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n").replace("\\r", "")
+
+/**
+ * Bridges one WebView subresource load whose path is under `/api/v1/`
+ * through OkHttp with the device signature; everything else returns null
+ * (WebView resolves it itself). Shared by the note view ([HtmlPanel]) and
+ * the file preview ([FilePreview]) — the only surface that can fetch
+ * beyond the asset page.
+ */
+internal fun bridgeServerResponse(server: Server, path: String, query: String?): WebResourceResponse? {
+    if (!path.startsWith("/api/v1/")) return null
+    val base = server.url.trimEnd('/')
+    val httpUrl = (base + path + (query?.let { "?$it" } ?: "")).toHttpUrl()
+    return try {
+        val resp = Api.client.newCall(
+            Request.Builder().url(httpUrl)
+                .header("Authorization", Auth.header(server, "GET", httpUrl))
+                .build()
+        ).execute()
+        val body = resp.body ?: return WebResourceResponse("text/plain", "utf-8", resp.code, resp.message, null, ByteArrayInputStream(ByteArray(0)))
+        val type = resp.header("Content-Type") ?: "application/octet-stream"
+        val mime = type.substringBefore(';').trim()
+        val charset = type.substringAfter("charset=", "").substringBefore(';').ifEmpty { null }
+        // WebView closes the stream when done reading, which closes the call.
+        WebResourceResponse(mime, charset, body.byteStream())
+    } catch (e: Exception) {
+        WebResourceResponse("text/plain", "utf-8", 502, "unreachable", null, ByteArrayInputStream(ByteArray(0)))
+    }
+}
 
 /**
  * Renders one note's `body_html` in a WebView, or edits it ([editing] = true).
@@ -55,7 +83,6 @@ fun HtmlPanel(
     onHtml: ((String) -> Unit)? = null,
     webViewRef: MutableState<WebView?>? = null,
 ) {
-    val base = remember(server.id) { server.url.trimEnd('/').toHttpUrl() }
     var ready by remember { mutableStateOf(false) }
     var rendered by remember { mutableStateOf("") }
     var editingOn by remember { mutableStateOf(false) }
@@ -77,26 +104,8 @@ fun HtmlPanel(
 
                     // Serve asset files normally; bridge the note's server-URL
                     // references through OkHttp with the device signature.
-                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-                        val path = request.url.path ?: return null
-                        if (!path.startsWith("/api/v1/")) return null
-                        val httpUrl = (base.toString() + path + (request.url.query?.let { "?$it" } ?: "")).toHttpUrl()
-                        return try {
-                            val resp = Api.client.newCall(
-                                Request.Builder().url(httpUrl)
-                                    .header("Authorization", Auth.header(server, "GET", httpUrl))
-                                    .build()
-                            ).execute()
-                            val body = resp.body ?: return WebResourceResponse("text/plain", "utf-8", resp.code, resp.message, null, ByteArrayInputStream(ByteArray(0)))
-                            val type = resp.header("Content-Type") ?: "application/octet-stream"
-                            val mime = type.substringBefore(';').trim()
-                            val charset = type.substringAfter("charset=", "").substringBefore(';').ifEmpty { null }
-                            // WebView closes the stream when done reading, which closes the call.
-                            WebResourceResponse(mime, charset, body.byteStream())
-                        } catch (e: Exception) {
-                            WebResourceResponse("text/plain", "utf-8", 502, "unreachable", null, ByteArrayInputStream(ByteArray(0)))
-                        }
-                    }
+                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                        bridgeServerResponse(server, request.url.path ?: return null, request.url.query)
                 }
                 addJavascriptInterface(object {
                     @android.webkit.JavascriptInterface

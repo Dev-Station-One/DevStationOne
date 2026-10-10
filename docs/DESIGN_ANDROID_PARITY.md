@@ -336,6 +336,25 @@ Round 1 implementation:
   await the Pixel E2E.
 - Stage 7 (docs/roundoff) remains — this stage updated its own docs.
 
+  On-device follow-ups the same day (user-confirmed working; commits
+  48c816f and d60d728, plus the size/preview pass): the empty-editor race
+  (file text landing before AndroidView's factory creates the CodeEditor
+  is now parked and applied in the update block), a **word-wrap
+  Settings switch** (default on), a **code editor font size**
+  (Settings, 12/14/16/18/20 sp presets, default 14), and a **rendered
+  View/Edit toggle** for markdown and HTML files in the editor top bar:
+  preview floats over (never replaces) the editor so edit state,
+  undo history and scroll survive the round trip; markdown renders via
+  the web client's own `marked` 12.0.2 (vendored, MIT) and everything
+  sanitizes through the note view's DOMPurify; HTML files render
+  scripts-stripped through DOMPurify whole-document mode; relative
+  image/stylesheet refs are rewritten to `files/content` URLs served by
+  the now-shared Sig-header bridge (`bridgeServerResponse`, extracted
+  from HtmlPanel, used by note views and the preview). Preview payload
+  rides the load URL b64-url-encoded (`assets/preview.html`,
+  `vendor/marked/` new in VENDOR.md). `previewable`/`previewIsHtml`
+  unit-tested; `CodeScreenLogicTest` extended.
+
 - **Stage 4 (file tree) — complete** (2026-10-10): third workspace tab
   "Files" hosts a new `ui/FileTreeScreen.kt` — breadcrumb drill-in over
   `GET /files?path=…` (root ".", dirs-first sort identical to the web

@@ -71,6 +71,9 @@ class AppSettings(ctx: Context) {
     var editorWordwrap: Boolean
         get() = prefs.getBoolean("editor_wordwrap", true)
         set(v) = prefs.edit().putBoolean("editor_wordwrap", v).apply()
+    var editorFontSize: Int
+        get() = prefs.getInt("editor_font_size", 14) // sp; must be in FONT_PRESETS
+        set(v) = prefs.edit().putInt("editor_font_size", v).apply()
 }
 
 /**

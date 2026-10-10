@@ -1,6 +1,11 @@
 package dev.devstationone.ui
 
 import androidx.activity.compose.BackHandler
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,6 +46,7 @@ import io.github.rosemoe.sora.widget.CodeEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.put
 import org.eclipse.tm4e.core.registry.IThemeSource
 
 /** Editor transfer guards (DESIGN_ANDROID_PARITY.md §4): hard ceiling, soft warn, binary sniff. */
@@ -96,6 +102,16 @@ internal fun looksBinary(bytes: ByteArray): Boolean {
     return bytes.take(8192).contains(0.toByte())
 }
 
+/** Rendered preview applies to markdown and HTML files only. */
+internal fun previewable(fileName: String): Boolean =
+    fileName.substringAfterLast('.', "").lowercase() in setOf("md", "markdown", "html", "htm", "xhtml")
+
+internal fun previewIsHtml(fileName: String): Boolean =
+    fileName.substringAfterLast('.', "").lowercase() in setOf("html", "htm", "xhtml")
+
+/** Settings presets for the editor font, in sp, smallest first. */
+internal val FONT_PRESETS = listOf(12, 14, 16, 18, 20)
+
 // TextMate registries are process-wide statics; one-time setup, guarded.
 @Volatile private var textmateReady = false
 private val textmateLock = Any()
@@ -135,7 +151,12 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
     val haptic = LocalHapticFeedback.current
     // Settings only change outside this screen (or with a process restart), so a
     // snapshot at composition matches what the Settings switch left behind.
-    val wordwrap = remember { dev.devstationone.data.AppSettings(ctx).editorWordwrap }
+    val settings = dev.devstationone.data.AppSettings(ctx)
+    val wordwrap = remember { settings.editorWordwrap }
+    val fontSize = remember { settings.editorFontSize }
+
+    var previewing by remember { mutableStateOf(false) }
+    var previewText by remember { mutableStateOf("") }
 
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -248,6 +269,15 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(end = 8.dp),
                     )
+                    if (previewable(filePath)) {
+                        TextButton(enabled = !loading && notice == null, onClick = {
+                            if (previewing) previewing = false
+                            else {
+                                previewText = editor.value?.text.toString()
+                                previewing = true
+                            }
+                        }) { Text(if (previewing) "Edit" else "View") }
+                    }
                     TextButton(enabled = !saving && !loading && notice == null, onClick = { save() }) {
                         Text(if (saving) "Saving…" else "Save")
                     }
@@ -271,13 +301,15 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                     modifier = Modifier.padding(16.dp),
                 )
                 loading -> CircularProgressIndicator(Modifier.padding(24.dp))
-                else -> AndroidView(
-                    modifier = Modifier.fillMaxSize(),
+                else -> Box(Modifier.fillMaxSize()) {
+                    AndroidView(
+                        modifier = Modifier.fillMaxSize(),
                     factory = { c ->
                         setUpTextmate(c)
                         CodeEditor(c).apply {
                             colorScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
                             isWordwrap = wordwrap // Settings → "Code editor word wrap"
+                            setTextSize(fontSize.toFloat()) // Settings → editor font size (sp)
                             // one dirty hook: every content mutation marks the buffer
                             subscribeEvent(ContentChangeEvent::class.java) { _, _ -> dirty = true }
                             editor.value = this
@@ -297,6 +329,14 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                     },
                     onRelease = { it.release() },
                 )
+                    // Preview floats over (never replaces) the editor: returning to
+                    // Edit keeps the buffer, scroll and undo history intact.
+                    if (previewing) {
+                        Surface(Modifier.fillMaxSize()) {
+                            FilePreview(server, projectID, filePath, previewText, previewIsHtml(filePath))
+                        }
+                    }
+                }
             }
         }
     }
@@ -340,4 +380,46 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
             dismissButton = { TextButton(onClick = { dialog = null }) { Text("Cancel") } },
         )
     }
+}
+/** b64-url(payload JSON) for preview.html — URL-safe, unescaped. */
+private fun previewPayload(server: Server, projectID: String, filePath: String, text: String, isHtml: Boolean): String {
+    val dir = filePath.substringBeforeLast('/', "").let { if (it == filePath) "" else it }
+    val cfg = kotlinx.serialization.json.buildJsonObject {
+        put("base", server.url.trimEnd('/'))
+        put("projectID", projectID)
+        put("dir", dir)
+        put("isHtml", isHtml)
+        put("body", text)
+    }.toString()
+    return android.util.Base64.encodeToString(cfg.toByteArray(), android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+}
+
+/**
+ * Rendered view of a markdown or HTML file: the sanitized DOM produced by
+ * assets/preview.html (marked + DOMPurify, the web client's own libs; HTML
+ * files lose their scripts), with relative image/stylesheet refs rewritten
+ * to files/content URLs that the shared Sig-header bridge serves.
+ * // ponytail: payload rides the URL (few MB fine) — bridge-pass if huge docs ever matter
+ */
+@Composable
+fun FilePreview(server: Server, projectID: String, filePath: String, text: String, isHtml: Boolean) {
+    val payload = remember(server.id, projectID, filePath, text, isHtml) {
+        previewPayload(server, projectID, filePath, text, isHtml)
+    }
+    AndroidView(
+        factory = { c ->
+            WebView(c).apply {
+                settings.javaScriptEnabled = true
+                settings.allowFileAccess = false
+                settings.allowContentAccess = false
+                setBackgroundColor(android.graphics.Color.TRANSPARENT)
+                webViewClient = object : WebViewClient() {
+                    override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+                        bridgeServerResponse(server, request.url.path ?: return null, request.url.query)
+                }
+                loadUrl("file:///android_asset/preview.html?d=$payload")
+            }
+        },
+        onRelease = { it.destroy() },
+    )
 }

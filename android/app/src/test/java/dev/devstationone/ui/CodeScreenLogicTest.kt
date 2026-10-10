@@ -46,4 +46,16 @@ class CodeScreenLogicTest {
         assertFalse(looksBinary("plain text".toByteArray()))
         assertFalse(looksBinary(ByteArray(0)))
     }
+
+    @Test
+    fun previewScope() {
+        assertTrue(previewable("README.md"))
+        assertTrue(previewable("a/b/notes.markdown"))
+        assertTrue(previewable("page.html"))
+        assertTrue(previewable("Page.HTM"))
+        assertFalse(previewable("build.gradle.kts"))
+        assertFalse(previewable("notes.txt"))
+        assertTrue(previewIsHtml("index.html"))
+        assertFalse(previewIsHtml("README.md"))
+    }
 }

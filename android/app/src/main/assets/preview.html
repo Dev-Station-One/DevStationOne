@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Rendered preview for Markdown/HTML files (stage 5): the CodeScreen
+     WebView loads this page with the payload passed as ?d=<base64url JSON>
+     — no JS↔native bridge needed; the WebViewClient intercept rule in
+     ui/CodeScreen.kt serves any /api/v1/ subresource with the Sig header.
+     Markdown renders via the web client's own marked build and everything
+     sanitizes through the same DOMPurify file the note view uses. -->
+<script src="vendor/marked/marked.min.js"></script>
+<script src="vendor/dompurify/purify.min.js"></script>
+<style>
+  body { background: transparent; color: #ddd; font-family: sans-serif; font-size: 15px; line-height: 1.5; margin: 0; padding: 12px 16px; overflow-wrap: break-word; }
+  pre, code { background: #2b2b2b; border-radius: 4px; }
+  pre { padding: 10px; overflow-x: auto; white-space: pre-wrap; }
+  code { padding: 1px 4px; }
+  img, video { max-width: 100%; }
+  table { border-collapse: collapse; }
+  th, td { border: 1px solid #444; padding: 4px 8px; }
+  blockquote { border-left: 3px solid #555; margin 8px 0; padding: 2px 12px; color: #bbb; }
+  a { color: #8ab4f8; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+  'use strict';
+
+  // base64url(no pad) UTF-8 → string
+  const raw = atob((new URLSearchParams(location.search).get('d') || '').replace(/-/g, '+').replace(/_/g, '/'));
+  const cfg = JSON.parse(new TextDecoder('utf8').decode(Uint8Array.from(raw, c => c.charCodeAt(0))));
+
+  // Resolve rel against the file's directory; returns null for absolute/foreign URLs.
+  function resolvePath(dir, rel) {
+    if (/^(https?:|data:|blob:)/i.test(rel) || rel.startsWith('//')) return null;
+    let p = rel;
+    if (!p.startsWith('/')) p = (dir ? dir + '/' : '') + p;
+    const out = [];
+    p.split('/').forEach(seg => {
+      if (!seg || seg === '.') return;
+      if (seg === '..') out.pop();
+      else out.push(seg);
+    });
+    return out.join('/');
+  }
+
+  function serverUrl(rel) {
+    return cfg.base + '/api/v1/projects/' + cfg.projectID + '/files/content?path=' + encodeURIComponent(rel);
+  }
+
+  // Point relative src/href refs at the server's files/content URLs.
+  function mapRefs(root) {
+    root.querySelectorAll('[src],[href]').forEach(el => {
+      const rel = el.getAttribute('src') || el.getAttribute('href');
+      if (!rel) return;
+      const p = resolvePath(cfg.dir, rel);
+      if (p === null) return;
+      el.setAttribute(el.hasAttribute('src') ? 'src' : 'href', serverUrl(p));
+    });
+  }
+
+  function fragmentOf(html) {
+    return DOMPurify.sanitize(html, { RETURN_DOM_FRAGMENT: true });
+  }
+
+  const stage = document.getElementById('stage');
+  if (cfg.isHtml) {
+    // Sanitized whole-document preview (scripts stripped by DOMPurify).
+    const doc = new DOMParser().parseFromString(
+      DOMPurify.sanitize(cfg.body, { WHOLE_DOCUMENT: true }), 'text/html');
+    mapRefs(doc);
+    document.body.replaceWith(doc.body);
+    document.head.appendChild(doc.head); // keep the file's <style> rules
+  } else {
+    const html = marked.parse(cfg.body);
+    const frag = fragmentOf(html);
+    stage.appendChild(frag);
+    mapRefs(stage);
+  }
+</script>
+</body>
+</html>
