@@ -179,6 +179,8 @@ fun SettingsScreen(
     onToggleLock: () -> Unit,
     allowScreenshots: Boolean,
     onAllowScreenshots: (Boolean) -> Unit,
+    editorWordwrap: Boolean,
+    onEditorWordwrap: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -187,6 +189,7 @@ fun SettingsScreen(
             ScreenHeader("Settings", onBack = onBack)
             SettingRow("App lock", "Ask for the phone's screen lock when the app opens, whenever the screen turns off, and after a minute away in another app.", lockEnabled) { onToggleLock() }
             SettingRow("Allow screenshots", "Off hides the app from screenshots, screen recording and the recent-apps preview.", allowScreenshots, onAllowScreenshots)
+            SettingRow("Code editor word wrap", "Wrap long lines in the Files code editor (on = easiest reading, off = line numbers stay true).", editorWordwrap, onEditorWordwrap)
         }
     }
 }

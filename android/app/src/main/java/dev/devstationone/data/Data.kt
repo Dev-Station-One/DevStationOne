@@ -68,6 +68,9 @@ class AppSettings(ctx: Context) {
     var allowScreenshots: Boolean
         get() = prefs.getBoolean("allow_screenshots", false)
         set(v) = prefs.edit().putBoolean("allow_screenshots", v).apply()
+    var editorWordwrap: Boolean
+        get() = prefs.getBoolean("editor_wordwrap", true)
+        set(v) = prefs.edit().putBoolean("editor_wordwrap", v).apply()
 }
 
 /**

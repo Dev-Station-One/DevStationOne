@@ -133,6 +133,9 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val drafts = remember(server.id, projectID) { FileDraftStore(ctx, server.id, projectID) }
     val haptic = LocalHapticFeedback.current
+    // Settings only change outside this screen (or with a process restart), so a
+    // snapshot at composition matches what the Settings switch left behind.
+    val wordwrap = remember { dev.devstationone.data.AppSettings(ctx).editorWordwrap }
 
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -274,7 +277,7 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                         setUpTextmate(c)
                         CodeEditor(c).apply {
                             colorScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
-                            isWordwrap = false
+                            isWordwrap = wordwrap // Settings → "Code editor word wrap"
                             // one dirty hook: every content mutation marks the buffer
                             subscribeEvent(ContentChangeEvent::class.java) { _, _ -> dirty = true }
                             editor.value = this

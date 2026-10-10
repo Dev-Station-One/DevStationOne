@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var settings: AppSettings
     private var lockEnabled by mutableStateOf(false)
     private var allowScreenshots by mutableStateOf(false)
+    private var editorWordwrap by mutableStateOf(true)
     private var locked by mutableStateOf(false)
     private var promptOnStart = false
     private var pendingToggle = false
@@ -111,6 +112,7 @@ class MainActivity : ComponentActivity() {
         registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF))
         settings = AppSettings(this)
         allowScreenshots = settings.allowScreenshots
+        editorWordwrap = settings.editorWordwrap
         applyScreenshotSetting()
         lockEnabled = appLock.enabled
         locked = lockEnabled // cold start always locks
@@ -150,6 +152,7 @@ class MainActivity : ComponentActivity() {
                         Screen.Settings -> SettingsScreen(
                             lockEnabled, ::toggleLock,
                             allowScreenshots, { allowScreenshots = it; settings.allowScreenshots = it; applyScreenshotSetting() },
+                            editorWordwrap, { editorWordwrap = it; settings.editorWordwrap = it },
                             onBack = { screen = Screen.List },
                         )
                     }
