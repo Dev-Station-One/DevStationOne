@@ -1518,3 +1518,16 @@ every server-side behavior it depends on is covered by the Slice 24 API
 and live-smoke tests.
 
 **Status: Complete (build); on-device verification pending** (2026-10-10).
+
+**On-device follow-up (2026-10-10, same day)**: real Pixel 8a E2E completed
+against production over the public TLS chain — pairing (QR + first Sig
+request), project list, session create, and stream all verified. Two bugs
+fixed in the process: (1) the Go verifier must hash the signed message with
+SHA-256 before `ecdsa.VerifyASN1` (Android Keystore's `SHA256withECDSA`
+signs the digest; Go-Go tests were self-consistently wrong about this — a
+raw-bytes-vs-digest asymmetry that only physical-device testing exposed),
+and (2) the Android sign path must use the locally-generated device UUID's
+Keystore alias (the server-side device row id only names the Sig header).
+Rejection diagnostics (reason + signed-message/signature hex on mismatch)
+stay at Warn — single-use values, no secrets. Production now runs the
+fixed build; rollback binary remains at `devstationone-server.prev`.
