@@ -152,36 +152,41 @@ openapi-described so it can.
   amend last commit changes its SHA on the web's log view. Accept:
   branch identity visible in the tab header at all times.
 
-## Open questions (carry into the design pass — resolved there, not silently)
+## Open questions (resolved in this pass unless marked otherwise)
 
-- **OQ-1 — Tab naming and icon**: "Source Control" per VSCode vs "Git"?
-  (Space in the tab bar is tight; the web tab already calls it Source
-  Control.)
-- **OQ-2 — Diff rendering depth**: plain read-only unified diff (monospace
-  scroll) in round 2, or side-by-side? (Round-1 Files preview precedent:
-  keep one lane.)
-- **OQ-3 — Discard semantics for untracked files**: delete them, refuse,
-  or offer "delete untracked" as its own action? (`git restore` does not
-  touch untracked files; `git clean` territory — recommend explicit
-  opt-in, refuse by default.)
-- **OQ-4 — Checkout with a dirty tree**: refuse outright, or dialog
-  "commit/stash/discard first" (no stash support exists anywhere —
-  refusal or guided paths only)?
-- **OQ-5 — Amend guard**: refuse amend when the branch is not-behind its
-  upstream (already published), or free-form with a loud warning?
-- **OQ-6 — Auto-stage on commit**: mirror VSCode's "commit all" shortcut
-  (stage-then-commit in one tap) or keep the staged-only rule strict?
-- **OQ-7 — Where discard/branch/amend routes land in the protocol**:
-  extend GitCommandPayload actions (likely) vs new payload types — a
-  design decision, listed so it isn't forgotten.
-- **OQ-8 — Auth split**: all 8 existing git routes need requireIdentity
-  for the tab; new discard/branch/amend routes born with it. One slice
-  or gradual? (Stage 4-5 precedent: per-slice.)
-- **OQ-9 — Tab bar final form**: icons-only (FR-A.0) vs icons +
-  selected-label; resolved by the on-device pass — ship icons-only
-  first, revert to selected-label on user feedback. Icon shapes
-  (terminal chevron, note/book, branch glyph) get user review before
-  the slice commits.
+- **OQ-1 — Tab naming**: **resolved 2026-10-10 — "Source Control"**,
+  matching the web tab and VSCode vocabulary (a11y label, dialogs,
+  empty states all use the full name).
+- **OQ-2 — Diff rendering**: **resolved — unified diff** (monospace,
+  +/- colored, horizontally scrollable; matches the Files preview's
+  one-lane precedent).
+- **OQ-3 — Discard semantics for untracked files**: **resolved —
+  refuse**; untracked files are untouched by every discard action and
+  stay listed. Deleting untracked files is a separate, explicit future
+  action (git clean territory), not part of discard.
+- **OQ-4 — Checkout with a dirty tree**: **resolved — refuse**; branch
+  switching is disabled while any tracked file is modified or staged,
+  with a "commit or discard first" note. No stash exists; nothing
+  silently hides changes.
+- **OQ-5 — Amend guard**: **resolved — refuse if pushed**; amend is
+  blocked when upstream exists and is strictly not-behind (commits
+  already published).
+- **OQ-6 — Commit area**: **resolved — staged-only commit as the
+  default button, plus a second commit-all shortcut** (stage-then-
+  commit in one tap, VSCode's "commit all"). Amend offered in the
+  commit area only when OQ-5's guard allows it.
+- **OQ-7 — Protocol shape of discard/branch/amend actions**: resolved
+  in the **design pass** (likely GitCommandPayload action extensions —
+  listed so it isn't forgotten).
+- **OQ-8 — Auth split**: the tab slice lands all 8 existing git routes
+  on requireIdentity in one batch while the new discard/branch/amend
+  routes are born with it (device-Sig entries per endpoint, tests per
+  the TestDeviceFilesAuth pattern). Design pass may still split into
+  sub-slices if the diff gets unwieldy.
+- **OQ-9 — Tab bar final form**: **resolved — icons-only now** (the
+  full round-2 roadmap fits without scroll); selected-label stays as
+  the documented fallback if the on-device pass finds icons unclear.
+  Icon shapes get user review before the slice commits.
 
 ## Explicitly out of scope (round 2)
 
