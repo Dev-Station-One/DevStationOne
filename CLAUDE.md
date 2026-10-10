@@ -139,6 +139,13 @@ For runtime:
 - database connector tests
 - systemd user integration tests when available
 
+### Android client builds
+
+- System gradle is 4.4.1 (unusable). Build with the cached dist:
+  `cd android && ANDROID_HOME=$ANDROID_SDK_ROOT ~/.gradle/wrapper/dists/gradle-8.14.3-bin/*/gradle-8.14.3/bin/gradle assembleDebug`
+- Only one SDK location may be set: use `ANDROID_SDK_ROOT=/home/btafoya/android_sdk` —
+  setting ANDROID_HOME to `/home/btafoya/Android/Sdk` at the same time fails the build.
+
 ### Security
 
 Treat terminal, process, filesystem, database, and service operations as high-impact capabilities.
@@ -305,6 +312,10 @@ Project
 
 Do not confuse application tabs with terminal sessions.
 
+Routes the Android client calls must be registered with `requireIdentity` (device Sig header,
+cookie fallback) — `requireSession` is cookie-only and 401s every device-signed request
+(ADR-053). Check `internal/api/server.go` when adding client-facing endpoints.
+
 ### API-first
 
 Every web capability must be exposed through the OpenAPI-described API.
@@ -337,6 +348,20 @@ logout and reboot):
 - Logs: `journalctl --user -u devstationone-dev.service -f`
 - Seeded dev user: `dev@local.test` — re-create with `bin/devstationone-admin --email dev@local.test` if the `users` table is ever empty (the `devstationone-admin` CLI, ADR-019; there is no env-var bootstrap anymore). It needs the same `DEVSTATIONONE_DATABASE_URL`/`DEVSTATIONONE_DB_ENCRYPTION_KEY` as the server, but those live only in `devstationone-dev.service`'s `Environment=` lines (systemd scopes them to that unit, not your shell) — pull them out first: `set -a; . <(systemctl --user cat devstationone-dev.service | grep '^Environment=' | sed 's/^Environment=//'); set +a` — then `echo '<password>' | bin/devstationone-admin --email dev@local.test`. Same pattern applies to any other devstationone instance deployed this way (docs/DEPLOYMENT.md "systemd (recommended)").
 - Integration tests (`make test`) use a separate test-only Postgres (`make dbtest-postgres-up`, port 55433, ADR-031) and `TRUNCATE ... CASCADE` freely there — they no longer touch the dev instance's database on 55432, so this seeded user survives test runs
+
+## Prod deploy (dev.brian.one)
+
+- `ssh dev.brian.one` / `scp ... dev.brian.one:~/devstationone/` — plain commands; the ssh config
+  carries user `btafoya`, port 22283. Do not invent remote usernames or add ssh flags.
+- Never use `rsync` to this host: it is shell-aliased with `--password-file` and errors on ssh targets.
+- Order matters: copy ALL files (`migrations/ internal/ cmd/ web/ go.mod go.sum`) BEFORE
+  `go build` + `systemctl --user restart devstationone.service` — the binary embeds
+  migrations and web (go:embed); a build from a stale tree dies at startup ("no migration
+  found for version N") and systemd lands in start-limit-hit (`systemctl --user reset-failed`
+  to recover).
+- Unit: `devstationone.service` (drop-ins live in `devstationone.service.d/` — never touch).
+  Health: `curl http://172.30.0.1:18091/healthz` on the host (not 127.0.0.1), then
+  `https://ds.premadev.com`, then a behavior check of the actual change.
 
 ## Definition of Done
 
