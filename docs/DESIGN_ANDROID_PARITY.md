@@ -40,24 +40,22 @@ with the existing device-key Sig auth (ADR-053).
 
 ```text
 android/app/src/main/java/dev/devstationone/
-├── MainActivity.kt            + Screen.Journal/Note/FileTree/Code (data classes)
-├── net/Api.kt                 + listJournal/getNote/putNote/deleteNote
-│                              + uploadAttachment/downloadAttachment
-│                              + listFiles/searchFiles/statFile/readFile/writeFile
-├── ui/JournalScreen.kt        (list + pagination, MuxCard rows, FAB)
-├── ui/NoteScreen.kt           (view mode + edit mode, attachment chips,
-│                               camera capture, upload/download)
+├── MainActivity.kt            + Screen.Workspace (was Screen.Term)
+├── net/Api.kt                 + journal models/JournalPage + journal/note/deleteNote
+│                              + (stage 2/3: putNote, upload/download attachment)
+│                              + (stage 4/5: listFiles/searchFiles/statFile/readFile/writeFile)
+├── ui/Workspace.kt            (top TabRow workspace; hiddenOther measure-but-not-place pattern)
+├── ui/TerminalScreen.kt       TerminalBodyContent (the Terminal tab; header lives in workspace)
+├── ui/JournalScreen.kt        (Journal tab list + note overlay NoteScreen: view, menu/delete)
 ├── ui/HtmlPanel.kt            (shared WebView: DOMPurify render, contenteditable
-│                               edit mode, request interception bridge)
-├── ui/FileTreeScreen.kt       (list + drill-in + name search)
-├── ui/CodeScreen.kt           (sora-editor CodeEditor in AndroidView, save bar)
-└── ui/EditorFiles.kt          (extension→language map, binary/size guard,
-                                dirty/collision decision — pure logic, unit-tested)
+│                               edit mode, request interception bridge — stage 2+)
+├── ui/FileTreeScreen.kt       (stage 4: list + drill-in + name search)
+└── ui/CodeScreen.kt           (stage 5: sora-editor CodeEditor in AndroidView, save bar)
 
 android/app/src/main/assets/
-├── note.html                  (journal view+edit page: contenteditable, DOMPurify)
+├── note.html                  (journal view+edit page: DOMPurify-sanitized setBody)
 ├── vendor/dompurify/*         (vendored from the web client's same file)
-├── tm-grammars/…tm-grammars/  (TextMate grammar subset + one dark theme JSON)
+├── tm-grammars/…              (stage 5: TextMate grammar subset + one dark theme JSON)
 └── VENDOR.md                  + license notices (LGPL sora-editor, DOMPurify, grammars)
 ```
 

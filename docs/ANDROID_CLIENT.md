@@ -8,8 +8,10 @@ stored token, nothing to steal.
 
 ## Scope
 
-- **Screens**: server list (multi-server) → projects → terminal tabs, plus
-  settings (app lock, screenshot flag) and the shortcut-dock macro editor.
+- **Screens**: server list (multi-server) → projects → the project **workspace** — a top
+  tab bar: Terminal (session tabs) and Journal (parity round 1, see
+  `docs/DESIGN_ANDROID_PARITY.md`), plus settings (app lock, screenshot flag)
+  and the shortcut-dock macro editor.
 - **Terminal**: one session per tab, named (the session `name` is the tab
   label, the UUID identity is server-side). Reconnect with backoff +
   immediate kick on network change; the server's 256 KiB scrollback replay
@@ -55,9 +57,10 @@ ANDROID_HOME=<sdk> gradle assembleDebug   # gradle 8.14+; a wrapper dist is cach
 ```
 
 The unsigned debug APK lands at `android/app/build/outputs/apk/debug/`.
-Release builds are minified (`assembleRelease`) and need a signing key
+Release builds are minified (`assembleRelease`) and signed with the
+permanently-kept key in `android/keystore/release.jks`
 (`keystore.properties` in `android/`, gitignored — same structure as
-muxalot's); CI release signing is out of scope here.
+muxalot's; back the keystore up).
 
 ## Install (sideload)
 
@@ -66,10 +69,12 @@ muxalot's); CI release signing is out of scope here.
 ## Vendored pieces
 
 `assets/` carries xterm.js + addon-fit + addon-unicode11 + addon-web-links,
-JetBrains Mono NF Mono, and their license files — identical vendoring
-policy to the web client (docs/REQUIREMENTS_ICON_SYSTEM.md); see
-`assets/VENDOR.md`. The clipboard/search/progress addon work tracked in
-docs/XTERM.md applies here too when that slice lands (same files).
+JetBrains Mono NF Mono, DOMPurify (`vendor/dompurify/` — the same file the
+web client vendors; note bodies are sanitized client-side), and their
+license files — identical vendoring policy to the web client
+(docs/REQUIREMENTS_ICON_SYSTEM.md); see `assets/VENDOR.md`. The
+clipboard/search/progress addon work tracked in docs/XTERM.md applies here
+too when that slice lands (same files).
 
 ## Session lifecycle notes
 

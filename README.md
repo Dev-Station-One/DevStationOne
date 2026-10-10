@@ -332,7 +332,7 @@ Yes. Create a user per person in Settings. Administrators see and manage every p
 No. The runtime is a headless Go binary using `systemd --user`. Any server distro works.
 
 **Windows or macOS dev machines?**
-Runtime targets are Linux today (it depends on PTYs and `systemd --user`). Windows/macOS support and native Android/Linux/Windows clients are planned — the OpenAPI-first design keeps future clients from needing backend rewrites.
+Runtime targets are Linux today (it depends on PTYs and `systemd --user`). A native Android client ships in `android/` (ADR-053: device-signature auth; terminal + project journal today, feature parity with the web in progress — docs/ANDROID_CLIENT.md); Linux desktop and Windows/macOS runtime support are still planned — the OpenAPI-first design keeps future clients from needing backend rewrites.
 
 **Why not just SSH?**
 You can keep SSH. DevStationOne adds persistent reattachable sessions across devices, file management, database browsers, and service management in one UI — and machines need zero inbound exposure. SSH remains the fallback when you're on a machine without the runtime.
