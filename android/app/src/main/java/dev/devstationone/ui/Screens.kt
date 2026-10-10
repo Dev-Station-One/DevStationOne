@@ -179,10 +179,6 @@ fun SettingsScreen(
     onToggleLock: () -> Unit,
     allowScreenshots: Boolean,
     onAllowScreenshots: (Boolean) -> Unit,
-    editorWordwrap: Boolean,
-    onEditorWordwrap: (Boolean) -> Unit,
-    editorFontSize: Int,
-    onEditorFontSize: (Int) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -191,26 +187,7 @@ fun SettingsScreen(
             ScreenHeader("Settings", onBack = onBack)
             SettingRow("App lock", "Ask for the phone's screen lock when the app opens, whenever the screen turns off, and after a minute away in another app.", lockEnabled) { onToggleLock() }
             SettingRow("Allow screenshots", "Off hides the app from screenshots, screen recording and the recent-apps preview.", allowScreenshots, onAllowScreenshots)
-            SettingRow("Code editor word wrap", "Wrap long lines in the Files code editor (on = easiest reading, off = line numbers stay true).", editorWordwrap, onEditorWordwrap)
-            FontSizeRow("Code editor font size", editorFontSize, onEditorFontSize)
-        }
-    }
-}
-
-/** Stepped value row: − / current / + over FontSizeRow's presets. */
-@Composable
-private fun FontSizeRow(title: String, value: Int, onChange: (Int) -> Unit) {
-    val options = FONT_PRESETS
-    val i = options.indexOf(value).coerceAtLeast(0)
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text("Applies when a file opens next. Measured in sp.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(enabled = i > 0, onClick = { onChange(options[i - 1]) }) { Text("−") }
-            Text("${options[i]} sp", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 4.dp))
-            TextButton(enabled = i < options.size - 1, onClick = { onChange(options[i + 1]) }) { Text("+") }
+            // Word wrap and font size live in the code editor header (CodeScreen). */
         }
     }
 }

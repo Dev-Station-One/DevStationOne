@@ -108,9 +108,9 @@ private fun queryName(res: android.content.ContentResolver, uri: Uri): String? =
         if (i >= 0 && c.moveToFirst()) c.getString(i) else null
     }
 
-/** One toolbar pill in note edit mode. */
+/** One toolbar pill in note edit mode (shared with the code editor's display row). */
 @Composable
-private fun Tool(label: String, onClick: () -> Unit) {
+internal fun Tool(label: String, onClick: () -> Unit) {
     Text(
         label,
         fontSize = 13.sp,

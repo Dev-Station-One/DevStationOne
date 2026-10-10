@@ -5,10 +5,16 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -149,11 +155,11 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val drafts = remember(server.id, projectID) { FileDraftStore(ctx, server.id, projectID) }
     val haptic = LocalHapticFeedback.current
-    // Settings only change outside this screen (or with a process restart), so a
-    // snapshot at composition matches what the Settings switch left behind.
+    // In-editor display controls (wrap + font size) — persisted via
+    // AppSettings so the next file opens with the same values.
     val settings = dev.devstationone.data.AppSettings(ctx)
-    val wordwrap = remember { settings.editorWordwrap }
-    val fontSize = remember { settings.editorFontSize }
+    var fontSize by remember { mutableStateOf(settings.editorFontSize) }
+    var wrap by remember { mutableStateOf(settings.editorWordwrap) }
 
     var previewing by remember { mutableStateOf(false) }
     var previewText by remember { mutableStateOf("") }
@@ -173,6 +179,19 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
     // parks here and the AndroidView update() applies it once the editor exists.
     var pendingText by remember { mutableStateOf<String?>(null) }
     var pendingDirty by remember { mutableStateOf(false) }
+
+    fun stepFontSize(delta: Int) {
+        val i = (FONT_PRESETS.indexOf(fontSize).coerceAtLeast(0) + delta).coerceIn(FONT_PRESETS.indices)
+        fontSize = FONT_PRESETS[i]
+        settings.editorFontSize = fontSize
+        editor.value?.setTextSize(fontSize.toFloat())
+    }
+
+    fun flipWrap() {
+        wrap = !wrap
+        settings.editorWordwrap = wrap
+        editor.value?.setWordwrap(wrap)
+    }
 
     // ---- load (stat → guards → read → render) ----
     fun load(warnOk: Boolean = false) {
@@ -301,39 +320,55 @@ fun CodeScreen(server: Server, projectID: String, projectName: String, filePath:
                     modifier = Modifier.padding(16.dp),
                 )
                 loading -> CircularProgressIndicator(Modifier.padding(24.dp))
-                else -> Box(Modifier.fillMaxSize()) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                    factory = { c ->
-                        setUpTextmate(c)
-                        CodeEditor(c).apply {
-                            colorScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
-                            isWordwrap = wordwrap // Settings → "Code editor word wrap"
-                            setTextSize(fontSize.toFloat()) // Settings → editor font size (sp)
-                            // one dirty hook: every content mutation marks the buffer
-                            subscribeEvent(ContentChangeEvent::class.java) { _, _ -> dirty = true }
-                            editor.value = this
+                else -> Column(Modifier.fillMaxSize()) {
+                    // In-editor display controls: they live with the editor, not in
+                    // Settings — apply live and persist for the next open.
+                    if (!previewing) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Tool("− font") { stepFontSize(-1) }
+                            Text("$fontSize sp", fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp), maxLines = 1)
+                            Tool("+ font") { stepFontSize(1) }
+                            Tool(if (wrap) "wrap on" else "wrap off") { flipWrap() }
                         }
-                    },
-                    update = { e ->
-                        // deliver whatever load() parked (initial load, reload, draft resume)
-                        pendingText?.let { t ->
-                            e.setText(t)
-                            dirty = pendingDirty
-                            pendingDirty = false
-                            pendingText = null
-                            grammarFor(filePath)?.let { scopeName ->
-                                e.setEditorLanguage(TextMateLanguage.create(scopeName, false))
+                    }
+                    Box(Modifier.weight(1f).fillMaxSize()) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { c ->
+                                setUpTextmate(c)
+                                CodeEditor(c).apply {
+                                    colorScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
+                                    isWordwrap = wrap
+                                    setTextSize(fontSize.toFloat())
+                                    // one dirty hook: every content mutation marks the buffer
+                                    subscribeEvent(ContentChangeEvent::class.java) { _, _ -> dirty = true }
+                                    editor.value = this
+                                }
+                            },
+                            update = { e ->
+                                // deliver whatever load() parked (initial load, reload, draft resume)
+                                pendingText?.let { t ->
+                                    e.setText(t)
+                                    dirty = pendingDirty
+                                    pendingDirty = false
+                                    pendingText = null
+                                    grammarFor(filePath)?.let { scopeName ->
+                                        e.setEditorLanguage(TextMateLanguage.create(scopeName, false))
+                                    }
+                                }
+                            },
+                            onRelease = { it.release() },
+                        )
+                        // Preview floats over (never replaces) the editor: returning
+                        // to Edit keeps the buffer, undo history and scroll intact.
+                        if (previewing) {
+                            Surface(Modifier.fillMaxSize()) {
+                                FilePreview(server, projectID, filePath, previewText, previewIsHtml(filePath))
                             }
-                        }
-                    },
-                    onRelease = { it.release() },
-                )
-                    // Preview floats over (never replaces) the editor: returning to
-                    // Edit keeps the buffer, scroll and undo history intact.
-                    if (previewing) {
-                        Surface(Modifier.fillMaxSize()) {
-                            FilePreview(server, projectID, filePath, previewText, previewIsHtml(filePath))
                         }
                     }
                 }
