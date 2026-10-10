@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>note</title>
+<script src="vendor/dompurify/purify.min.js"></script>
+<style>
+  /* Colors track the system theme, matching DevStationTheme (isSystemInDarkTheme). */
+  body {
+    margin: 0; padding: 12px 16px 32px; font: 14px/1.55 system-ui, sans-serif;
+    background: transparent; -webkit-text-size-adjust: 100%;
+  }
+  @media (prefers-color-scheme: light) {
+    body { color: #16202b; }
+    a { color: #0f7b5a; }
+    pre, code, .bg { background: #eef1f6; }
+    td, th, blockquote { border-color: #d5dbe5; }
+    blockquote { color: #5a6572; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e3e7ee; }
+    a { color: #7aa2f7; }
+    pre, code, .bg { background: #1d2331; }
+    td, th, blockquote { border-color: #2a3242; }
+    blockquote { color: #98a2b3; }
+  }
+  img { max-width: 100%; height: auto; }
+  pre { overflow-x: auto; padding: 10px; border-radius: 6px; }
+  code { padding: 1px 4px; border-radius: 4px; }
+  table { border-collapse: collapse; }
+  td, th { border: 1px solid; padding: 4px 8px; }
+  blockquote { border-left: 3px solid; margin: 8px 0; padding: 0 12px; }
+</style>
+</head>
+<body>
+<div id="body"></div>
+<script>
+// Body arrives base64 (quotes/HTML can't break the JS string). Sanitized here,
+// same as the web client — never rendered raw.
+function setBody(b64) {
+  document.getElementById('body').innerHTML =
+    DOMPurify.sanitize(atob(b64), { RETURN_DOM: false });
+}
+if (window.Android && Android.ready) Android.ready();
+</script>
+</body>
+</html>

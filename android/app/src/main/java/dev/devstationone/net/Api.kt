@@ -60,6 +60,52 @@ data class SessionInfo(
     val rows: Int = 24,
 )
 
+// ---- project journal (server-side notes; body is Summernote HTML, sanitized client-side) ----
+
+@Serializable
+data class JournalAttachment(
+    val id: String,
+    val filename: String,
+    val content_type: String = "",
+    val size_bytes: Long = 0,
+    val created_at: String = "",
+)
+
+/** A note as the list returns it: snippet only, plus attachment metadata for the count. */
+@Serializable
+data class JournalNoteSummary(
+    val id: String,
+    val snippet: String = "",
+    val attachments: List<JournalAttachment> = emptyList(),
+    val commit_sha: String = "",
+    val commit_subject: String = "",
+    val commit_author: String = "",
+    val commit_datetime: String? = null,
+    val created_by: String = "",
+    val creator_name: String = "",
+    val created_at: String = "",
+    val updated_at: String = "",
+)
+
+/** Full note: body_html + attachments. */
+@Serializable
+data class JournalNote(
+    val id: String,
+    val body_html: String = "",
+    val attachments: List<JournalAttachment> = emptyList(),
+    val commit_sha: String = "",
+    val commit_subject: String = "",
+    val commit_author: String = "",
+    val commit_datetime: String? = null,
+    val created_by: String = "",
+    val creator_name: String = "",
+    val created_at: String = "",
+    val updated_at: String = "",
+)
+
+@Serializable
+data class JournalPage(val notes: List<JournalNoteSummary>, val total: Int = 0, val limit: Int = 0, val offset: Int = 0)
+
 class ApiException(val code: Int, message: String) : Exception(message)
 
 class Api(private val server: Server) {
@@ -176,5 +222,30 @@ class Api(private val server: Server) {
 
     fun signal(id: String, name: String) {
         client.newCall(request("POST", url("api", "v1", "sessions", id, "signal"), bodyOf("signal" to name))).execute().use { check(it) }
+    }
+
+    // ---- project journal ----
+
+    /** One page of the project's journal, newest first. */
+    fun journal(projectID: String, limit: Int = 25, offset: Int = 0): JournalPage {
+        val u = url("api", "v1", "projects", projectID, "journal").newBuilder()
+            .addQueryParameter("limit", limit.toString())
+            .addQueryParameter("offset", offset.toString())
+            .build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    fun note(projectID: String, noteID: String): JournalNote {
+        client.newCall(request("GET", url("api", "v1", "projects", projectID, "journal", "notes", noteID))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    fun deleteNote(projectID: String, noteID: String) {
+        client.newCall(request("DELETE", url("api", "v1", "projects", projectID, "journal", "notes", noteID))).execute().use { check(it) }
     }
 }

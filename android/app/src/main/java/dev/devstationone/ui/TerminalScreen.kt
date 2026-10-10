@@ -2,9 +2,6 @@ package dev.devstationone.ui
 
 import android.content.ClipboardManager
 import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -15,11 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,18 +23,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.clickable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -60,16 +52,11 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
-import dev.devstationone.data.Server
 import dev.devstationone.data.Shortcut
-import dev.devstationone.data.ShortcutStore
-import dev.devstationone.data.TabColorStore
 import dev.devstationone.net.ConnState
 import dev.devstationone.ui.kit.MuxChip
 import dev.devstationone.ui.kit.MuxIcons
 import dev.devstationone.ui.kit.RoundIconButton
-import dev.devstationone.ui.kit.ScreenHeader
-import dev.devstationone.ui.kit.StatusDot
 import dev.devstationone.ui.kit.TabChipColors
 import dev.devstationone.ui.kit.TabShape
 import dev.devstationone.ui.kit.stateColor
@@ -77,14 +64,24 @@ import dev.devstationone.ui.theme.Mux
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+/**
+ * Terminal tab content of the project workspace ([WorkspaceScreen] owns the
+ * header and the top tab bar). [active] collapses the whole column to zero
+ * size while another workspace tab shows: the composition stays, so hidden
+ * terminal tabs keep their WebViews and live PTY streams, and panes go GONE
+ * through [TerminalPane]'s visibility handling.
+ */
 @Composable
-fun TerminalScreen(server: Server, projectID: String, projectName: String, onShortcuts: () -> Unit, onBack: () -> Unit) {
+fun TerminalBodyContent(
+    ctrl: TerminalController,
+    active: Boolean,
+    shortcuts: List<Shortcut>,
+    onShortcuts: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val ctx = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val ctrl = remember(projectID) { TerminalController(server, projectID, scope, TabColorStore(ctx)) }
     var fontSize by remember { mutableIntStateOf(14) }
     var menu by remember { mutableStateOf(false) }
-    val shortcuts = remember { ShortcutStore(ctx).load() }
     var newTab by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf<String?>(null) }
     var renaming by remember { mutableStateOf<String?>(null) }
@@ -92,50 +89,32 @@ fun TerminalScreen(server: Server, projectID: String, projectName: String, onSho
     var colorMenu by remember { mutableStateOf(false) }
     var bulk by remember { mutableStateOf<BulkClose?>(null) }
 
-    DisposableEffect(ctrl) {
-        ctrl.load()
-        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val cb = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) = ctrl.kick()
-        }
-        cm.registerDefaultNetworkCallback(cb)
-        onDispose {
-            runCatching { cm.unregisterNetworkCallback(cb) }
-            ctrl.dispose()
-        }
-    }
-    BackHandler(onBack = onBack)
-
-    Scaffold { pad ->
-        Column(Modifier.padding(pad).consumeWindowInsets(pad).imePadding().fillMaxSize()) {
-            ScreenHeader(
-                title = projectName,
-                onBack = onBack,
-                leading = { ctrl.selected?.let { StatusDot(stateColor(ctrl.states[it])); Spacer(Modifier.width(8.dp)) } },
-                actions = {
-                    RoundIconButton(MuxIcons.Plus, "New session") { newTab = true }
-                    Box {
-                        RoundIconButton(MuxIcons.More, "Menu") { menu = true }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            val sel = ctrl.selected
-                            DropdownMenuItem(text = { Text("Shortcuts") }, onClick = { menu = false; onShortcuts() })
-                            DropdownMenuItem(text = { Text("Paste") }, onClick = {
-                                menu = false
-                                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val t = cm.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
-                                if (sel != null && t.isNotEmpty()) ctrl.enc(sel).paste(t)
-                            })
-                            DropdownMenuItem(text = { Text("Copy output → clipboard (selection)") }, onClick = { menu = false })
-                            DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; ctrl.kick() })
-                            DropdownMenuItem(text = { Text("Refresh sessions") }, onClick = { menu = false; ctrl.load() })
-                            DropdownMenuItem(text = { Text("Close tab…") }, onClick = { menu = false; closing = sel })
-                        }
-                    }
-                },
-            )
-            ctrl.error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+    Column(modifier.fillMaxSize().then(if (active) Modifier else Modifier.size(0.dp))) {
+        // the terminal's action row (was TerminalScreen's header actions)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+            RoundIconButton(MuxIcons.Plus, "New session") { newTab = true }
+            Spacer(Modifier.width(8.dp))
+            Box {
+                RoundIconButton(MuxIcons.More, "Menu") { menu = true }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    val sel = ctrl.selected
+                    DropdownMenuItem(text = { Text("Shortcuts") }, onClick = { menu = false; onShortcuts() })
+                    DropdownMenuItem(text = { Text("Paste") }, onClick = {
+                        menu = false
+                        val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val t = cm.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
+                        if (sel != null && t.isNotEmpty()) ctrl.enc(sel).paste(t)
+                    })
+                    DropdownMenuItem(text = { Text("Copy output → clipboard (selection)") }, onClick = { menu = false })
+                    DropdownMenuItem(text = { Text("Reconnect") }, onClick = { menu = false; ctrl.kick() })
+                    DropdownMenuItem(text = { Text("Refresh sessions") }, onClick = { menu = false; ctrl.load() })
+                    DropdownMenuItem(text = { Text("Close tab…") }, onClick = { menu = false; closing = sel })
+                }
             }
+        }
+        ctrl.error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+        }
             if (ctrl.tabs.isNotEmpty()) {
                 val idx = ctrl.tabs.indexOfFirst { it.id == ctrl.selected }.coerceAtLeast(0)
                 val tabState = rememberLazyListState()
@@ -196,7 +175,7 @@ fun TerminalScreen(server: Server, projectID: String, projectName: String, onSho
                         TerminalPane(
                             conn = ctrl.conn(s.id),
                             enc = ctrl.enc(s.id),
-                            visible = s.id == ctrl.selected,
+                            visible = active && s.id == ctrl.selected,
                             fontSize = fontSize,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -207,7 +186,6 @@ fun TerminalScreen(server: Server, projectID: String, projectName: String, onSho
                 }
                 ctrl.selected?.let { ShortcutDock(ctrl.enc(it), shortcuts, Modifier.fillMaxSize()) }
             }
-        }
     }
 
     if (newTab) {

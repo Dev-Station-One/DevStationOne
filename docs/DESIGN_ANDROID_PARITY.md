@@ -231,5 +231,19 @@ integration tests.
 
 ## 10. Status
 
-Design current as of 2026-10-10; no stage started. Round-1 scope per
-accepted REQUIREMENTS doc; stages 1..5 + 7 remain (stage 6 removed).
+Round 1 implementation:
+- **Stage 1 (journal list + note view, workspace tab bar) — complete** (2026-10-10):
+  `Screen.Term` became `Screen.Workspace` (`ui/Workspace.kt`) with a
+  material3 `TabRow` (Terminal/Journal); `TerminalScreen`'s body is now
+  `TerminalBodyContent` (own action row, header actions moved with it),
+  always composed and zero-size-hidden while the Journal tab shows, so
+  hidden tabs keep their WebViews, PTY streams and list state. Notes open
+  as a full-screen overlay (`JournalScreen.kt`'s `NoteScreen`) — the
+  workspace never unmounts. Rendering is `ui/HtmlPanel.kt` + the new
+  `assets/note.html` (DOMPurify 3.1.6 vendored from the web client's file,
+  VENDOR.md updated); server-URL subresource loads ride `shouldInterceptRequest`
+  → OkHttp Sig header. `net/Api.kt` gained journal models + `journal`,
+  `note`, `deleteNote`. `assembleDebug` + `testDebugUnitTest` green
+  (`JournalModelsTest` decodes openapi-shaped payloads).
+- Stages 2 (note edit), 3 (attachments), 4 (file tree), 5 (code editor),
+  7 (docs/roundoff) remain.

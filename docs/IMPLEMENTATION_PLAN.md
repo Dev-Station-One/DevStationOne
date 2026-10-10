@@ -1543,4 +1543,10 @@ No server changes expected.
 **Stages**: design doc §8 (1 journal list/view, 2 note edit, 3 attachments,
 4 file tree, 5 code editor, 7 docs/roundoff).
 
-**Status: Design complete, not started** (2026-10-10).
+**Status: In progress — stage 1 complete** (2026-10-10): `Screen.Workspace`
+with Terminal/Journal top tab bar (tab content stays composed when hidden —
+no reattach), `JournalScreen` paged list, `NoteScreen` view mode with
+`HtmlPanel` (DOMPurify-sanitized body_html, Sig-header request
+interception), `net/Api.kt` journal models + list/get/delete,
+`JournalModelsTest` decode tests. `assembleDebug` + `testDebugUnitTest`
+green. Note edit/attachments/Files/Code = stages 2-5.

@@ -6,6 +6,7 @@
 | `addon-fit.js` | npm `@xterm/addon-fit` (`lib/addon-fit.js`) | 0.11.0 |
 | `addon-web-links.js` | npm `@xterm/addon-web-links` (`lib/addon-web-links.js`) | 0.12.0 |
 | `addon-unicode11.js` | npm `@xterm/addon-unicode11` (`lib/addon-unicode11.js`) | 0.9.0 |
+| `vendor/dompurify/purify.min.js` | npm `dompurify` — the exact file the web client vendors (`web/static/vendor/dompurify/`), Apache-2.0 / MPL-2.0 dual license | 3.1.6 |
 
 SHA-256 of each file is in `xterm.sha256`; `make xterm-check` verifies it and
 `make desktop-assets` runs it first. To bump: change `XTERM_VERSION` / `FIT_VERSION` /

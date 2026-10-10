@@ -29,13 +29,13 @@ import dev.devstationone.ui.ProjectsScreen
 import dev.devstationone.ui.ServerListScreen
 import dev.devstationone.ui.SettingsScreen
 import dev.devstationone.ui.ShortcutsScreen
-import dev.devstationone.ui.TerminalScreen
+import dev.devstationone.ui.WorkspaceScreen
 
 private sealed interface Screen {
     data object List : Screen
     data class Pair(val url: String = "", val code: String = "") : Screen
     data class Projects(val server: Server) : Screen
-    data class Term(val server: Server, val projectID: String, val projectName: String) : Screen
+    data class Workspace(val server: Server, val projectID: String, val projectName: String) : Screen
     data object Shortcuts : Screen
     data object Settings : Screen
 }
@@ -136,9 +136,9 @@ class MainActivity : ComponentActivity() {
                         is Screen.Projects -> ProjectsScreen(
                             s.server,
                             onBack = { screen = Screen.List },
-                            onOpen = { p -> screen = Screen.Term(s.server, p.id, p.name) },
+                            onOpen = { p -> screen = Screen.Workspace(s.server, p.id, p.name) },
                         )
-                        is Screen.Term -> TerminalScreen(
+                        is Screen.Workspace -> WorkspaceScreen(
                             s.server, s.projectID, s.projectName,
                             onShortcuts = { preShortcuts = screen; screen = Screen.Shortcuts },
                             onBack = { screen = Screen.Projects(s.server) },

@@ -21,10 +21,11 @@ stored token, nothing to steal.
 - **Dock**: bottom bar (ESC/TAB///:/arrows) + drill-in fan (sticky
   modifiers, ctrl combos, F-keys, navigation, user-defined shortcut
   macros), ported from muxalot in full.
-- **NOT in the app**: file management (the web UI owns it by design), Quick
-  Commands (ADR-045), databases/services/git screens — web-only for now.
-  Parity round 1 planned on top of this: Journal + Editor per
-  `docs/REQUIREMENTS_ANDROID_PARITY.md` / `docs/DESIGN_ANDROID_PARITY.md`.
+- **Round 1 under way** (2026-10-10): the project screen is a tabbed
+  **Workspace** — Terminal + Journal so far; note reading with
+  DOMPurify-rendered bodies works, note editing and the Files/Code editor
+  follow (docs/DESIGN_ANDROID_PARITY.md). Everything in the next line stays
+  web-only except what those docs move into the app.
 
 ## Auth (ADR-053)
 
