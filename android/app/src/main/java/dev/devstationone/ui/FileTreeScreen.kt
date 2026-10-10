@@ -63,12 +63,12 @@ internal fun fileGlyph(type: String): String = when (type) {
 
 /**
  * The project Files tab: breadcrumb drill-in over the runtime filesystem
- * (read-only in round 1 until the stage-5 editor lands) plus a name search
- * over the subtree rooted at the current directory. Search results are
- * root-relative paths; they open in the code editor once stage 5 ships.
+ * plus a name search over the subtree rooted at the current directory.
+ * Tapping a file (or a search result) hands its root-relative path to
+ * [onOpenFile] — the workspace shows it in the stage-5 code editor.
  */
 @Composable
-fun FileTreeScreen(server: Server, projectID: String) {
+fun FileTreeScreen(server: Server, projectID: String, onOpenFile: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val api = remember { Api(server) }
     var path by remember { mutableStateOf(".") }
@@ -151,7 +151,10 @@ fun FileTreeScreen(server: Server, projectID: String) {
                         fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(vertical = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onOpenFile(r) }
+                            .padding(vertical = 6.dp),
                     )
                 }
                 if (results.orEmpty().isEmpty() && !searching) {
@@ -165,7 +168,10 @@ fun FileTreeScreen(server: Server, projectID: String) {
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = f.type == "dir") { loadDir(if (path == ".") f.name else "$path/${f.name}") }
+                            .clickable {
+                                if (f.type == "dir") loadDir(if (path == ".") f.name else "$path/${f.name}")
+                                else onOpenFile(if (path == ".") f.name else "$path/${f.name}")
+                            }
                             .padding(vertical = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {

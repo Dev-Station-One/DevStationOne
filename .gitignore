@@ -20,7 +20,7 @@ web/dist/
 # Runtime/local state
 *.sqlite
 *.db
-data/
+/data/
 tmp/
 
 # IDE
@@ -49,3 +49,9 @@ android/*.iml
 # Android release signing (never commit)
 android/keystore.properties
 android/keystore/
+
+# Local deploy tooling (CLAUDE.md Prod deploy)
+scripts/deploy-to-prod.sh
+
+# Kotlin 2.3+ compiler session cache
+.kotlin/

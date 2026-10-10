@@ -303,7 +303,38 @@ Round 1 implementation:
   through Workspace. The created note is prepended to the list at once;
   flagging: notes deleted from `NoteScreen` still linger in the list
   until the tab is reloaded — wire a list refresh when that bites.
-- Stages 4 (file tree), 5 (code editor), 7 (docs/roundoff) remain.
+- **Stage 5 (code editor) — complete** (2026-10-10, pending on-device E2E):
+  `ui/CodeScreen.kt` hosts a sora-editor `CodeEditor` (0.24.6 via BOM +
+  `language-textmate`) in `AndroidView`, released on dispose, wired to
+  `Api.statFile`/`readFile`/`writeFile` (raw-byte GET/PUT). TextMate
+  highlighting: 20 grammars vendored from npm `tm-grammars` 1.32.22 (MIT;
+  LICENSE+NOTICE in `assets/textmate/grammars/`), one dark theme
+  (`darcula.json` from sora-editor's own sample assets), and an in-repo
+  `languages.json` without `languageConfiguration` entries (symbol-pair
+  autocomplete off) — extension→scope map `grammarFor()` is unit-tested;
+  files outside the map render plain. The registries are process-wide
+  statics, set up once under a lock. The §4 flow is all in: stat baseline
+  at open, >4 MB refusal notice, >1 MB soft-warn dialog, NUL-sniff
+  binary refusal, `saveDecision()` collision table (unit-tested) driving
+  the save button (free PUT / "reload" prompt for an untouched stale copy
+  / keep-mine-or-reload conflict dialog), re-stat as the new baseline
+  after save, and the §6 draft: dirty-buffer snapshots to
+  `FileDraftStore` (`cacheDir/editor-store/{server}/{project}/`,
+  path-hashed) on back-nav and ON_STOP, cleared on successful save,
+  restored over the fetched copy on open. Dependency delta beyond §7:
+  the project's Kotlin toolchain moved 2.0.21 → 2.3.10 (sora-editor 0.24.6
+  ships 2.3-metadata modules; `kotlinOptions` DSL migrated as required) —
+  a build-compat change, not a design change. Server: stat/content
+  GET+PUT switched to `requireIdentity` (openapi `deviceSig` entries;
+  `TestDeviceFilesAuth` covers the four editor-ish routes), deployed to
+  dev + prod via `scripts/deploy-to-prod.sh`; the
+  create/mkdir/rename/copy/move/mode/owner/delete writers stay
+  cookie-only (round-1 Files is browse + edit-content only). APK
+  5.4 MB release (+2.1 MB, inside the §7 estimate). Accept US-3/US-5:
+  unit tests green, `assembleDebug`/`assembleRelease` green; on-device
+  edit-and-save (mtime observable on web) and the 900 KB / 40 MB paths
+  await the Pixel E2E.
+- Stage 7 (docs/roundoff) remains — this stage updated its own docs.
 
 - **Stage 4 (file tree) — complete** (2026-10-10): third workspace tab
   "Files" hosts a new `ui/FileTreeScreen.kt` — breadcrumb drill-in over

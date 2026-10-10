@@ -207,12 +207,13 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/backups/{backupID}/restore", requireSession(db, restoreProjectBackupHandler(db, registry)))
 
 	// Android parity round 1 (ADR-053 addendum): list/search take a device
-	// identity; the editor routes switch when the code-editor stage lands.
+	// identity; the editor routes (stat/content) too since the code-editor
+	// stage writes them. The writer/delete/mode-owner routes stay cookie-only.
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/files", requireIdentity(db, listFilesHandler(db, registry)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/search", requireIdentity(db, searchFilesHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/stat", requireSession(db, statFileHandler(db, registry)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/content", requireSession(db, readFileHandler(db, registry)))
-	mux.HandleFunc("PUT /api/v1/projects/{projectID}/files/content", requireSession(db, writeFileHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/stat", requireIdentity(db, statFileHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/files/content", requireIdentity(db, readFileHandler(db, registry)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/files/content", requireIdentity(db, writeFileHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/create", requireSession(db, createFileHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/mkdir", requireSession(db, mkdirHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/files/rename", requireSession(db, fileTransferHandler(db, registry, "rename")))

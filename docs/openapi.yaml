@@ -2347,6 +2347,7 @@ paths:
       operationId: statFile
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2385,6 +2386,7 @@ paths:
       operationId: readFile
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2426,6 +2428,7 @@ paths:
       operationId: writeFile
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path

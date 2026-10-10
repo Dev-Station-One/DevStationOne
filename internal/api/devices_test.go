@@ -413,6 +413,11 @@ func TestDeviceFilesAuth(t *testing.T) {
 	for _, uri := range []string{
 		"/api/v1/projects/" + proj.ID + "/files?path=.",
 		"/api/v1/projects/" + proj.ID + "/files/search?q=go&path=.",
+		// Stage 5 (code editor): the stat/content editor routes take a
+		// device identity too; PUT carries no body because the device wall
+		// runs before the handler ever looks at one.
+		"/api/v1/projects/" + proj.ID + "/files/stat?path=go.mod",
+		"/api/v1/projects/" + proj.ID + "/files/content?path=go.mod",
 	} {
 		// The owner's device passes the device-signature wall and reaches
 		// the handler, which answers 409 because no runtime is connected.

@@ -1,0 +1,24 @@
+{
+  "languages": [
+    {"name": "kotlin", "scopeName": "source.kotlin", "grammar": "textmate/grammars/kotlin.json"},
+    {"name": "java", "scopeName": "source.java", "grammar": "textmate/grammars/java.json"},
+    {"name": "json", "scopeName": "source.json", "grammar": "textmate/grammars/json.json"},
+    {"name": "yaml", "scopeName": "source.yaml", "grammar": "textmate/grammars/yaml.json"},
+    {"name": "go", "scopeName": "source.go", "grammar": "textmate/grammars/go.json"},
+    {"name": "typescript", "scopeName": "source.ts", "grammar": "textmate/grammars/typescript.json"},
+    {"name": "javascript", "scopeName": "source.js", "grammar": "textmate/grammars/javascript.json"},
+    {"name": "css", "scopeName": "source.css", "grammar": "textmate/grammars/css.json"},
+    {"name": "html", "scopeName": "text.html.basic", "grammar": "textmate/grammars/html.json", "embeddedLanguages": {"source.js": "javascript", "source.css": "css"}},
+    {"name": "markdown", "scopeName": "text.html.markdown", "grammar": "textmate/grammars/markdown.json", "embeddedLanguages": {"text.html.basic": "html", "source.js": "javascript"}},
+    {"name": "shellscript", "scopeName": "source.shell", "grammar": "textmate/grammars/shellscript.json"},
+    {"name": "docker", "scopeName": "source.dockerfile", "grammar": "textmate/grammars/docker.json"},
+    {"name": "toml", "scopeName": "source.toml", "grammar": "textmate/grammars/toml.json"},
+    {"name": "ini", "scopeName": "source.ini", "grammar": "textmate/grammars/ini.json"},
+    {"name": "c", "scopeName": "source.c", "grammar": "textmate/grammars/c.json"},
+    {"name": "cpp", "scopeName": "source.cpp", "grammar": "textmate/grammars/cpp.json"},
+    {"name": "csharp", "scopeName": "source.cs", "grammar": "textmate/grammars/csharp.json"},
+    {"name": "php", "scopeName": "source.php", "grammar": "textmate/grammars/php.json"},
+    {"name": "rust", "scopeName": "source.rust", "grammar": "textmate/grammars/rust.json"},
+    {"name": "sql", "scopeName": "source.sql", "grammar": "textmate/grammars/sql.json"}
+  ]
+}

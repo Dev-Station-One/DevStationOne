@@ -29,10 +29,11 @@ stored token, nothing to steal.
   crash-resilient drafts (NFR-3) work; attachments (upload via file
   picker or camera, share/download chips, inline images via the WebView
   request bridge) are in, and the Files tab (breadcrumb drill-in +
-  name search over the runtime filesystem, read-only) is in; the
-  code editor follows (docs/DESIGN_ANDROID_PARITY.md). Everything in
-  the next line stays web-only except what those docs move into the
-  app.
+  name search over the runtime filesystem) with the sora-editor code
+  editor (TextMate highlighting over a vendored grammar subset, the
+  stat-mtime collision flow, and crash-resilient dirty-buffer drafts)
+  are in — docs/DESIGN_ANDROID_PARITY.md. Everything in the next line
+  stays web-only except what those docs move into the app.
 
 ## Auth (ADR-053)
 

@@ -326,4 +326,35 @@ class Api(private val server: Server) {
             return json.decodeFromString(it.jsonText())
         }
     }
+
+    /** Stat one entry; [FileInfo.mtime] is the collision baseline (§4). */
+    fun statFile(projectID: String, path: String): FileInfo {
+        val u = url("api", "v1", "projects", projectID, "files", "stat").newBuilder()
+            .addQueryParameter("path", path)
+            .build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** Raw bytes of a file; the server rejects anything over the 24 MB cap with 502. */
+    fun readFile(projectID: String, path: String): ByteArray {
+        val u = url("api", "v1", "projects", projectID, "files", "content").newBuilder()
+            .addQueryParameter("path", path)
+            .build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return it.body?.bytes() ?: ByteArray(0)
+        }
+    }
+
+    /** Raw-byte PUT; the runtime creates the file (0644) when absent, replaces it when present. */
+    fun writeFile(projectID: String, path: String, bytes: ByteArray) {
+        val u = url("api", "v1", "projects", projectID, "files", "content").newBuilder()
+            .addQueryParameter("path", path)
+            .build()
+        val body = bytes.toRequestBody("application/octet-stream".toMediaType())
+        client.newCall(request("PUT", u, body)).execute().use { check(it) }
+    }
 }

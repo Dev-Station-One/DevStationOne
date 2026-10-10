@@ -59,6 +59,7 @@ fun WorkspaceScreen(
     var tab by remember { mutableIntStateOf(0) }
     var noteID by remember { mutableStateOf<String?>(null) }
     var noteStartEdit by remember { mutableStateOf(false) }
+    var filePath by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(ctrl) {
         ctrl.load()
@@ -98,13 +99,16 @@ fun WorkspaceScreen(
                         })
                     }
                     Box(Modifier.fillMaxSize().hiddenOther(tab != 2)) {
-                        FileTreeScreen(server, projectID)
+                        FileTreeScreen(server, projectID, onOpenFile = { filePath = it })
                     }
                 }
             }
             // Full-screen overlay: reading or editing a note while the workspace stays alive.
             noteID?.let { id ->
                 NoteScreen(server, projectID, projectName, id, startEdit = noteStartEdit, onBack = { noteID = null })
+            }
+            filePath?.let { p ->
+                CodeScreen(server, projectID, projectName, p, onBack = { filePath = null })
             }
         }
     }

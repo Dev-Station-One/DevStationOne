@@ -51,8 +51,13 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true // sora-editor uses java.time etc. on API < 33
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
+    }
     buildFeatures {
         compose = true
         buildConfig = true
@@ -74,4 +79,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     // QR scanning for pairing (Apache-2.0)
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    // sora-editor code editor + TextMate engine (parity stage 5;
+    // LGPL-2.1-or-later — unmodified AARs, notices in assets/VENDOR.md)
+    implementation(platform("io.github.rosemoe:editor-bom:0.24.6"))
+    implementation("io.github.rosemoe:editor")
+    implementation("io.github.rosemoe:language-textmate")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }
