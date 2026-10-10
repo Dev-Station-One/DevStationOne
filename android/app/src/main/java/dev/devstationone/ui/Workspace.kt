@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
@@ -26,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import dev.devstationone.data.Server
@@ -40,11 +40,9 @@ import dev.devstationone.ui.kit.stateColor
  * (docs/DESIGN_ANDROID_PARITY.md §3). Round 1 has "Terminal" and "Journal";
  * later rounds append "Files" and the other web tabs.
  *
- * Neither tab's content is ever left the composition — the hidden one
- * collapses to zero size, so terminal WebViews/PTY streams keep running and
- * the Journal list keeps its state while a note is open. Notes and the code
- * editor (later rounds) overlay this screen instead of pushing it out, for
- * the same reason.
+ * Neither tab is ever left the composition or re-measured: hidden tab
+ * content is measured full-size (WebViews/PTY streams and Journal list
+ * state survive tab switches) but never placed — see [hiddenOther].
  */
 @Composable
 fun WorkspaceScreen(
@@ -88,12 +86,10 @@ fun WorkspaceScreen(
                     Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Journal") })
                 }
                 Box(Modifier.weight(1f).fillMaxSize()) {
-                    // Terminal: always composed, zero-size hidden when inactive.
-                    Box(Modifier.fillMaxSize().then(if (tab == 0) Modifier else Modifier.size(0.dp))) {
+                    Box(Modifier.fillMaxSize().hiddenOther(tab != 0)) {
                         TerminalBodyContent(ctrl, active = tab == 0, shortcuts, onShortcuts)
                     }
-                    // Journal: also always composed so its list/scroll survives.
-                    Box(Modifier.fillMaxSize().then(if (tab == 1) Modifier else Modifier.size(0.dp))) {
+                    Box(Modifier.fillMaxSize().hiddenOther(tab != 1)) {
                         JournalScreen(server, projectID, onOpen = { n -> noteID = n.id })
                     }
                 }
@@ -105,3 +101,16 @@ fun WorkspaceScreen(
         }
     }
 }
+
+/**
+ * Measures [hidden] content at full size but never places it — an unplaced
+ * placeable draws nothing, hit-tests nothing, and drops from the a11y tree.
+ * This is what keeps hidden terminal WebViews perfectly sized/stateful while
+ * making the other tab's content impossible to see "behind the tab row".
+ */
+private fun Modifier.hiddenOther(hidden: Boolean): Modifier = then(
+    if (hidden) Modifier.layout { measurable, constraints ->
+        measurable.measure(constraints)
+        layout(0, 0) { /* not placed → not drawn */ }
+    } else Modifier
+)

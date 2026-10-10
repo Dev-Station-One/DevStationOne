@@ -66,10 +66,10 @@ import kotlinx.coroutines.launch
 
 /**
  * Terminal tab content of the project workspace ([WorkspaceScreen] owns the
- * header and the top tab bar). [active] collapses the whole column to zero
- * size while another workspace tab shows: the composition stays, so hidden
- * terminal tabs keep their WebViews and live PTY streams, and panes go GONE
- * through [TerminalPane]'s visibility handling.
+ * header and the top tab bar, and hides this whole subtree when another
+ * workspace tab shows — the WebViews/PTY streams here survive untouched).
+ * The pane for the selected session is GONE when [active] is false, so no
+ * hidden pane holds keyboard focus or paints.
  */
 @Composable
 fun TerminalBodyContent(
@@ -89,7 +89,7 @@ fun TerminalBodyContent(
     var colorMenu by remember { mutableStateOf(false) }
     var bulk by remember { mutableStateOf<BulkClose?>(null) }
 
-    Column(modifier.fillMaxSize().then(if (active) Modifier else Modifier.size(0.dp))) {
+    Column(modifier.fillMaxSize()) {
         // the terminal's action row (was TerminalScreen's header actions)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
             RoundIconButton(MuxIcons.Plus, "New session") { newTab = true }
