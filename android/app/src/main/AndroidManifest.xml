@@ -32,5 +32,16 @@
                 <data android:scheme="devstation" android:host="pair" />
             </intent-filter>
         </activity>
+
+        <!-- Camera capture output and downloaded-attachment share URIs (res/xml/file_paths.xml). -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="dev.devstationone.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

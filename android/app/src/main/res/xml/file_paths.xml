@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- cacheDir/camera holds TakePicture output; cacheDir/share backs the
+     share-sheet URIs for downloaded attachments. -->
+<paths>
+    <cache-path name="camera" path="camera/" />
+    <cache-path name="share" path="share/" />
+</paths>

@@ -272,5 +272,25 @@ Round 1 implementation:
   is the stage-7 E2E — the attached Pixel runs the release-signed APK and
   switching to debug needs uninstall + device re-pair, deliberately not
   done in this slice.
-- Stages 3 (attachments), 4 (file tree), 5 (code editor), 7 (docs/roundoff)
-  remain.
+- **Stage 3 (attachments) — complete** (2026-10-10): `Api.uploadAttachment`
+  (multipart `file` POST) and `Api.downloadAttachment` (stream-to-stream GET);
+  chips are now tappable — tap = download to `cacheDir/share/` + share sheet
+  (`ACTION_SEND`, FileProvider `dev.devstationone.fileprovider`), long-press =
+  save into MediaStore's Downloads (API 29+; earlier versions get a
+  "share it instead" message, `ponytail:` no WRITE_EXTERNAL_STORAGE path).
+  Upload sources are `OpenDocument` (any type, display name from
+  OpenableColumns) and `TakePicture` (fixed `cacheDir/camera/capture.jpg`
+  FileProvider output, `res/xml/file_paths.xml` new, provider added to the
+  manifest). Client limits enforced pre-upload: 25 MB and 10 per note
+  (mirror the server's checks; the server stays authoritative). Inline
+  images in `body_html` already render — `shouldInterceptRequest` bridges
+  every `/api/v1/` GET with the Sig header, unchanged in this stage. What
+  is deliberately not done: attaching from the phone does not insert the
+  image into the note body (the web editor does that); the attachment is
+  metadata + a chip, which is what US-2's bytes round trip needs — add
+  insert-into-body if the flow demands it. Accept US-2: build +
+  `AttachmentNamesTest` (server-filename sanitization for cache paths)
+  green; the photo→web round trip is the stage-7 on-device E2E (Pixel runs
+  the release-signed APK; debug switch needs uninstall + re-pair,
+  deliberately not done in this slice — same as stages 1–2).
+- Stages 4 (file tree), 5 (code editor), 7 (docs/roundoff) remain.

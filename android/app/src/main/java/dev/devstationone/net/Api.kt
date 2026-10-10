@@ -10,12 +10,15 @@ import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONObject
+import java.io.OutputStream
 import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 
@@ -255,5 +258,25 @@ class Api(private val server: Server) {
 
     fun deleteNote(projectID: String, noteID: String) {
         client.newCall(request("DELETE", url("api", "v1", "projects", projectID, "journal", "notes", noteID))).execute().use { check(it) }
+    }
+
+    /** Uploads one attachment (multipart field "file"); the server caps 25 MB / 10 per note. */
+    fun uploadAttachment(projectID: String, noteID: String, filename: String, mime: String, bytes: ByteArray): JournalAttachment {
+        val type = if (mime.isBlank()) null else mime.toMediaTypeOrNull()
+        val body = MultipartBody.Builder().setType(MultipartBody.FORM)
+            .addFormDataPart("file", filename, bytes.toRequestBody(type))
+            .build()
+        client.newCall(request("POST", url("api", "v1", "projects", projectID, "journal", "notes", noteID, "attachments"), body)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** Streams the attachment bytes into [out]; the server always answers as a download. */
+    fun downloadAttachment(projectID: String, noteID: String, attachmentID: String, out: OutputStream) {
+        client.newCall(request("GET", url("api", "v1", "projects", projectID, "journal", "notes", noteID, "attachments", attachmentID))).execute().use {
+            check(it)
+            it.body?.byteStream()?.copyTo(out)
+        }
     }
 }

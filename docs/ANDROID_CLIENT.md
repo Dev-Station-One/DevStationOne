@@ -26,9 +26,11 @@ stored token, nothing to steal.
 - **Round 1 under way** (2026-10-10): the project screen is a tabbed
   **Workspace** — Terminal + Journal so far; note reading (DOMPurify
   bodies), in-place note editing with a native ExecCommand toolbar and
-  crash-resilient drafts (NFR-3) work; attachments and the Files/Code
-  editor follow (docs/DESIGN_ANDROID_PARITY.md). Everything in the next
-  line stays web-only except what those docs move into the app.
+  crash-resilient drafts (NFR-3) work; attachments (upload via file
+  picker or camera, share/download chips, inline images via the WebView
+  request bridge) are in; the Files/Code editor follows
+  (docs/DESIGN_ANDROID_PARITY.md). Everything in the next line stays
+  web-only except what those docs move into the app.
 
 ## Auth (ADR-053)
 
