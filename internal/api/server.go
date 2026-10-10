@@ -116,7 +116,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	// Paired native-client devices (ADR-053). Pairing is unauthenticated
 	// but code-gated and rate-limited; device identity rides requireIdentity
 	// on the routes the Android client calls.
-	deviceAuth = devices.NewAuthenticator(db.Pool)
+	deviceAuth = devices.NewAuthenticator(db.Pool, logger)
 	pairRateLimit := newIPLimiter(rate.Limit(10.0/900.0), 10) // 10 attempts per 15 min per IP
 	mux.HandleFunc("POST /api/v1/auth/devices/pair", rateLimit(pairRateLimit, pairDeviceHandler(db)))
 	mux.HandleFunc("GET /api/v1/auth/devices", requireIdentity(db, listDevicesHandler(db)))
@@ -124,7 +124,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/users/{userID}/devices", requireAdmin(db, listUserDevicesHandler(db)))
 
 	mux.HandleFunc("POST /api/v1/runtimes", requireAdmin(db, createRuntimeHandler(db)))
-	mux.HandleFunc("GET /api/v1/runtimes", requireSession(db, listRuntimesHandler(db, registry)))
+	mux.HandleFunc("GET /api/v1/runtimes", requireIdentity(db, listRuntimesHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/revoke", requireAdmin(db, revokeRuntimeHandler(db, registry)))
 	mux.HandleFunc("DELETE /api/v1/runtimes/{runtimeID}", requireAdmin(db, deleteRuntimeHandler(db, registry)))
 	mux.HandleFunc("POST /api/v1/runtimes/{runtimeID}/reactivate", requireAdmin(db, reactivateRuntimeHandler(db)))

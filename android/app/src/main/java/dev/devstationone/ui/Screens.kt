@@ -126,15 +126,19 @@ fun ServerListScreen(store: ServerStore, onSettings: () -> Unit, onOpen: (Server
 fun ProjectsScreen(server: Server, onBack: () -> Unit, onOpen: (ProjectInfo) -> Unit) {
     val scope = rememberCoroutineScope()
     var projects by remember { mutableStateOf<List<ProjectInfo>>(emptyList()) }
+    var runtimeNames by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
     var error by remember { mutableStateOf<String?>(null) }
     BackHandler(onBack = onBack)
 
     LaunchedEffect(server.id) {
         error = null
         try {
-            projects = withContext(Dispatchers.IO) { Api(server).projects() }
+            val api = Api(server)
+            val (p, r) = withContext(Dispatchers.IO) { api.projects() to api.runtimes() }
+            projects = p
+            runtimeNames = r.associate { it.id to (it.name to it.online) }
         } catch (e: Exception) {
-            error = "Failed to load projects: ${e.message}"
+            error = "Failed to load projects: ${e.message?.take(200)}"
         }
     }
 
@@ -144,10 +148,22 @@ fun ProjectsScreen(server: Server, onBack: () -> Unit, onOpen: (ProjectInfo) -> 
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
             LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(projects, key = { it.id }) { p ->
+                    val rName = runtimeNames[p.runtime_id]?.first
+                    val rOnline = runtimeNames[p.runtime_id]?.second
                     MuxCard(onClick = { onOpen(p) }) {
                         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
                                 Text(p.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    rName?.let { n -> "$n · ${if (rOnline == true) "online" else "offline"}" } ?: "unknown runtime",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (p.active_sessions > 0) {
+                                Text("${p.active_sessions}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }

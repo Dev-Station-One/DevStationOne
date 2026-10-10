@@ -46,7 +46,10 @@ object Auth {
 }
 
 @Serializable
-data class ProjectInfo(val id: String, val name: String)
+data class ProjectInfo(val id: String, val name: String, val runtime_id: String = "", val active_sessions: Int = 0)
+
+@Serializable
+data class RuntimeInfo(val id: String, val name: String, val online: Boolean = false)
 
 @Serializable
 data class SessionInfo(
@@ -110,6 +113,13 @@ class Api(private val server: Server) {
 
     fun projects(): List<ProjectInfo> {
         client.newCall(request("GET", url("api", "v1", "projects"))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    fun runtimes(): List<RuntimeInfo> {
+        client.newCall(request("GET", url("api", "v1", "runtimes"))).execute().use {
             check(it)
             return json.decodeFromString(it.jsonText())
         }
