@@ -1531,3 +1531,16 @@ Keystore alias (the server-side device row id only names the Sig header).
 Rejection diagnostics (reason + signed-message/signature hex on mismatch)
 stay at Warn — single-use values, no secrets. Production now runs the
 fixed build; rollback binary remains at `devstationone-server.prev`.
+
+## Slice 26: Android parity round 1 — Journal + Editor (ADR-053 follow-on)
+
+**Goal**: Android gains the Journal tab (list/read/edit notes, attachments
+including camera capture) and an Editor (file browse/search + sora-editor
+code editing with save-back and collision handling) per
+`docs/REQUIREMENTS_ANDROID_PARITY.md`, design `docs/DESIGN_ANDROID_PARITY.md`.
+No server changes expected.
+
+**Stages**: design doc §8 (1 journal list/view, 2 note edit, 3 attachments,
+4 file tree, 5 code editor, 7 docs/roundoff).
+
+**Status: Design complete, not started** (2026-10-10).

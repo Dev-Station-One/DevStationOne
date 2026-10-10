@@ -23,6 +23,8 @@ stored token, nothing to steal.
   macros), ported from muxalot in full.
 - **NOT in the app**: file management (the web UI owns it by design), Quick
   Commands (ADR-045), databases/services/git screens — web-only for now.
+  Parity round 1 planned on top of this: Journal + Editor per
+  `docs/REQUIREMENTS_ANDROID_PARITY.md` / `docs/DESIGN_ANDROID_PARITY.md`.
 
 ## Auth (ADR-053)
 
