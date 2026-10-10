@@ -140,7 +140,7 @@ fun ProjectsScreen(server: Server, onBack: () -> Unit, onOpen: (ProjectInfo) -> 
 
     Scaffold { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
-            ScreenHeader(server.name.ifEmpty { "Projects" }, onBack = onBack)
+            ScreenHeader(title = "Projects · ${server.name}", onBack = onBack)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
             LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(projects, key = { it.id }) { p ->
