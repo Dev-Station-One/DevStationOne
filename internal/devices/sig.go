@@ -5,9 +5,11 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -123,13 +125,14 @@ func (c *nonceCache) fresh(nonce string) bool {
 
 // Authenticator verifies signed requests against the devices table.
 type Authenticator struct {
-	pool *pgxpool.Pool
-	rn   nonceCache
+	pool   *pgxpool.Pool
+	logger *slog.Logger
+	rn     nonceCache
 }
 
 // NewAuthenticator builds the request verifier for one Control Server.
-func NewAuthenticator(pool *pgxpool.Pool) *Authenticator {
-	return &Authenticator{pool: pool}
+func NewAuthenticator(pool *pgxpool.Pool, logger *slog.Logger) *Authenticator {
+	return &Authenticator{pool: pool, logger: logger}
 }
 
 // Authenticate verifies the Sig header of one request and returns the
@@ -139,43 +142,59 @@ func NewAuthenticator(pool *pgxpool.Pool) *Authenticator {
 func (a *Authenticator) Authenticate(ctx context.Context, r *http.Request) (Device, auth.User, error) {
 	h, ok := ParseSigHeader(r.Header.Get("Authorization"))
 	if !ok {
+		a.logger.Warn("device auth rejected", "reason", "malformed Sig header")
 		return Device{}, auth.User{}, fmt.Errorf("malformed Sig header")
 	}
 
 	ts, err := strconv.ParseInt(h.TS, 10, 64)
 	if err != nil {
+		a.logger.Warn("device auth rejected", "reason", "bad ts")
 		return Device{}, auth.User{}, fmt.Errorf("bad ts")
 	}
 	skew := time.Since(time.Unix(ts, 0))
 	if skew > clockWindow || skew < -clockWindow {
+		a.logger.Warn("device auth rejected", "reason", "ts skew", "skew", skew.String())
 		return Device{}, auth.User{}, fmt.Errorf("timestamp skew %s exceeds %s", skew, clockWindow)
 	}
 	if !a.rn.fresh(h.Nonce) {
+		a.logger.Warn("device auth rejected", "reason", "replayed nonce")
 		return Device{}, auth.User{}, fmt.Errorf("replayed nonce")
 	}
 
 	d, err := Get(ctx, a.pool, h.ID)
 	if err != nil {
+		a.logger.Warn("device auth rejected", "reason", "device lookup", "device", h.ID, "err", err)
 		return Device{}, auth.User{}, err
 	}
 	if d.RevokedAt != nil {
+		a.logger.Warn("device auth rejected", "reason", "device revoked", "device", h.ID)
 		return Device{}, auth.User{}, fmt.Errorf("device revoked")
 	}
 
 	der, err := base64.StdEncoding.DecodeString(d.PublicKey)
 	if err != nil {
+		a.logger.Warn("device auth rejected", "reason", "pubkey not base64", "device", d.ID)
 		return Device{}, auth.User{}, fmt.Errorf("stored pubkey not base64: %w", err)
 	}
 	anyKey, err := x509.ParsePKIXPublicKey(der)
 	if err != nil {
+		a.logger.Warn("device auth rejected", "reason", "pubkey not SPKI", "device", d.ID)
 		return Device{}, auth.User{}, fmt.Errorf("stored pubkey not SPKI: %w", err)
 	}
 	key, ok := anyKey.(*ecdsa.PublicKey)
 	if !ok || key.Curve != elliptic.P256() {
+		a.logger.Warn("device auth rejected", "reason", "pubkey not P-256", "device", d.ID)
 		return Device{}, auth.User{}, fmt.Errorf("stored pubkey not ECDSA P-256")
 	}
 	msg := Message(r.Method, r.Host, r.RequestURI, h.TS, h.Nonce)
-	if !ecdsa.VerifyASN1(key, []byte(msg), h.Signature) {
+	// Signatures verify over the SHA-256 digest of the signed message —
+	// the Android Keystore's SHA256withECDSA hashes first, so the Go side
+	// must too (ecdsa.VerifyASN1 takes a digest, not the raw message).
+	digest := sha256.Sum256([]byte(msg))
+	if !ecdsa.VerifyASN1(key, digest[:], h.Signature) {
+		a.logger.Warn("device auth rejected", "reason", "signature mismatch", "device", d.ID,
+			"method", r.Method, "host", r.Host, "uri", r.RequestURI, "ts", h.TS,
+			"msg_hex", fmt.Sprintf("%x", msg), "sig_len", len(h.Signature), "sig_hex", fmt.Sprintf("%x", h.Signature))
 		return Device{}, auth.User{}, fmt.Errorf("signature mismatch")
 	}
 
@@ -220,7 +239,10 @@ func Sign(key KeyPair, deviceID, method, host, requestURI string, now time.Time)
 		return "", err
 	}
 	nonceB64 := base64.RawURLEncoding.EncodeToString(nonce)
-	der, err := ecdsa.SignASN1(rand.Reader, key.Private, []byte(Message(method, host, requestURI, ts, nonceB64)))
+	// ecdsa.SignASN1 takes the digest — hash exactly like the Android
+	// Keystore's SHA256withECDSA does.
+	digest := sha256.Sum256([]byte(Message(method, host, requestURI, ts, nonceB64)))
+	der, err := ecdsa.SignASN1(rand.Reader, key.Private, digest[:])
 	if err != nil {
 		return "", err
 	}

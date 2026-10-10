@@ -38,7 +38,9 @@ object Auth {
             Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
         )
         val msg = "devstationone-v1\n$method\n$host\n$uri\n$ts\n$nonce".toByteArray()
-        val sig = Base64.encodeToString(DeviceKey.sign(server.deviceId, msg), Base64.NO_WRAP)
+        // The Keystore alias is keyed on the locally generated id, not the
+        // server-side device row (server.deviceId only labels the Sig header).
+        val sig = Base64.encodeToString(DeviceKey.sign(server.id, msg), Base64.NO_WRAP)
         return "Sig id=\"${server.deviceId}\", ts=\"$ts\", nonce=\"$nonce\", sig=\"$sig\""
     }
 }
