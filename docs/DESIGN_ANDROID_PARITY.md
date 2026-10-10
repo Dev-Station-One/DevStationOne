@@ -290,9 +290,10 @@ Round 1 implementation:
   metadata + a chip, which is what US-2's bytes round trip needs — add
   insert-into-body if the flow demands it. Accept US-2: build +
   `AttachmentNamesTest` (server-filename sanitization for cache paths)
-  green; the photo→web round trip is the stage-7 on-device E2E (Pixel runs
-  the release-signed APK; debug switch needs uninstall + re-pair,
-  deliberately not done in this slice — same as stages 1–2).
+  green; on-device E2E on the Pixel 8a (release-signed APK, incl. the
+  FAB follow-up) confirmed working by the user 2026-10-10 — no debug
+  switch / device re-pair needed, so the stage-7 E2E does not re-run
+  this.
 
   Follow-up found during the on-device pass (same day): the Journal tab
   had no way to create a note — added the `New note` FAB to
