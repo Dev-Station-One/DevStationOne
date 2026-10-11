@@ -1704,7 +1704,8 @@ omits `secret` so the stored one is kept, and `extra_params` is never sent
 (D4), so the phone cannot clear a stored password. No server change: the
 existing POST/PATCH/DELETE/test routes were already covered by
 `TestDeviceDatabasesAuth`. Stage 7
-(principals/grants) **Complete in code, not yet verified on device** —
+(principals/grants) **Complete; on-device E2E passed (reported by the user,
+2026-10-11, release build on Pixel 8a against prod)** —
 `Users` button in the Tables header → `PrincipalsView` (list with
 login/superuser flags, create, set password via PATCH, drop with confirm) →
 `GrantsView` (list, grant with quick privilege chips + schema/table, revoke

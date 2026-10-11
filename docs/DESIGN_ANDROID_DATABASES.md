@@ -239,7 +239,7 @@ browse) complete; slice 3 (data browser) complete, device E2E passed —
 slice 4 (SQL editor) complete, device E2E passed; see
 slice 5 (row edit) complete, device E2E passed; see
 slice 6 (connection CRUD) complete, device E2E passed; see
-slice 7 (principals/grants) built, device verification pending; see
+slice 7 (principals/grants) complete, device E2E passed; see
 `IMPLEMENTATION_PLAN.md` Slice 28; slice 8 not started. Deviation: the
 password-change route is `PATCH …/principals/{p}` (the §4 table said PUT). The SQL entry is a
 button in the Tables header. Slice 3 shows
