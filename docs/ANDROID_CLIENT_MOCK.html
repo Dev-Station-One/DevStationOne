@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android client mock — project workspace</title>
+<style>
+  :root {
+    --surface: #10141c;
+    --surface-1: #161b26;
+    --surface-2: #1d2331;
+    --border: #2a3242;
+    --text: #e3e7ee;
+    --text-dim: #98a2b3;
+    --accent: #7aa2f7;
+    --accent-dim: #3a4a75;
+    --green: #9ece6a;
+    --yellow: #e0af68;
+    --red: #f7768e;
+    --blue: #b4f9f8;
+    --mono: ui-monospace, "JetBrains Mono", "Cascadia Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #07090d; color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  .caption { color: var(--text-dim); text-align: center; margin-bottom: 14px; font-size: 12px; }
+  .caption code { color: var(--accent); }
+
+  .phone {
+    width: 390px; height: 800px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 28px;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 20px 4px; font-size: 12px; color: var(--text-dim);
+  }
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 12px 10px;
+  }
+  .topbar .back { color: var(--text-dim); font-size: 20px; padding: 0 6px; }
+  .topbar .title { flex: 1; min-width: 0; }
+  .topbar .title .n { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar .title .s { font-size: 11px; color: var(--text-dim); }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--green); margin-right: 4px; vertical-align: 1px; }
+  .iconbtn { color: var(--text-dim); padding: 6px; font-size: 16px; }
+
+  /* ---- top tab bar ---- */
+  .tabs {
+    display: flex; padding: 0 8px; border-bottom: 2px solid var(--border);
+    gap: 2px; user-select: none;
+  }
+  .tab {
+    padding: 10px 14px 11px; font-weight: 600; font-size: 13.5px; letter-spacing: .2px;
+    color: var(--text-dim); cursor: pointer; border-bottom: 2.5px solid transparent;
+    margin-bottom: -2px; white-space: nowrap; background: none; border-top: 0; border-left: 0; border-right: 0;
+  }
+  .tab[data-active] { color: var(--text); border-bottom-color: var(--accent); }
+  .tab[disabled] { opacity: .38; cursor: not-allowed; }
+  .tab .badge {
+    font-size: 9px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase;
+    background: var(--surface-2); color: var(--text-dim);
+    border-radius: 8px; padding: 1px 5px; margin-left: 5px; vertical-align: 2px;
+  }
+
+  .pane-box { flex: 1; position: relative; overflow: hidden; }
+  .pane { position: absolute; inset: 0; display: none; flex-direction: column; }
+  .pane[data-active] { display: flex; }
+
+  /* ---- terminal tab ---- */
+  .chips { display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; flex-shrink: 0; }
+  .chip {
+    display: flex; align-items: center; gap: 7px; flex: 0 0 auto;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 12px; font-size: 12.5px; color: var(--accent);
+  }
+  .chip .st { width: 6px; height: 6px; border-radius: 50%; }
+  .chip[data-active] { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+  .chip.newchip { color: var(--text-dim); }
+  .chipmenu { margin-left: 2px; color: var(--text-dim); }
+
+  .term { flex: 1; background: #000; font-family: var(--mono); font-size: 12.5px; line-height: 1.5; padding: 10px 12px; overflow: hidden; }
+  .term .c { color: #4a5567; } .g { color: #9ece6a; } .b { color: var(--blue); } .y { color: #e0af68; }
+  .term .r { color: #f7768e; } .dim { color: #6b7896; }
+  .cursor { display: inline-block; width: 8px; height: 15px; background: #ffcc66; vertical-align: -2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .dock {
+    flex-shrink: 0; display: flex; align-items: center; gap: 6px;
+    padding: 8px 10px calc(8px + 4px); background: var(--surface-1); border-top: 1px solid var(--border);
+  }
+  .dock .row { display: flex; gap: 6px; flex: 1; justify-content: space-between; }
+  .dk {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; min-width: 40px; padding: 8px 0; text-align: center;
+    font-family: var(--mono); font-size: 12.5px; cursor: pointer;
+  }
+  .dk.fan { background: var(--accent-dim); color: #fff; border-color: var(--accent); }
+
+  /* ---- journal tab ---- */
+  .pane-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 4px; flex-shrink: 0; }
+  .pane-title { font-size: 13px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .8px; }
+  .note-list { flex: 1; overflow-y: auto; padding: 8px 16px 76px; display: flex; flex-direction: column; gap: 10px; }
+  .note {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
+  }
+  .note .sn { font-size: 13.5px; }
+  .note .meta { margin-top: 7px; font-size: 11.5px; color: var(--text-dim); display: flex; gap: 10px; align-items: center; }
+  .note .clip { color: var(--accent); }
+  .note .tag { background: var(--surface-2); border-radius: 6px; padding: 1px 6px; font-family: var(--mono); font-size: 10.5px; }
+  .fab {
+    position: absolute; right: 16px; bottom: 74px; width: 52px; height: 52px; border-radius: 16px;
+    background: var(--accent); color: #0b1020; display: grid; place-items: center;
+    font-size: 24px; box-shadow: 0 8px 20px rgba(0,0,0,.5); cursor: pointer; font-weight: 700;
+  }
+  .pane[data-active] .fab { display: grid; }
+  .pane .fab { display: none; }
+
+  /* ---- files tab ---- */
+  .crumbs { padding: 10px 16px 2px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+  .crumbs b { color: var(--accent); font-weight: 600; }
+  .search { margin: 8px 16px 4px; flex-shrink: 0; }
+  .search input {
+    width: 100%; background: var(--surface-1); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 8px 12px; font-size: 13px; outline: none;
+  }
+  .files { flex: 1; overflow-y: auto; padding: 6px 0 16px; }
+  .frow { display: flex; align-items: center; gap: 12px; padding: 9px 16px; cursor: pointer; }
+  .frow:hover, .frow[data-active] { background: var(--surface-1); }
+  .frow .ico { width: 20px; text-align: center; color: var(--yellow); }
+  .frow.dir .ico { color: var(--accent); }
+  .frow .nm { flex: 1; font-family: var(--mono); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .frow .sz { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+
+  /* ---- database tab (round 3) ---- */
+  .tabs { overflow-x: auto; scrollbar-width: none; }
+  .jump { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 560px; margin: 0 auto 14px; }
+  .jump button { background: var(--surface-1); color: var(--text-dim); border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
+  .jump button[data-active] { color: var(--text); border-color: var(--accent); background: var(--accent-dim); }
+  .dbv { position: absolute; inset: 0; display: none; flex-direction: column; background: var(--surface); }
+  .dbv[data-active] { display: flex; }
+  .dbhead { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px; flex-shrink: 0; }
+  .dbhead .bk { color: var(--text-dim); font-size: 18px; cursor: pointer; padding: 0 4px; }
+  .dbhead .tt { flex: 1; min-width: 0; font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dbhead .tt small { display: block; font-weight: 400; font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+  .txtbtn { color: var(--accent); font-size: 12.5px; font-weight: 600; padding: 4px 8px; cursor: pointer; background: none; border: 0; }
+  .txtbtn.danger { color: var(--red); }
+  .scroll { flex: 1; overflow-y: auto; padding: 4px 12px 80px; }
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 10px; cursor: pointer; }
+  .card .t1 { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .card .t2 { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); margin-top: 4px; word-break: break-all; }
+  .eng { font-size: 9.5px; font-weight: 700; letter-spacing: .4px; text-transform: uppercase; border-radius: 6px; padding: 1px 6px; background: var(--surface-2); color: var(--blue); }
+  .eng.my { color: var(--yellow); } .eng.ms { color: var(--red); } .eng.sq { color: var(--green); }
+  .pill { font-size: 10.5px; border-radius: 999px; padding: 1px 8px; background: var(--surface-2); color: var(--text-dim); }
+  .pill.ok { color: var(--green); } .pill.bad { color: var(--red); } .pill.warn { color: var(--yellow); }
+  .sec { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .8px; padding: 10px 2px 6px; display: flex; justify-content: space-between; align-items: center; }
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; color: var(--text-dim); margin-bottom: 3px; }
+  .field .in { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; font-size: 13px; color: var(--text); font-family: var(--mono); min-height: 38px; }
+  .field .in.ph { color: var(--text-dim); }
+  .field .row2 { display: flex; gap: 8px; } .field .row2 > div { flex: 1; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .seg span { flex: 1; text-align: center; padding: 8px 0; font-size: 12px; color: var(--text-dim); background: var(--surface-1); }
+  .seg span[data-active] { background: var(--accent-dim); color: var(--text); }
+  .btnrow { display: flex; gap: 8px; margin-top: 12px; }
+  .btn { flex: 1; text-align: center; border-radius: 10px; padding: 10px 0; font-weight: 600; font-size: 13px; background: var(--accent); color: #0b1020; cursor: pointer; border: 0; }
+  .btn.sec2 { background: var(--surface-2); color: var(--text); border: 1px solid var(--border); }
+  .btn.red { background: var(--red); }
+  .li { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .li .nm { flex: 1; min-width: 0; font-family: var(--mono); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .li .sub { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+  .miniseg { display: flex; gap: 6px; padding: 4px 12px 8px; flex-shrink: 0; overflow-x: auto; }
+  .miniseg span { flex: 0 0 auto; font-size: 12px; padding: 5px 12px; border-radius: 999px; background: var(--surface-1); border: 1px solid var(--border); color: var(--text-dim); }
+  .miniseg span[data-active] { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+  .filter { display: flex; gap: 6px; padding: 0 12px 8px; flex-shrink: 0; }
+  .filter .in { flex: 1; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 7px 10px; font: 12px var(--mono); color: var(--text); }
+  .grid { flex: 1; overflow: auto; border-top: 1px solid var(--border); }
+  .grid table { border-collapse: collapse; font: 12px var(--mono); min-width: 560px; }
+  .grid th { position: sticky; top: 0; background: var(--surface-2); text-align: left; padding: 7px 10px; font-weight: 600; color: var(--text-dim); white-space: nowrap; border-bottom: 1px solid var(--border); }
+  .grid th:first-child, .grid td:first-child { position: sticky; left: 0; background: var(--surface-1); }
+  .grid th:first-child { background: var(--surface-2); }
+  .grid td { padding: 7px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+  .grid tr[data-sel] td { background: var(--accent-dim); }
+  .null { color: var(--text-dim); font-style: italic; }
+  .pager { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--surface-1); font-size: 12px; color: var(--text-dim); flex-shrink: 0; }
+  .pager b { color: var(--text); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--surface-1); border-top: 1px solid var(--border); border-radius: 20px 20px 0 0; padding: 12px 16px 18px; box-shadow: 0 -12px 30px rgba(0,0,0,.5); max-height: 70%; overflow-y: auto; z-index: 3; }
+  .sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--border); margin: 0 auto 10px; }
+  .kv { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+  .kv .k { width: 90px; color: var(--text-dim); font-family: var(--mono); flex-shrink: 0; }
+  .kv .v { flex: 1; font-family: var(--mono); word-break: break-all; }
+  .editor { background: #000; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; font: 12.5px/1.55 var(--mono); min-height: 130px; margin: 4px 12px 8px; flex-shrink: 0; }
+  .kw { color: #bb9af7; } .str { color: var(--green); } .num { color: var(--yellow); }
+  .meta2 { font-size: 11.5px; color: var(--text-dim); padding: 0 14px 6px; display: flex; gap: 10px; flex-shrink: 0; }
+  .banner { margin: 6px 12px; padding: 10px 12px; border-radius: 12px; font-size: 12.5px; border: 1px solid var(--border); background: var(--surface-1); }
+  .banner.err { border-color: var(--red); color: var(--red); } .banner.warn { border-color: var(--yellow); }
+  .scrim { position: absolute; inset: 0; background: rgba(0,0,0,.55); z-index: 4; display: grid; place-items: center; padding: 20px; }
+  .dialog { background: var(--surface-2); border: 1px solid var(--border); border-radius: 18px; padding: 16px; width: 100%; }
+  .dialog h4 { margin: 0 0 8px; font-size: 15px; }
+  .dialog code { display: block; background: #000; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin: 8px 0; color: var(--yellow); }
+  .dialog .acts { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+  .sw { width: 34px; height: 20px; border-radius: 10px; background: var(--accent); position: relative; flex-shrink: 0; }
+  .sw::after { content: ""; position: absolute; top: 3px; right: 3px; width: 14px; height: 14px; border-radius: 50%; background: #0b1020; }
+  .sw.off { background: var(--surface-2); border: 1px solid var(--border); } .sw.off::after { right: auto; left: 2px; background: var(--text-dim); }
+  .fab2 { position: absolute; right: 16px; bottom: 16px; width: 52px; height: 52px; border-radius: 16px; background: var(--accent); color: #0b1020; display: grid; place-items: center; font-size: 24px; font-weight: 700; box-shadow: 0 8px 20px rgba(0,0,0,.5); z-index: 2; cursor: pointer; }
+  .empty { text-align: center; color: var(--text-dim); padding: 40px 24px; }
+  .empty .big { font-size: 34px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+  <div>
+    <div class="caption">DevStation Android client — <b>project workspace with top tab bar</b> · mock for <code>docs/DESIGN_ANDROID_PARITY.md §3</code> · click the enabled tabs</div>
+
+    <div class="caption">Round 3 — <b>Database tab</b> · <code>docs/REQUIREMENTS_ANDROID_DATABASES.md</code> · open the Database tab, tap through, or jump to a view:</div>
+    <div class="jump" id="jump"></div>
+
+    <div class="phone">
+      <div class="statusbar"><span>14:22</span><span>▲ 5G ▮ 87%</span></div>
+
+      <div class="topbar">
+        <span class="back">←</span>
+        <div class="title">
+          <div class="n">devstation</div>
+          <div class="s"><span class="dot"></span>ds1.premadev.com</div>
+        </div>
+        <span class="iconbtn">⋮</span>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button class="tab" data-tab="terminal" data-active>Terminal</button>
+        <button class="tab" data-tab="journal">Journal</button>
+        <button class="tab" data-tab="files">Files</button>
+        <button class="tab" disabled>Docker<span class="badge">round 2</span></button>
+        <button class="tab" disabled>Git<span class="badge">round 2</span></button>
+        <button class="tab" data-tab="database">Database<span class="badge">round 3</span></button>
+      </div>
+
+      <div class="pane-box">
+        <!-- ===================== TERMINAL ===================== -->
+        <div class="pane" data-pane="terminal" data-active>
+          <div class="chips">
+            <div class="chip" data-active><span class="st" style="background:var(--green)"></span>bash<span class="chipmenu">▾</span></div>
+            <div class="chip"><span class="st" style="background:var(--yellow)"></span>claude</div>
+            <div class="chip"><span class="st" style="background:var(--blue)"></span>dev server</div>
+            <div class="chip newchip">＋ new</div>
+          </div>
+          <div class="term">
+<span class="c"># ~/projects/devstation (main)</span><br>
+<span class="g">brian@ds1</span> <span class="dim">:</span> <span class="b">~/projects/devstation</span> <span class="y">%</span> make test<br>
+<span class="dim">go test -p 1 ./...</span><br>
+ok   internal/api     <span class="dim">4.21s</span><br>
+ok   internal/journal <span class="dim">0.62s</span><br>
+<span class="g">✓ all packages pass</span><br>
+<span class="g">brian@ds1</span> <span class="dim">:</span> <span class="b">~/projects/devstation</span> <span class="y">%</span> <span class="cursor"></span>
+          </div>
+          <div class="dock">
+            <div class="row">
+              <div class="dk">ESC</div><div class="dk">TAB</div><div class="dk">/</div><div class="dk">:</div><div class="dk">←</div><div class="dk">→</div>
+              <div class="dk fan">▸</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== JOURNAL ===================== -->
+        <div class="pane" data-pane="journal">
+          <div class="pane-head"><span class="pane-title">Journal · 42 notes</span></div>
+          <div class="note-list">
+            <div class="note">
+              <div class="sn">Reworked session reconnect: kick() now clears the attempt counter so a network change reconnects instantly instead of backing off again.</div>
+              <div class="meta"><span>2h ago</span><span class="clip">📎 2</span><span class="tag">a1b2c3</span><span>you</span></div>
+            </div>
+            <div class="note" data-active style="border-color:var(--accent)">
+              <div class="sn">Journal viewer design — attachment chips native; inline images load through the Sig-header intercept rule; body is <b>body_html</b> (rich text, sanitized).</div>
+              <div class="meta"><span>yesterday</span><span class="clip">📎 1</span><span>you</span></div>
+            </div>
+            <div class="note">
+              <div class="sn">Upgrade runtimes: sora-editor 0.24.6 verified (LGPL-2.1+, Maven Central, minSdk 21). Desugaring required below API 33.</div>
+              <div class="meta"><span>Tue</span><span>you</span></div>
+            </div>
+            <div class="note">
+              <div class="sn">Note: staging DB pool capped at 5 after the 413 spike — raised per-connection timeout first, revisit if p99 climbs again.</div>
+              <div class="meta"><span>Mon</span><span>you</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===================== FILES ===================== -->
+        <div class="pane" data-pane="files">
+          <div class="crumbs">devstation / <b>internal / api</b></div>
+          <div class="search"><input placeholder="🔍 Search file names…" value=""></div>
+          <div class="files">
+            <div class="frow dir"><span class="ico">▸ 📁</span><span class="nm">..</span></div>
+            <div class="frow dir"><span class="ico">📁</span><span class="nm">testdata</span><span class="sz">—</span></div>
+            <div class="frow file" data-active><span class="ico">⬒</span><span class="nm">auth.go</span><span class="sz">18.4k · 10:47</span></div>
+            <div class="frow file"><span class="ico">⬒</span><span class="nm">backups.go</span><span class="sz">12.9k · Mon</span></div>
+            <div class="frow file"><span class="ico">⬒</span><span class="nm">commands.go</span><span class="sz">9.1k · Mon</span></div>
+            <div class="frow file"><span class="ico">⬒</span><span class="nm">databases.go</span><span class="sz">22.7k · Sun</span></div>
+            <div class="frow file"><span class="ico">⬒</span><span class="nm">editor.go</span><span class="sz">7.4k · Sun</span></div>
+            <div class="frow file"><span class="ico">⬒</span><span class="nm">journal.go</span><span class="sz">6.8k · Sun</span></div>
+          </div>
+        </div>
+
+        <!-- ===================== DATABASE (round 3) ===================== -->
+        <div class="pane" data-pane="database">
+
+          <!-- V1 connections -->
+          <div class="dbv" data-v="conns" data-active>
+            <div class="dbhead"><div class="tt">Databases<small>3 connections</small></div><button class="txtbtn" data-go="connform">＋ Add</button></div>
+            <div class="scroll">
+              <div class="card" data-go="tables">
+                <div class="t1"><span class="eng">PostgreSQL</span>devstation-dev<span style="flex:1"></span><span class="pill ok">● online</span></div>
+                <div class="t2">127.0.0.1:55432 / devstation · 🔑</div>
+              </div>
+              <div class="card" data-go="tables">
+                <div class="t1"><span class="eng my">MySQL</span>billing-staging<span style="flex:1"></span><span class="pill ok">● online</span></div>
+                <div class="t2">10.0.4.12:3306 / billing · 🔑</div>
+              </div>
+              <div class="card" data-go="tables">
+                <div class="t1"><span class="eng sq">SQLite</span>local-cache<span style="flex:1"></span><span class="pill">file</span></div>
+                <div class="t2">~/projects/devstation/data/cache.db</div>
+              </div>
+              <div class="sec">States</div>
+              <div class="card" data-go="offline"><div class="t1">Runtime offline state →</div></div>
+              <div class="card" data-go="empty"><div class="t1">Empty state →</div></div>
+            </div>
+          </div>
+
+          <!-- V1b empty -->
+          <div class="dbv" data-v="empty">
+            <div class="dbhead"><span class="bk" data-go="conns">←</span><div class="tt">Databases</div></div>
+            <div class="empty"><div class="big">🛢</div>No connections yet.<br>Add PostgreSQL, MySQL/MariaDB, SQL Server or SQLite.<div class="btnrow"><div class="btn" data-go="connform">Add connection</div></div></div>
+          </div>
+
+          <!-- V1c offline -->
+          <div class="dbv" data-v="offline">
+            <div class="dbhead"><span class="bk" data-go="conns">←</span><div class="tt">devstation-dev<small>PostgreSQL</small></div></div>
+            <div class="banner err">Runtime offline — cannot reach the development machine. Database actions need a live runtime.</div>
+            <div class="btnrow" style="padding:0 12px"><div class="btn sec2" data-go="offline">Retry</div></div>
+          </div>
+
+          <!-- V2 connection form -->
+          <div class="dbv" data-v="connform">
+            <div class="dbhead"><span class="bk" data-go="conns">←</span><div class="tt">New connection</div></div>
+            <div class="scroll">
+              <div class="field"><label>Engine</label><div class="seg"><span data-active>PostgreSQL</span><span>MySQL</span><span>MSSQL</span><span>SQLite</span></div></div>
+              <div class="field"><label>Name</label><div class="in">devstation-dev</div></div>
+              <div class="field"><div class="row2"><div style="flex:2"><label>Host</label><div class="in">127.0.0.1</div></div><div><label>Port</label><div class="in">5432</div></div></div></div>
+              <div class="field"><label>Database</label><div class="in">devstation</div></div>
+              <div class="field"><label>Username</label><div class="in">devstation</div></div>
+              <div class="field"><label>Password (write-only — leave blank on edit to keep)</label><div class="in">••••••••••</div></div>
+              <div class="field"><label>SSL mode</label><div class="in">prefer ▾</div></div>
+              <div class="field"><label>Search path</label><div class="in ph">public</div></div>
+              <div class="banner ok" style="border-color:var(--green)">✓ Connected — PostgreSQL 16.4, 14 tables</div>
+              <div class="btnrow"><div class="btn sec2">Test</div><div class="btn">Save</div></div>
+              <div class="btnrow"><div class="btn sec2" style="color:var(--red)" data-go="delconfirm">Delete connection</div></div>
+            </div>
+          </div>
+
+          <!-- V2b delete confirm -->
+          <div class="dbv" data-v="delconfirm">
+            <div class="dbhead"><span class="bk" data-go="connform">←</span><div class="tt">Edit connection</div></div>
+            <div class="scrim"><div class="dialog"><h4>Delete “devstation-dev”?</h4>The saved connection and its stored password are removed. The database itself is untouched.<div class="acts"><button class="txtbtn" data-go="connform">Cancel</button><button class="txtbtn danger" data-go="conns">Delete</button></div></div></div>
+          </div>
+
+          <!-- V3 tables -->
+          <div class="dbv" data-v="tables">
+            <div class="dbhead"><span class="bk" data-go="conns">←</span><div class="tt">devstation-dev<small>PostgreSQL · schema public ▾</small></div><button class="txtbtn" data-go="sql">SQL</button><span class="iconbtn" data-go="dbmenu">⋮</span></div>
+            <div class="miniseg"><span data-active>Tables · 14</span><span data-go="principals">Users</span><span data-go="backups">Backups</span></div>
+            <div class="scroll">
+              <div class="li" data-go="data"><span>▦</span><span class="nm">projects</span><span class="sub">≈ 38</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">sessions</span><span class="sub">≈ 1,204</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">users</span><span class="sub">≈ 5</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">journal_notes</span><span class="sub">≈ 412</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">database_connections</span><span class="sub">≈ 9</span></div>
+              <div class="li" data-go="data"><span>◫</span><span class="nm">v_active_sessions</span><span class="pill">view</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">audit_events</span><span class="sub">≈ 22,870</span></div>
+            </div>
+          </div>
+
+          <!-- V4 data browser -->
+          <div class="dbv" data-v="data">
+            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">users<small>public · 5 rows</small></div><button class="txtbtn" data-go="structure">Structure</button></div>
+            <div class="filter"><div class="in">email LIKE '%@local.test'</div><span class="txtbtn">Apply</span></div>
+            <div class="grid"><table>
+              <tr><th>id ▲</th><th>email</th><th>role</th><th>created_at</th><th>totp</th></tr>
+              <tr data-go="row"><td>1</td><td>dev@local.test</td><td>admin</td><td>2026-09-02 10:11</td><td>true</td></tr>
+              <tr data-go="row"><td>2</td><td>qa@local.test</td><td>member</td><td>2026-09-14 08:40</td><td>false</td></tr>
+              <tr data-go="row"><td>3</td><td>brian@briantafoya.com</td><td>admin</td><td>2026-09-20 17:02</td><td>true</td></tr>
+              <tr data-go="row"><td>4</td><td>ci@local.test</td><td>member</td><td>2026-10-01 12:30</td><td><span class="null">NULL</span></td></tr>
+              <tr data-go="row"><td>5</td><td>guest@local.test</td><td>viewer</td><td>2026-10-07 09:15</td><td>false</td></tr>
+            </table></div>
+            <div class="pager"><span>‹ prev</span><span>Rows <b>1–5</b> of 5 · 50/page ▾</span><span>next ›</span></div>
+            <div class="fab2" data-go="rowedit" style="bottom:56px">＋</div>
+          </div>
+
+          <!-- V4b row detail sheet over grid -->
+          <div class="dbv" data-v="row">
+            <div class="dbhead"><span class="bk" data-go="data">←</span><div class="tt">users<small>row id = 1</small></div></div>
+            <div class="sheet" style="top:56px;bottom:auto;border-radius:20px;margin:0 8px;position:relative;max-height:none">
+              <div class="kv"><span class="k">id</span><span class="v">1</span></div>
+              <div class="kv"><span class="k">email</span><span class="v">dev@local.test</span></div>
+              <div class="kv"><span class="k">role</span><span class="v">admin</span></div>
+              <div class="kv"><span class="k">created_at</span><span class="v">2026-09-02 10:11:09+00</span></div>
+              <div class="kv"><span class="k">totp</span><span class="v">true</span></div>
+              <div class="kv"><span class="k">notes</span><span class="v null">NULL</span></div>
+              <div class="btnrow"><div class="btn sec2" data-go="rowedit">Edit</div><div class="btn sec2" style="color:var(--red)" data-go="rowdel">Delete</div></div>
+            </div>
+          </div>
+
+          <!-- V5 row edit -->
+          <div class="dbv" data-v="rowedit">
+            <div class="dbhead"><span class="bk" data-go="row">←</span><div class="tt">Edit row<small>users · id = 1</small></div><button class="txtbtn" data-go="data">Save</button></div>
+            <div class="scroll">
+              <div class="field"><label>id · int4 · PK (read-only)</label><div class="in" style="opacity:.5">1</div></div>
+              <div class="field"><label>email · text · not null</label><div class="in">dev@local.test</div></div>
+              <div class="field"><label>role · text</label><div class="in">admin</div></div>
+              <div class="field"><label>totp · bool</label><div class="in" style="display:flex;justify-content:space-between;align-items:center">true<span class="sw"></span></div></div>
+              <div class="field"><label>notes · text · nullable</label><div style="display:flex;gap:8px;align-items:center"><div class="in" style="flex:1;opacity:.5">NULL</div><span class="sw"></span><span style="font-size:11px;color:var(--text-dim)">NULL</span></div></div>
+              <div class="banner err">duplicate key value violates unique constraint "users_email_key"</div>
+              <div class="banner warn">No primary key tables show: “Editing disabled — this table has no primary key.”</div>
+            </div>
+          </div>
+
+          <!-- V5b row delete confirm -->
+          <div class="dbv" data-v="rowdel">
+            <div class="dbhead"><span class="bk" data-go="row">←</span><div class="tt">users</div></div>
+            <div class="scrim"><div class="dialog"><h4>Delete this row?</h4>Permanently removes the row identified by:<code>id = 1<br>email = dev@local.test</code>There is no undo.<div class="acts"><button class="txtbtn" data-go="row">Cancel</button><button class="txtbtn danger" data-go="data">Delete</button></div></div></div>
+          </div>
+
+          <!-- V6 table structure -->
+          <div class="dbv" data-v="structure">
+            <div class="dbhead"><span class="bk" data-go="data">←</span><div class="tt">users · structure<small>public</small></div></div>
+            <div class="miniseg"><span data-active>Columns</span><span>Indexes</span><span>Constraints</span><span>Triggers</span></div>
+            <div class="scroll">
+              <div class="li"><span>🔑</span><span class="nm">id</span><span class="sub">int4 · not null</span></div>
+              <div class="li"><span>&nbsp;</span><span class="nm">email</span><span class="sub">text · not null</span></div>
+              <div class="li"><span>&nbsp;</span><span class="nm">role</span><span class="sub">text · default 'member'</span></div>
+              <div class="li"><span>&nbsp;</span><span class="nm">created_at</span><span class="sub">timestamptz · now()</span></div>
+              <div class="li"><span>&nbsp;</span><span class="nm">totp</span><span class="sub">bool · default false</span></div>
+              <div class="li"><span>&nbsp;</span><span class="nm">notes</span><span class="sub">text · null</span></div>
+            </div>
+          </div>
+
+          <!-- V7 SQL editor -->
+          <div class="dbv" data-v="sql">
+            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">SQL editor<small>devstation-dev</small></div><button class="txtbtn" data-go="sqlwarn">▶ Run</button></div>
+            <div class="editor"><span class="kw">UPDATE</span> users<br><span class="kw">SET</span> role = <span class="str">'viewer'</span><br><span class="kw">WHERE</span> id = <span class="num">4</span>;</div>
+            <div class="meta2"><span>history ▾</span><span>·</span><span>cap 1,000 rows</span></div>
+            <div class="banner">1 row affected · 12 ms</div>
+            <div class="sec" style="padding:6px 14px">Last SELECT result</div>
+            <div class="grid"><table>
+              <tr><th>id</th><th>email</th><th>role</th></tr>
+              <tr><td>1</td><td>dev@local.test</td><td>admin</td></tr>
+              <tr><td>2</td><td>qa@local.test</td><td>member</td></tr>
+              <tr><td>4</td><td>ci@local.test</td><td>viewer</td></tr>
+            </table></div>
+            <div class="pager"><span>3 rows · truncated at 1,000 if more</span><span>cancel ✕</span></div>
+          </div>
+
+          <!-- V7b non-SELECT warning -->
+          <div class="dbv" data-v="sqlwarn">
+            <div class="dbhead"><span class="bk" data-go="sql">←</span><div class="tt">SQL editor</div></div>
+            <div class="scrim"><div class="dialog"><h4>Run a modifying statement?</h4>This is not a read-only query and runs verbatim against <b>devstation-dev</b>:<code>UPDATE users SET role = 'viewer' WHERE id = 4;</code><div class="acts"><button class="txtbtn" data-go="sql">Cancel</button><button class="txtbtn danger" data-go="sql">Run</button></div></div></div>
+          </div>
+
+          <!-- V8 principals -->
+          <div class="dbv" data-v="principals">
+            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">Users &amp; roles<small>devstation-dev · PostgreSQL</small></div><button class="txtbtn" data-go="principals">＋ New</button></div>
+            <div class="scroll">
+              <div class="card" data-go="grants"><div class="t1">postgres<span style="flex:1"></span><span class="pill warn">superuser</span><span class="pill ok">login</span></div></div>
+              <div class="card" data-go="grants"><div class="t1">devstation<span style="flex:1"></span><span class="pill ok">login</span></div></div>
+              <div class="card" data-go="grants"><div class="t1">readonly<span style="flex:1"></span><span class="pill">role</span></div></div>
+              <div class="card" data-go="sqliteprin"><div class="t1">SQLite connection (unsupported state) →</div></div>
+            </div>
+          </div>
+
+          <!-- V8b grants -->
+          <div class="dbv" data-v="grants">
+            <div class="dbhead"><span class="bk" data-go="principals">←</span><div class="tt">readonly<small>table grants</small></div><button class="txtbtn" data-go="grants">＋ Grant</button></div>
+            <div class="scroll">
+              <div class="li"><span class="nm">public.users</span><span class="pill">SELECT</span><span class="txtbtn danger">revoke</span></div>
+              <div class="li"><span class="nm">public.projects</span><span class="pill">SELECT</span><span class="txtbtn danger">revoke</span></div>
+              <div class="li"><span class="nm">public.sessions</span><span class="pill">SELECT</span><span class="txtbtn danger">revoke</span></div>
+              <div class="sec">Principal actions</div>
+              <div class="btnrow"><div class="btn sec2">Set password</div><div class="btn sec2" style="color:var(--red)">Drop</div></div>
+            </div>
+          </div>
+
+          <!-- V8c sqlite unsupported -->
+          <div class="dbv" data-v="sqliteprin">
+            <div class="dbhead"><span class="bk" data-go="principals">←</span><div class="tt">Users &amp; roles<small>local-cache · SQLite</small></div></div>
+            <div class="empty"><div class="big">🔒</div>SQLite has no server-side users or roles.<br>Access is governed by file permissions on the runtime host.</div>
+          </div>
+
+          <!-- V9 backups -->
+          <div class="dbv" data-v="backups">
+            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">Backups<small>devstation-dev</small></div><button class="txtbtn">Back up now</button></div>
+            <div class="scroll">
+              <div class="card"><div class="t1">Schedule<span style="flex:1"></span><span class="pill ok">daily 03:00 · keep 7</span></div><div class="t2">Next run in 11 h · <span style="color:var(--accent)">edit</span> · <span style="color:var(--red)">remove</span></div></div>
+              <div class="sec">Backups</div>
+              <div class="card" data-go="restore"><div class="t1">2026-10-10 03:00<span style="flex:1"></span><span class="pill ok">done</span></div><div class="t2">devstation-20261010.sql.gz · 4.2 MB</div><div class="t2"><span style="color:var(--accent)">⬇ download</span> &nbsp; <span style="color:var(--yellow)">↺ restore</span> &nbsp; <span style="color:var(--red)">🗑 delete</span></div></div>
+              <div class="card"><div class="t1">2026-10-09 03:00<span style="flex:1"></span><span class="pill ok">done</span></div><div class="t2">devstation-20261009.sql.gz · 4.1 MB</div></div>
+              <div class="card"><div class="t1">2026-10-08 03:00<span style="flex:1"></span><span class="pill bad">failed</span></div><div class="t2">pg_dump: connection refused</div></div>
+            </div>
+          </div>
+
+          <!-- V9b restore confirm -->
+          <div class="dbv" data-v="restore">
+            <div class="dbhead"><span class="bk" data-go="backups">←</span><div class="tt">Backups</div></div>
+            <div class="scrim"><div class="dialog"><h4>Restore backup?</h4>Overwrites data in <b>devstation-dev</b> with <b>devstation-20261010.sql.gz</b>. Type the connection name to confirm:<div class="field" style="margin:10px 0 0"><div class="in">devstation-dev</div></div><div class="acts"><button class="txtbtn" data-go="backups">Cancel</button><button class="txtbtn danger" data-go="backups">Restore</button></div></div></div>
+          </div>
+
+          <!-- V3b overflow menu -->
+          <div class="dbv" data-v="dbmenu">
+            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">devstation-dev</div></div>
+            <div class="scroll">
+              <div class="li" data-go="connform"><span>✎</span><span class="nm">Edit connection</span></div>
+              <div class="li" data-go="tables"><span>⚡</span><span class="nm">Test connection</span></div>
+              <div class="li" data-go="tables"><span>⟳</span><span class="nm">Refresh schema</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fab" id="fab">✚</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const tabs = document.querySelectorAll('.tab[data-tab]');
+  const panes = document.querySelectorAll('.pane');
+  const fab = document.getElementById('fab');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.removeAttribute('data-active'));
+    panes.forEach(p => p.removeAttribute('data-active'));
+    t.setAttribute('data-active', '');
+    document.querySelector(`.pane[data-pane="${t.dataset.tab}"]`).setAttribute('data-active', '');
+  }));
+  // ---- Database tab view navigation ----
+  const views = [
+    ['conns','Connections'],['empty','Empty'],['offline','Offline'],['connform','Conn form'],['delconfirm','Delete conn'],
+    ['tables','Tables'],['dbmenu','Menu'],['data','Data grid'],['row','Row detail'],['rowedit','Row edit'],['rowdel','Row delete'],
+    ['structure','Structure'],['sql','SQL editor'],['sqlwarn','SQL warning'],['principals','Users'],['grants','Grants'],
+    ['sqliteprin','SQLite users'],['backups','Backups'],['restore','Restore']
+  ];
+  const jump = document.getElementById('jump');
+  function go(v) {
+    document.querySelectorAll('.dbv').forEach(e => e.toggleAttribute('data-active', e.dataset.v === v));
+    jump.querySelectorAll('button').forEach(b => b.toggleAttribute('data-active', b.dataset.v === v));
+  }
+  views.forEach(([v, l]) => { const b = document.createElement('button'); b.textContent = l; b.dataset.v = v; b.onclick = () => selectDb(v); jump.appendChild(b); });
+  function selectDb(v) { document.querySelector('.tab[data-tab="database"]').click(); go(v); }
+  document.querySelector('[data-pane="database"]').addEventListener('click', e => {
+    const t = e.target.closest('[data-go]'); if (t) go(t.dataset.go);
+  });
+  document.querySelector('.tab[data-tab="database"]').addEventListener('click', () => go(document.querySelector('.dbv[data-active]')?.dataset.v || 'conns'));
+  go('conns');
+  tabs.forEach(t => t.addEventListener('click', () => { fab.style.display = t.dataset.tab === 'database' ? 'none' : ''; }));
+  fab.addEventListener('click', () => {
+    const active = document.querySelector('.pane[data-active]')?.dataset.pane;
+    alert(active === 'journal' ? 'New note → NoteScreen (edit mode)' : active === 'terminal' ? 'New session dialog' : 'Search / new file');
+  });
+</script>
+</body>
+</html>
