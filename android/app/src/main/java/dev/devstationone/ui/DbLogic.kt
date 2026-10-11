@@ -1,5 +1,6 @@
 package dev.devstationone.ui
 
+import dev.devstationone.net.DbColumn
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbIndex
@@ -127,3 +128,86 @@ internal const val SQL_HISTORY_MAX = 20
 /** Newest-first, de-duplicated, capped history after running [sql]. */
 internal fun pushHistory(history: List<String>, sql: String): List<String> =
     (listOf(sql.trim()) + history.filter { it != sql.trim() }).take(SQL_HISTORY_MAX)
+
+// ---- row editing (design D3/D5) ----
+
+private val INT_TYPES = setOf(
+    "integer", "int", "int2", "int4", "int8", "bigint", "smallint", "tinyint", "mediumint",
+    "serial", "bigserial", "smallserial",
+)
+private val FLOAT_TYPES = setOf("float", "float4", "float8", "real", "double", "double precision")
+private val NUMERIC_TYPES = setOf("numeric", "decimal") + FLOAT_TYPES
+private val BOOL_TYPES = setOf("boolean", "bool", "bit")
+
+private fun baseType(type: String): String = type.lowercase().substringBefore('(').trim().removeSuffix(" unsigned")
+
+/** Why Edit/Delete are off for this table, or null when a safe row identity exists (D3). */
+internal fun editBlockedReason(pk: List<String>, columns: List<DbColumn>): String? = when {
+    pk.isEmpty() -> "No primary key — rows can't be matched safely, so Edit and Delete are off."
+    pk.any { k -> columns.firstOrNull { it.name == k }?.let { baseType(it.type) in FLOAT_TYPES } == true } ->
+        "Floating-point key — rows can't be matched reliably, so Edit and Delete are off."
+    else -> null
+}
+
+/** D5: text → JSON by column type; null when [text] isn't valid for it. Everything non-numeric/bool stays a string. */
+internal fun coerceValue(type: String, text: String): JsonElement? = when (baseType(type)) {
+    in INT_TYPES -> text.trim().toLongOrNull()?.let { JsonPrimitive(it) }
+    in NUMERIC_TYPES -> text.trim().let { s ->
+        s.toLongOrNull()?.let { JsonPrimitive(it) } ?: s.toDoubleOrNull()?.takeIf { it.isFinite() }?.let { JsonPrimitive(it) }
+    }
+    in BOOL_TYPES -> when (text.trim().lowercase()) {
+        "true", "t", "1" -> JsonPrimitive(true)
+        "false", "f", "0" -> JsonPrimitive(false)
+        else -> null
+    }
+    else -> JsonPrimitive(text)
+}
+
+/** Per-column edit input: KEEP = untouched (omitted on update; DEFAULT on insert), VALUE = typed text, NULL. */
+internal enum class FieldMode { KEEP, VALUE, NULL }
+
+internal data class FieldState(val mode: FieldMode = FieldMode.KEEP, val text: String = "")
+
+internal class EditResult(val values: Map<String, JsonElement>, val error: String?)
+
+/**
+ * Turns form state into the commit `values` map. [row] = the fetched row for an update (only changed
+ * columns are sent), null for an insert (every touched column is sent).
+ */
+internal fun buildValues(columns: List<DbColumn>, fields: Map<String, FieldState>, row: Map<String, JsonElement>?): EditResult {
+    val out = linkedMapOf<String, JsonElement>()
+    for (c in columns) {
+        val f = fields[c.name] ?: continue
+        val current = row?.get(c.name)
+        when (f.mode) {
+            FieldMode.KEEP -> {}
+            FieldMode.NULL -> {
+                if (!c.nullable) return EditResult(emptyMap(), "${c.name} is not nullable")
+                if (current !is JsonNull) out[c.name] = JsonNull
+            }
+            FieldMode.VALUE -> {
+                val v = coerceValue(c.type, f.text) ?: return EditResult(emptyMap(), "${c.name}: not a valid ${c.type}")
+                if (current == null || current is JsonNull || cellText(current) != f.text) out[c.name] = v
+            }
+        }
+    }
+    return EditResult(out, null)
+}
+
+/** The row's primary-key cells exactly as fetched — the only `original` ever sent (D3). */
+internal fun pkOriginal(columns: List<String>, pk: List<String>, row: List<JsonElement>): Map<String, JsonElement> =
+    pk.associateWith { row[columns.indexOf(it)] }
+
+/**
+ * D3 verification after an update/delete: the runtime never reports rows affected, so look at the
+ * re-fetched page. A delete landed iff the PK is gone; an update landed iff the PK is gone from
+ * this page (sorted/filtered away) or the row differs. Same PK + identical row ⇒ nothing matched.
+ */
+internal fun editLanded(op: String, columns: List<String>, pk: List<String>, old: List<JsonElement>, fresh: List<List<JsonElement>>): Boolean {
+    val idx = pk.map { columns.indexOf(it) }
+    val match = fresh.firstOrNull { r -> idx.all { r.getOrNull(it) == old[it] } }
+    return when (op) {
+        "delete" -> match == null
+        else -> match == null || match != old
+    }
+}

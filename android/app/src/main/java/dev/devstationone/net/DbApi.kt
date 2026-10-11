@@ -2,6 +2,12 @@ package dev.devstationone.net
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import kotlinx.coroutines.suspendCancellableCoroutine
 import okhttp3.Call
 import okhttp3.Callback
@@ -69,6 +75,9 @@ data class DbRows(
     val is_exec: Boolean = false,
     val rows_affected: Long = 0,
 )
+
+/** One row change for the commit call: [original] = primary-key columns only (D3); [values] = changed columns. */
+class DbEdit(val op: String, val original: Map<String, JsonElement> = emptyMap(), val values: Map<String, JsonElement> = emptyMap())
 
 private fun Api.dbUrl(projectID: String, vararg segs: String): HttpUrl =
     url("api", "v1", "projects", projectID, "databases", *segs)
@@ -151,3 +160,22 @@ suspend fun Api.dbQuery(projectID: String, connID: String, sql: String, limit: I
             }
         })
     }
+
+/**
+ * Applies [edits] in one server-side transaction. The runtime never reports rows affected, so a
+ * non-matching update/delete still succeeds — callers verify by re-fetching (D3).
+ */
+fun Api.dbCommit(projectID: String, connID: String, schema: String, table: String, edits: List<DbEdit>) {
+    val body = buildJsonObject {
+        put("edits", buildJsonArray {
+            edits.forEach { e ->
+                add(buildJsonObject {
+                    put("op", e.op)
+                    put("original", JsonObject(e.original))
+                    put("values", JsonObject(e.values))
+                })
+            }
+        })
+    }.toString().toRequestBody("application/json".toMediaType())
+    Api.netClient.newCall(request("PATCH", dbTableUrl(projectID, connID, schema, table, "rows"), body)).execute().use { check(it) }
+}

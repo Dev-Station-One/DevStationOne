@@ -1682,5 +1682,15 @@ stripping, multi-statement guard; `WITH … DELETE` is a known false negative)
 with a confirm dialog for everything else, `SqlHistoryStore` (20 per
 connection, app-private SharedPreferences, so SQL text persists on the
 phone). `DbLogicTest` covers classifier read/write/multi-statement cases and
-history dedupe/cap. Stages 5-8 (row edit, connection CRUD,
-principals/grants, backups) **Not Started**.
+history dedupe/cap. Stage 5 (row edit) **Complete in code, not yet
+verified on device** — `Api.dbCommit` (PATCH `/rows`, one edit per call),
+`RowForm` (per-column field, explicit NULL toggle; insert omits untouched
+columns so DB defaults apply), Edit/Delete in the row sheet, `+ Row` in the
+Data header, delete confirm naming the PK values. Row identity is PK columns
+only (constraint, else primary index); no PK or a float/real/double PK
+disables Edit/Delete with the reason shown (Insert stays). Because the runtime
+never reports rows affected, update/delete re-fetch the page and
+`editLanded` flags "No row matched — nothing changed" when the row is still
+present and unchanged. `DbLogicTest` covers type coercion, blocked reasons,
+changed-column-only updates, NULL/invalid rejection and the landed check.
+Stages 6-8 (connection CRUD, principals/grants, backups) **Not Started**.

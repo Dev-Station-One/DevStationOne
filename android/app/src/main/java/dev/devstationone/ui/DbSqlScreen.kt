@@ -131,5 +131,5 @@ internal fun SqlView(api: Api, projectID: String, r: DbRoute.Sql, onBack: () -> 
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
         )
     }
-    rowOpen?.let { i -> result?.let { RowSheet(it.columns, it.rows[i]) { rowOpen = null } } }
+    rowOpen?.let { i -> result?.let { RowSheet(it.columns, it.rows[i], onDismiss = { rowOpen = null }) } }
 }

@@ -3,6 +3,7 @@ package dev.devstationone.ui
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbIndex
+import dev.devstationone.net.DbColumn
 import dev.devstationone.net.DbRows
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -104,6 +105,67 @@ class DbLogicTest {
         assertEquals(SQL_HISTORY_MAX, next.size)
         assertEquals("new", next.first())
         assertFalse("q$SQL_HISTORY_MAX" in next)
+    }
+
+    private val cols = listOf(
+        DbColumn("id", "integer", nullable = false),
+        DbColumn("name", "character varying", nullable = true),
+        DbColumn("ok", "boolean", nullable = false),
+        DbColumn("price", "numeric", nullable = true),
+    )
+
+    @Test
+    fun coerceByColumnType() {
+        assertEquals(JsonPrimitive(7L), coerceValue("integer", " 7 "))
+        assertEquals(null, coerceValue("bigint", "7.5"))
+        assertEquals(null, coerceValue("int", "abc"))
+        assertEquals(JsonPrimitive(7L), coerceValue("numeric(10,2)", "7"))
+        assertEquals(JsonPrimitive(7.5), coerceValue("numeric", "7.5"))
+        assertEquals(null, coerceValue("double precision", "NaN"))
+        assertEquals(JsonPrimitive(true), coerceValue("boolean", "T"))
+        assertEquals(null, coerceValue("boolean", "yes"))
+        assertEquals(JsonPrimitive("2026-01-01"), coerceValue("date", "2026-01-01"))
+        assertEquals(JsonPrimitive("1 day"), coerceValue("interval", "1 day")) // not an int type
+    }
+
+    @Test
+    fun editBlockedWithoutUsablePrimaryKey() {
+        assertTrue(editBlockedReason(emptyList(), cols)!!.startsWith("No primary key"))
+        assertTrue(editBlockedReason(listOf("x"), listOf(DbColumn("x", "double precision")))!!.startsWith("Floating-point"))
+        assertEquals(null, editBlockedReason(listOf("id"), cols))
+    }
+
+    @Test
+    fun updateSendsOnlyChangedColumns() {
+        val row = mapOf<String, JsonElement>("id" to JsonPrimitive(1), "name" to JsonPrimitive("a"), "ok" to JsonPrimitive(true), "price" to JsonNull)
+        val fields = mapOf(
+            "name" to FieldState(FieldMode.VALUE, "b"),
+            "ok" to FieldState(FieldMode.VALUE, "true"), // unchanged
+            "price" to FieldState(FieldMode.NULL), // already NULL
+        )
+        val res = buildValues(cols, fields, row)
+        assertEquals(null, res.error)
+        assertEquals(mapOf<String, JsonElement>("name" to JsonPrimitive("b")), res.values)
+    }
+
+    @Test
+    fun nullAndInvalidValuesAreRejected() {
+        assertEquals("id is not nullable", buildValues(cols, mapOf("id" to FieldState(FieldMode.NULL)), null).error)
+        assertTrue(buildValues(cols, mapOf("id" to FieldState(FieldMode.VALUE, "x")), null).error!!.startsWith("id:"))
+        assertEquals(JsonNull, buildValues(cols, mapOf("name" to FieldState(FieldMode.NULL)), null).values["name"])
+    }
+
+    @Test
+    fun editLandedVerifiesAgainstRefetchedPage() {
+        val names = listOf("id", "name")
+        val old = listOf<JsonElement>(JsonPrimitive(1), JsonPrimitive("a"))
+        val changed = listOf<JsonElement>(JsonPrimitive(1), JsonPrimitive("b"))
+        assertEquals(mapOf<String, JsonElement>("id" to JsonPrimitive(1)), pkOriginal(names, listOf("id"), old))
+        assertTrue(editLanded("update", names, listOf("id"), old, listOf(changed)))
+        assertFalse(editLanded("update", names, listOf("id"), old, listOf(old))) // zero-row update
+        assertTrue(editLanded("update", names, listOf("id"), old, emptyList())) // sorted/filtered away
+        assertTrue(editLanded("delete", names, listOf("id"), old, emptyList()))
+        assertFalse(editLanded("delete", names, listOf("id"), old, listOf(old)))
     }
 
     @Test
