@@ -3,6 +3,7 @@ package dev.devstationone.ui
 import dev.devstationone.net.DbColumn
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
+import dev.devstationone.net.DbGrant
 import dev.devstationone.net.DbIndex
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -19,6 +20,8 @@ sealed interface DbRoute {
     data object Connections : DbRoute
     data class Tables(val conn: DbConnection) : DbRoute
     data class Sql(val conn: DbConnection) : DbRoute
+    data class Principals(val conn: DbConnection) : DbRoute
+    data class Grants(val conn: DbConnection, val principal: String) : DbRoute
     /** [conn] null = new connection. */
     data class Form(val conn: DbConnection?) : DbRoute
     data class Data(val conn: DbConnection, val schema: String, val table: String) : DbRoute
@@ -130,6 +133,26 @@ internal const val SQL_HISTORY_MAX = 20
 /** Newest-first, de-duplicated, capped history after running [sql]. */
 internal fun pushHistory(history: List<String>, sql: String): List<String> =
     (listOf(sql.trim()) + history.filter { it != sql.trim() }).take(SQL_HISTORY_MAX)
+
+// ---- principals & grants ----
+
+/** SQLite has no server-side users or roles — the screen says so instead of calling the API. */
+internal fun userManagementSupported(engine: String): Boolean = engine != "sqlite"
+
+internal fun validatePrincipal(name: String, password: String): String? = when {
+    name.isBlank() -> "Name is required"
+    password.isEmpty() -> "Password is required"
+    else -> null
+}
+
+internal fun validateGrant(privilege: String, table: String): String? = when {
+    privilege.isBlank() -> "Privilege is required"
+    table.isBlank() -> "Table is required"
+    else -> null
+}
+
+/** `schema.table` (or just table); structured grants only — raw grants have no label. */
+internal fun grantTarget(g: DbGrant): String = if (g.schema.isEmpty()) g.table else "${g.schema}.${g.table}"
 
 // ---- connection form (design §5) ----
 

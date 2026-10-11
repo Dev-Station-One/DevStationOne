@@ -1703,5 +1703,12 @@ record only (no draft-test route). Password is held in plain `remember`
 omits `secret` so the stored one is kept, and `extra_params` is never sent
 (D4), so the phone cannot clear a stored password. No server change: the
 existing POST/PATCH/DELETE/test routes were already covered by
-`TestDeviceDatabasesAuth`. Stages 7-8 (principals/grants, backups) **Not
-Started**.
+`TestDeviceDatabasesAuth`. Stage 7
+(principals/grants) **Complete in code, not yet verified on device** —
+`Users` button in the Tables header → `PrincipalsView` (list with
+login/superuser flags, create, set password via PATCH, drop with confirm) →
+`GrantsView` (list, grant with quick privilege chips + schema/table, revoke
+with confirm; MySQL `raw` grant text is read-only). SQLite shows "no
+server-side users or roles" without calling the API. Passwords are plain
+`remember`, never logged. `DbLogicTest` covers validation, SQLite gating and
+structured/raw grant decode. Stage 8 (backups) **Not Started**.

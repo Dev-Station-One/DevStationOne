@@ -77,7 +77,10 @@ fun DatabasesScreen(server: Server, projectID: String, active: Boolean) {
             onBack = { stack.removeLast() },
             onOpen = { schema, table -> stack += DbRoute.Data(r.conn, schema, table) },
             onSql = { stack += DbRoute.Sql(r.conn) },
+            onUsers = { stack += DbRoute.Principals(r.conn) },
         )
+        is DbRoute.Principals -> PrincipalsView(api, projectID, r.conn, onBack = { stack.removeLast() }, onGrants = { stack += DbRoute.Grants(r.conn, it) })
+        is DbRoute.Grants -> GrantsView(api, projectID, r, onBack = { stack.removeLast() })
         is DbRoute.Sql -> SqlView(api, projectID, r, onBack = { stack.removeLast() })
         is DbRoute.Data -> DataView(
             api, projectID, r,
@@ -150,9 +153,12 @@ private fun ConnectionsView(api: Api, projectID: String, rev: Int, onOpen: (DbCo
 }
 
 @Composable
-private fun TablesView(api: Api, projectID: String, conn: DbConnection, onBack: () -> Unit, onOpen: (schema: String, table: String) -> Unit, onSql: () -> Unit) {
+private fun TablesView(api: Api, projectID: String, conn: DbConnection, onBack: () -> Unit, onOpen: (schema: String, table: String) -> Unit, onSql: () -> Unit, onUsers: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(conn.name, onBack = onBack, actions = { TextButton(onClick = onSql) { Text("SQL") } })
+        ScreenHeader(conn.name, onBack = onBack, actions = {
+            TextButton(onClick = onUsers) { Text("Users") }
+            TextButton(onClick = onSql) { Text("SQL") }
+        })
         if (hasSchemas(conn.engine)) {
             Loaded(conn.id, { api.dbSchemas(projectID, conn.id) }) { schemas ->
                 var schema by remember(schemas) { mutableStateOf(defaultSchema(conn.engine, schemas)) }

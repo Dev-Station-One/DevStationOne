@@ -86,6 +86,14 @@ class DbConnForm(
 @Serializable
 data class DbTestResult(val ok: Boolean = false, val error: String = "")
 
+/** A database-level user/role/login. */
+@Serializable
+data class DbPrincipal(val name: String, val can_login: Boolean = false, val superuser: Boolean = false)
+
+/** One privilege; [raw] is set instead (and the rest blank) for engines that only expose native grant text (MySQL). */
+@Serializable
+data class DbGrant(val privilege: String = "", val schema: String = "", val table: String = "", val raw: String = "")
+
 /** One row change for the commit call: [original] = primary-key columns only (D3); [values] = changed columns. */
 class DbEdit(val op: String, val original: Map<String, JsonElement> = emptyMap(), val values: Map<String, JsonElement> = emptyMap())
 
@@ -218,6 +226,34 @@ fun Api.dbSave(projectID: String, id: String?, f: DbConnForm, password: String):
 
 fun Api.dbDelete(projectID: String, connID: String) {
     Api.client.newCall(request("DELETE", dbUrl(projectID, connID))).execute().use { check(it) }
+}
+
+// ---- principals & grants (not offered for SQLite: it has no server-side users) ----
+
+fun Api.dbPrincipals(projectID: String, connID: String): List<DbPrincipal> = dbGet(dbUrl(projectID, connID, "principals"))
+
+fun Api.dbCreatePrincipal(projectID: String, connID: String, name: String, password: String, canLogin: Boolean, superuser: Boolean) {
+    val body = jsonBody(buildJsonObject { put("name", name); put("password", password); put("can_login", canLogin); put("superuser", superuser) })
+    Api.client.newCall(request("POST", dbUrl(projectID, connID, "principals"), body)).execute().use { check(it) }
+}
+
+fun Api.dbDropPrincipal(projectID: String, connID: String, name: String) {
+    Api.client.newCall(request("DELETE", dbUrl(projectID, connID, "principals", name))).execute().use { check(it) }
+}
+
+fun Api.dbSetPrincipalPassword(projectID: String, connID: String, name: String, password: String) {
+    val body = jsonBody(buildJsonObject { put("password", password) })
+    Api.client.newCall(request("PATCH", dbUrl(projectID, connID, "principals", name), body)).execute().use { check(it) }
+}
+
+fun Api.dbGrants(projectID: String, connID: String, name: String): List<DbGrant> =
+    dbGet(dbUrl(projectID, connID, "principals", name, "grants"))
+
+/** [revoke] false grants, true revokes (`…/grants/revoke`). */
+fun Api.dbChangeGrant(projectID: String, connID: String, name: String, g: DbGrant, revoke: Boolean) {
+    val url = if (revoke) dbUrl(projectID, connID, "principals", name, "grants", "revoke") else dbUrl(projectID, connID, "principals", name, "grants")
+    val body = jsonBody(buildJsonObject { put("privilege", g.privilege); put("schema", g.schema); put("table", g.table) })
+    Api.client.newCall(request("POST", url, body)).execute().use { check(it) }
 }
 
 /** Tests the *saved* connection (no draft-test route exists). */

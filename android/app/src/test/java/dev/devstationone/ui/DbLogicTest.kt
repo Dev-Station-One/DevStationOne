@@ -4,6 +4,7 @@ import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbIndex
 import dev.devstationone.net.DbColumn
+import dev.devstationone.net.DbGrant
 import dev.devstationone.net.DbRows
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -166,6 +167,30 @@ class DbLogicTest {
         assertTrue(editLanded("update", names, listOf("id"), old, emptyList())) // sorted/filtered away
         assertTrue(editLanded("delete", names, listOf("id"), old, emptyList()))
         assertFalse(editLanded("delete", names, listOf("id"), old, listOf(old)))
+    }
+
+    @Test
+    fun principalAndGrantValidation() {
+        assertFalse(userManagementSupported("sqlite"))
+        assertTrue(userManagementSupported("postgresql"))
+        assertEquals("Name is required", validatePrincipal(" ", "pw"))
+        assertEquals("Password is required", validatePrincipal("bob", ""))
+        assertEquals(null, validatePrincipal("bob", "pw"))
+        assertEquals("Privilege is required", validateGrant("", "t"))
+        assertEquals("Table is required", validateGrant("SELECT", " "))
+        assertEquals(null, validateGrant("SELECT", "t"))
+        assertEquals("public.t", grantTarget(DbGrant("SELECT", "public", "t")))
+        assertEquals("t", grantTarget(DbGrant("SELECT", "", "t")))
+    }
+
+    @Test
+    fun grantsDecodeStructuredAndRaw() {
+        val l = Json { ignoreUnknownKeys = true }.decodeFromString<List<DbGrant>>(
+            """[{"privilege":"SELECT","schema":"public","table":"t"},{"raw":"GRANT ALL ON *.* TO 'u'@'%'"}]"""
+        )
+        assertEquals("public.t", grantTarget(l[0]))
+        assertEquals("GRANT ALL ON *.* TO 'u'@'%'", l[1].raw)
+        assertEquals("", l[1].privilege)
     }
 
     @Test
