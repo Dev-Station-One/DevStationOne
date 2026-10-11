@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"devstationone/internal/events"
 	"devstationone/internal/mail"
 	"devstationone/internal/protocol"
+	"devstationone/internal/push"
 	"devstationone/internal/runtimes"
 	"devstationone/internal/sessions"
 	"devstationone/web"
@@ -302,6 +304,18 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("GET /api/v1/notifications/unread-count", requireSession(db, unreadNotificationCountHandler(db)))
 	mux.HandleFunc("POST /api/v1/notifications/{id}/read", requireSession(db, markNotificationReadHandler(db)))
 	mux.HandleFunc("POST /api/v1/notifications/read-all", requireSession(db, markAllNotificationsReadHandler(db)))
+
+	// Web Push (ADR-055): browser-only, so cookie sessions, not devices.
+	pushSvc, err := push.New(context.Background(), db.Pool, logger, dbEncryptionKey, twoFactorCfg.WebAuthnRPOrigin)
+	if err != nil {
+		logger.Error("push: disabled, web push endpoints will return 503", "error", err)
+		pushSvc = nil
+	} else {
+		pushSvc.Attach(bus)
+	}
+	mux.HandleFunc("GET /api/v1/push/public-key", requireSession(db, pushPublicKeyHandler(pushSvc)))
+	mux.HandleFunc("POST /api/v1/push/subscriptions", requireSession(db, pushSubscribeHandler(pushSvc)))
+	mux.HandleFunc("DELETE /api/v1/push/subscriptions", requireSession(db, pushUnsubscribeHandler(pushSvc)))
 
 	var staticFS, assetsFS fs.FS
 	if staticDir == "" {

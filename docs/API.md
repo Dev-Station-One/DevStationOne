@@ -944,6 +944,38 @@ Recorded notification types (`notifications.Type*` in
 Recording is best-effort, like `internal/audit.Record`: a write failure is
 logged and never blocks the action it describes.
 
+### Web Push
+
+```text
+GET    /api/v1/push/public-key
+POST   /api/v1/push/subscriptions
+DELETE /api/v1/push/subscriptions
+```
+
+Cookie session only (ADR-055). Each recorded notification is also delivered
+to the owning user's registered browsers over Web Push, so an alert reaches a
+closed or backgrounded tab. The web UI's bell panel has the opt-in toggle
+and registers `/sw.js` (the service worker: push + notification click only,
+no caching).
+
+`GET /api/v1/push/public-key` → `{"public_key": "<base64url VAPID key>"}`,
+the `applicationServerKey` for `pushManager.subscribe`.
+
+`POST /api/v1/push/subscriptions` with the browser's `PushSubscription` JSON
+`{"endpoint": "https://…", "keys": {"p256dh": "…", "auth": "…"}}` returns
+`204`. Idempotent per endpoint; an endpoint already held by another user is
+moved to the caller. `400` for a missing key, a non-https endpoint, or an
+endpoint host that is `localhost` or a loopback/private/link-local IP literal
+(the server POSTs to the endpoint, so it must be a public push service).
+
+`DELETE /api/v1/push/subscriptions` with `{"endpoint": "…"}` returns `204`,
+removing only the caller's own subscription (also `204` if absent).
+
+All three return `503` if Web Push failed to initialise at startup (see the
+server log). The push payload is `{title, body, url, tag}`; `url` deep-links
+to the project when the notification's `detail` has a `project_id`. A
+subscription the push service reports gone (404/410) is deleted.
+
 ## Users (user manager)
 
 ```text

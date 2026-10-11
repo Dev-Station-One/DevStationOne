@@ -70,3 +70,17 @@ func TestBusFullBufferDropsRatherThanBlocks(t *testing.T) {
 		b.Publish(Event{Type: "runtime.status"}) // must not block/deadlock
 	}
 }
+
+func TestBusTapSeesEveryEventRegardlessOfUserScope(t *testing.T) {
+	b := NewBus()
+	var seen []string
+	b.Tap(func(e Event) { seen = append(seen, e.Type) })
+
+	alice := "alice"
+	b.Publish(Event{Type: "scoped", UserID: &alice}) // no subscribers at all
+	b.Publish(Event{Type: "broadcast"})
+
+	if len(seen) != 2 || seen[0] != "scoped" || seen[1] != "broadcast" {
+		t.Fatalf("tap saw %v, want [scoped broadcast]", seen)
+	}
+}

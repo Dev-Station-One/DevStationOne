@@ -12,7 +12,7 @@ import (
 // runtime, and go:embed has no exclude syntax — only cm6.bundle.js/chunks/
 // entry.js (what the built bundle references) are embedded.
 //
-//go:embed static/*.html static/css static/js static/help static/favicon.ico static/manifest.json
+//go:embed static/*.html static/css static/js static/help static/favicon.ico static/manifest.json static/sw.js
 //go:embed static/vendor/xterm static/vendor/bootstrap static/vendor/sweetalert2
 //go:embed static/vendor/codemirror static/vendor/tabler static/vendor/jquery
 //go:embed static/vendor/fontawesome static/vendor/marked static/vendor/dompurify

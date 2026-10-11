@@ -30,6 +30,17 @@ type Event struct {
 type Bus struct {
 	mu   sync.Mutex
 	subs map[chan Event]string
+	taps []func(Event)
+}
+
+// Tap registers fn to be called with every published Event, regardless of
+// user scope. fn runs on the publisher's goroutine, so it must return
+// quickly (hand slow work to its own goroutine). Taps cannot be removed;
+// they live as long as the Bus.
+func (b *Bus) Tap(fn func(Event)) {
+	b.mu.Lock()
+	b.taps = append(b.taps, fn)
+	b.mu.Unlock()
 }
 
 // NewBus creates an empty Bus.
@@ -56,7 +67,6 @@ func (b *Bus) Subscribe(userID string) (<-chan Event, func()) {
 // buffer is full is skipped rather than blocking the publisher.
 func (b *Bus) Publish(e Event) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	for ch, userID := range b.subs {
 		if e.UserID != nil && *e.UserID != userID {
 			continue
@@ -65,5 +75,10 @@ func (b *Bus) Publish(e Event) {
 		case ch <- e:
 		default:
 		}
+	}
+	taps := b.taps
+	b.mu.Unlock()
+	for _, fn := range taps {
+		fn(e)
 	}
 }

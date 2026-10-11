@@ -315,3 +315,23 @@ Revoke the runtime in the UI too, and drop the PostgreSQL database if done.
 - **Database panel connection fails:** connections are made by the runtime
   from the dev machine; the database must be reachable from there.
 - **Port in use:** set `DEVSTATIONONE_SERVER_ADDR=:9090` and restart.
+
+## Web Push and installing the web app
+
+Browsers can install the web UI as an app (Chrome/Edge: install icon in the
+address bar; Android Chrome: "Install app"; Safari: Share → Add to Home
+Screen) and can receive alerts while the tab is closed (bell panel → "Turn
+on"). Requirements:
+
+- Serve the UI over **HTTPS** (browsers refuse service workers and push
+  otherwise, except on `localhost`).
+- Set `DEVSTATIONONE_WEBAUTHN_RP_ORIGIN` to the public `https://` origin;
+  it is also the VAPID contact URL sent to push services.
+- The Control Server needs **outbound HTTPS** to the browsers' push services
+  (for example `fcm.googleapis.com`, `*.push.services.mozilla.com`,
+  `web.push.apple.com`, `*.notify.windows.com`). Nothing inbound is added.
+- Keep `DEVSTATIONONE_DB_ENCRYPTION_KEY` stable: the push private key is
+  sealed with it. If it changes, the server logs "push: disabled" and the
+  push endpoints return 503 until the key is restored.
+- The VAPID keypair is created on first start and stored in Postgres, so it
+  is included in database backups (docs/BACKUPS.md).

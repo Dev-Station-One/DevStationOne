@@ -48,11 +48,11 @@ One server, every screen. Your workspaces follow you, and so do your running ses
 
 | Client | Status | Why you'll want it |
 |---|---|---|
-| **Browser** | Available | Nothing to install. Open your server's URL on any laptop, tablet, or borrowed machine and you're in your workspace. |
+| **Browser** | Available | Nothing to install. Open your server's URL on any laptop, tablet, or borrowed machine. Install it as an app from Chrome, Edge, or Safari for a standalone window and a home-screen icon, and turn on push alerts to hear about finished tasks and waiting prompts with the tab closed. |
 | **Android** | Available | A native app, not a shrunken website: real terminals, journal, source control, and databases in your pocket. Each phone is paired and signs every request with a key that never leaves the device. See [docs/ANDROID_CLIENT.md](docs/ANDROID_CLIENT.md). |
-| **Windows desktop** | Coming soon | Your whole fleet in a dedicated window with its own taskbar icon and notifications. No browser tab to lose. |
-| **macOS desktop** | Coming soon | The same workspace as a first-class Mac app. |
-| **Linux desktop** | Coming soon | A native client for the platform most of your dev machines already run. |
+| **Windows desktop** | Coming soon | A native client with a system tray icon, OS notifications, and real file downloads. Everything the web app does, plus the three things a browser tab can't. |
+| **macOS desktop** | Coming soon | The same tray, notification, and download integration as a native Mac app. |
+| **Linux desktop** | Coming soon | A native client for the platform most of your dev machines already run: tray, notifications, and downloads that land where you expect. |
 
 Every client talks to the same documented API, so a session started on your desktop is waiting on your phone.
 

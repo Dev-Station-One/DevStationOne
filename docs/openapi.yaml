@@ -23,6 +23,7 @@ tags:
   - name: Docker
   - name: Audit
   - name: Metrics
+  - name: Push
 paths:
   /healthz:
     get:
@@ -857,6 +858,97 @@ paths:
           description: Revoked
         "404":
           description: Trusted device not found
+  /api/v1/push/public-key:
+    get:
+      summary: VAPID public key for Web Push subscription
+      description: |
+        Pass the value (base64url) as `applicationServerKey` to
+        `pushManager.subscribe`. Cookie session only; devices do not use Web Push.
+      tags: [Push]
+      operationId: pushPublicKey
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Public key
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [public_key]
+                properties:
+                  public_key:
+                    type: string
+        "401":
+          description: Not authenticated
+        "503":
+          description: Web Push failed to initialise at server start
+  /api/v1/push/subscriptions:
+    post:
+      summary: Register this browser's push subscription for the signed-in user
+      description: |
+        Idempotent per `endpoint`; an endpoint already registered to another
+        user is moved to the caller. `endpoint` must be a public https URL
+        (loopback, private and link-local IP literals and `localhost` are
+        refused because the server POSTs to it).
+      tags: [Push]
+      operationId: pushSubscribe
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+                keys:
+                  type: object
+                  required: [p256dh, auth]
+                  properties:
+                    p256dh:
+                      type: string
+                    auth:
+                      type: string
+      responses:
+        "204":
+          description: Subscribed
+        "400":
+          description: Invalid body, missing keys, or disallowed endpoint
+        "401":
+          description: Not authenticated
+        "503":
+          description: Web Push failed to initialise at server start
+    delete:
+      summary: Remove the caller's push subscription for an endpoint
+      tags: [Push]
+      operationId: pushUnsubscribe
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint]
+              properties:
+                endpoint:
+                  type: string
+                  format: uri
+      responses:
+        "204":
+          description: Removed (also when it did not exist)
+        "400":
+          description: endpoint missing
+        "401":
+          description: Not authenticated
+        "503":
+          description: Web Push failed to initialise at server start
   /api/v1/auth/devices/pair:
     post:
       summary: Exchange a one-time pairing code for a device registration

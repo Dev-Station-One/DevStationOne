@@ -1728,3 +1728,22 @@ SQLite online-backup API, so it is allowed on device (the user's E2E report
 did not break out a SQLite restore separately).
 `DbLogicTest` covers running detection, restore confirm, retention parsing
 and backup/schedule decode (null `last_run_at`).
+
+## Web: installable app + Web Push (ADR-055)
+
+**Goal**: The web UI installs as an app with correct icons and alerts a
+closed or backgrounded browser when a notification is recorded.
+
+**Implemented**: manifest with real 192/512 + maskable icons and an
+180px Apple touch icon (`assets/logo/pwa-*.png`); `web/static/sw.js`
+(push + click only, no cache); migration 0025 (`push_vapid`,
+`push_subscriptions`); `internal/push` (VAPID keypair sealed with the DB
+encryption key, bus tap on `notification.created`, 404/410 pruning, endpoint
+SSRF guard); `events.Bus.Tap`; `GET /api/v1/push/public-key`,
+`POST|DELETE /api/v1/push/subscriptions`; bell-panel opt-in toggle.
+
+**Tests**: `internal/push` (keypair stability, delivery + VAPID/aes128gcm
+headers, 410 pruning, per-user scoping, Record→push, endpoint validation,
+re-homing), `internal/events` tap, `internal/api` push HTTP lifecycle.
+
+**Status**: Complete.

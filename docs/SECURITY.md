@@ -277,6 +277,13 @@ Provide environment/config mechanisms for:
 - runtime bootstrap credentials
 - TLS material
 
+## Web Push (ADR-055)
+
+- The server POSTs to browser-supplied push endpoints, so registration accepts only public `https` URLs and rejects `localhost` and loopback/private/link-local IP literals (`push.ValidEndpoint`). DNS names resolving to private space are not checked; accounts are trusted per ADR-054.
+- The VAPID private key is stored sealed with `DEVSTATIONONE_DB_ENCRYPTION_KEY`; subscription endpoints are capability URLs and are never logged (only the subscription id).
+- Subscribing, listing and unsubscribing are scoped to the session user; an unsubscribe cannot remove another user's subscription.
+- Payloads are encrypted end to end to the browser (RFC 8291); the push service sees metadata only.
+
 ## Defense in depth
 
 Security must be enforced at:

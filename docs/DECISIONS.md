@@ -2056,3 +2056,54 @@ Hardening shipped with this decision:
 4. **Project restore**: extraction writes through an `os.Root` on the
    restore directory, so symlinks already on disk cannot redirect writes,
    with ceilings of 5,000,000 entries and 64 GiB extracted.
+
+## ADR-055 — Web Push for browser notifications; installable PWA without an offline cache
+
+**Context.** The web UI had a manifest (add-to-home-screen) but no service
+worker, so notifications existed only while a tab was open and visible. The
+manifest's icons were also wrong: `favicon-256.png`/`favicon-512.png` are
+really 90×89 and 145×127, so Chrome's 192/512 install check was at risk and
+installed icons were blurry.
+
+**Decisions.**
+1. **Web Push over the existing notification path.** `internal/push` taps
+   `events.Bus` (new `Bus.Tap`, a firehose callback) for
+   `notification.created` and sends to that user's `push_subscriptions`. No
+   change to any `notifications.Record` caller.
+2. **Library: `github.com/SherClockHolmes/webpush-go`.** RFC 8291 payload
+   encryption and RFC 8292 VAPID JWTs are not worth hand-rolling.
+3. **One VAPID keypair per installation, in Postgres** (`push_vapid`,
+   migration 0025), generated on first start. Private key sealed with
+   `DEVSTATIONONE_DB_ENCRYPTION_KEY` (AES-256-GCM, same scheme as stored DB
+   credentials). No new env var. The VAPID `sub` claim is
+   `DEVSTATIONONE_WEBAUTHN_RP_ORIGIN`. Losing or changing the encryption key
+   makes the server log that push is disabled (503) rather than fail to boot;
+   restoring the key restores push, and existing subscriptions keep working
+   because the keypair row is unchanged.
+4. **Service worker is push-only: no fetch handler, no cache.** Every page
+   and API call still hits the network, so upgrades are never masked by a
+   stale shell. Consequently there is no offline mode. `sw.js` is served
+   from the root so its scope is `/`.
+5. **Cookie sessions only.** Paired Android devices do not use Web Push.
+6. **No alert when a tab is visible and focused** (the bell already shows
+   it); the service worker suppresses the duplicate.
+7. **SSRF guard.** The server POSTs to client-supplied endpoint URLs, so
+   registration requires https and rejects `localhost` and loopback,
+   private, link-local and unspecified IP literals. DNS names that resolve
+   into private space are not checked: accounts are administrator-created
+   and trusted with code execution anyway (ADR-054). Revisit with a
+   dialer-level check if untrusted users are ever hosted.
+8. **Honest scope of "no vendor relay".** Browser push goes through the
+   browser vendor's push service (FCM, Mozilla autopush, Apple, WNS). The
+   payload is encrypted end to end to the browser, but the push service sees
+   timing and endpoint metadata. Opting in is per browser and off by default.
+9. **Icons.** `pwa-192.png`, `pwa-512.png`, `pwa-maskable-512.png`
+   (maskable, mark inside the 80% safe zone) and `apple-touch-180.png` are
+   rendered from the approved lockup (`devstationone-top-logo.png`, glyph
+   only) on the `#0B1220` brand background. The old `favicon-256/512.png`
+   remain for favicon use but are no longer referenced by the manifest.
+
+**Consequences.** Push needs the site served over HTTPS (browser
+requirement; localhost excepted) and the Control Server must reach the push
+services outbound. Delivery is best-effort with a 24 h TTL. A tab that is
+open but unfocused still gets the OS notification.

@@ -165,6 +165,14 @@ notification, since a notification's fields are immutable after creation
                                                   ("notification.created")
 ```
 
+Web Push (ADR-055) rides the same `events.Bus.Publish`: `push.Service.Attach`
+registers a bus tap that, for every `notification.created`, sends the
+payload to the owning user's rows in `push_subscriptions` (VAPID-signed,
+encrypted per RFC 8291) from its own goroutine. The VAPID keypair lives in
+`push_vapid`, private half sealed with `DEVSTATIONONE_DB_ENCRYPTION_KEY`.
+The browser side is `web/static/sw.js` plus the toggle in the bell panel
+(`web/static/js/app.js` `initPushToggle`).
+
 `internal/agent/manager.go`'s `MessageSessionExit` handling
 (`internal/api/runtime_ws.go`) calls the same `notifications.Record` for
 `task.completed`, outside the idle loop — a session exit is an immediate

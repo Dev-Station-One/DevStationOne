@@ -221,6 +221,10 @@
       + '<span class="fw-bold">Notifications</span>'
       + '<button id="notifications-mark-all" class="btn btn-link btn-sm p-0" type="button">Mark all read</button>'
       + '</div>'
+      + '<div id="notifications-push" class="px-3 pb-2 small d-flex align-items-center justify-content-between" hidden>'
+      + '<span id="notifications-push-label" class="text-secondary"></span>'
+      + '<button id="notifications-push-toggle" class="btn btn-sm btn-outline-primary" type="button"></button>'
+      + '</div>'
       + '<div id="notifications-list" class="list-group list-group-flush"></div>'
       + '<div id="notifications-empty" class="text-secondary text-center py-4 small" hidden>No notifications</div>'
       + '</div>';
@@ -324,7 +328,90 @@
       if (bellToggle.getAttribute('aria-expanded') === 'true') loadList();
     });
 
+    initPushToggle(host);
     loadUnreadCount();
+  }
+
+  // Web Push opt-in (ADR-055), shown in the bell panel only where the browser
+  // supports it. Per-browser: each browser/device subscribes for itself.
+  function initPushToggle(host) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+    var row = host.querySelector('#notifications-push');
+    var label = host.querySelector('#notifications-push-label');
+    var btn = host.querySelector('#notifications-push-toggle');
+
+    function send(method, path, body, done) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method, path);
+      if (body) xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.onload = function () { done(xhr.status, xhr.responseText); };
+      xhr.onerror = function () { done(0, ''); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    }
+
+    function b64urlToBytes(s) {
+      var pad = '='.repeat((4 - s.length % 4) % 4);
+      var raw = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
+      var out = new Uint8Array(raw.length);
+      for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+      return out;
+    }
+
+    function show(text, btnText) {
+      label.textContent = text;
+      btn.textContent = btnText || '';
+      btn.hidden = !btnText;
+      btn.disabled = false;
+      row.hidden = false;
+    }
+
+    function refresh() {
+      if (Notification.permission === 'denied') { show('Push blocked in browser settings', null); return; }
+      navigator.serviceWorker.register('/sw.js').then(function (reg) {
+        return reg.pushManager.getSubscription();
+      }).then(function (sub) {
+        if (sub) show('Push alerts on for this browser', 'Turn off');
+        else show('Get alerts when the tab is closed', 'Turn on');
+        btn.dataset.on = sub ? '1' : '';
+      }).catch(function () { row.hidden = true; });
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      btn.disabled = true;
+      var reg;
+      navigator.serviceWorker.register('/sw.js').then(function () { return navigator.serviceWorker.ready; }).then(function (r) {
+        reg = r;
+        return reg.pushManager.getSubscription();
+      }).then(function (sub) {
+        if (btn.dataset.on) {
+          if (!sub) return;
+          var endpoint = sub.endpoint;
+          return sub.unsubscribe().then(function () {
+            send('DELETE', '/api/v1/push/subscriptions', { endpoint: endpoint }, function () {});
+          });
+        }
+        return Notification.requestPermission().then(function (perm) {
+          if (perm !== 'granted') return;
+          return new Promise(function (resolve, reject) {
+            send('GET', '/api/v1/push/public-key', null, function (status, text) {
+              if (status !== 200) { reject(new Error('push unavailable')); return; }
+              resolve(JSON.parse(text).public_key);
+            });
+          }).then(function (key) {
+            return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToBytes(key) });
+          }).then(function (sub) {
+            var j = sub.toJSON();
+            send('POST', '/api/v1/push/subscriptions', { endpoint: j.endpoint, keys: j.keys }, function (status) {
+              if (status !== 204) sub.unsubscribe();
+              refresh();
+            });
+          });
+        });
+      }).then(refresh, function () { show('Could not update push', 'Try again'); });
+    });
+
+    refresh();
   }
 
   // Global "?" shortcut to the help manual (docs/WEB_UI_DESIGN.md). Skipped

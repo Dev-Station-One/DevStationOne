@@ -34,7 +34,8 @@ Reference board (source crops, not deployed): `assets/brand-assets/` with its ow
 
 - Top navigation: the vertical sidebar header shows `devstationone-top-logo.png` at 68px height (40px below `lg`, where the sidebar becomes a horizontal top navbar). The folded sidebar scales it to the available width. `navbar-brand-autodark` is deliberately not applied — it inverts the image under dark themes and would destroy the brand gradient.
 - Login page: `devstationone-top-logo.png` at 100px height above the sign-in card.
-- Favicons: pages link `/favicon.ico`, `favicon-32.png`, `favicon-16.png`, and use `favicon-256.png` as the Apple touch icon (the pack has no 180px asset).
+- Favicons: pages link `/favicon.ico`, `favicon-32.png`, `favicon-16.png`. Note `favicon-256.png`/`favicon-512.png` are really 90x89 / 145x127 — do not reference them with those sizes.
+- Installable-app icons (ADR-055), rendered from the DS1 glyph of `devstationone-top-logo.png` on `#0B1220`: `pwa-192.png`, `pwa-512.png` (manifest `any`), `pwa-maskable-512.png` (manifest `maskable`, glyph inside the 80% safe zone), `apple-touch-180.png` (the Apple touch icon on every page).
 
 ## Known limitation
 
