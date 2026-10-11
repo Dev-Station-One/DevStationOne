@@ -1,8 +1,9 @@
 # REQUIREMENTS_ANDROID_SCM.md — Android Source Control tab (parity round 2)
 
-Status: requirements discovery complete (2026-10-10), produced by the
-`/sc:brainstorm` pass. Architecture/design follows in a design doc +
-ADR if needed — nothing here decides implementation.
+Status: **shipped 2026-10-10** (design: `docs/DESIGN_ANDROID_SCM.md`;
+record: `docs/IMPLEMENTATION_PLAN.md` Slice 27). Requirements discovery was
+produced by the `/sc:brainstorm` pass. FR-A, FR-D and FR-B all landed;
+OQ-1..OQ-9 are resolved as recorded below.
 
 Reference UX: VSCode/VSCodium's Source Control view, as demonstrated by
 microsoft/vscode-extension-samples `source-control-sample` — a changes

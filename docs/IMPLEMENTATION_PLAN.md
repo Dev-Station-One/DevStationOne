@@ -1634,4 +1634,19 @@ bar icons + SCM core) **Complete** — `PrimaryTabRow` icon-only tab bar,
 `ScmScreen`/`DiffScreen`, Api git methods, `ScmScreenLogicTest` (8 tests);
 verified on the Pixel 8a against prod (tab bar, branch header, status groups,
 commit/pull/push enabled states, history) and signed off by the user. Stage 3
-(discard + amend + branch dialog UI) **Complete**; stage 4 (docs roundoff) **Not Started**.
+(discard + amend + branch dialog UI) **Complete**; stage 4 (docs roundoff)
+**Complete**.
+
+**On-device E2E** (Pixel 8a, release-signed APK against prod
+`ds.premadev.com`): the icon tab bar, branch header (`main · origin/main ↑1 ↓0`),
+Staged/Changes groups, Commit/Commit all/Pull/Push and 45-commit history
+rendered correctly and the user confirmed the app working. Stage 3's
+destructive actions (discard, amend, checkout) were not driven on the
+device; their behavior is covered by the runtime and HTTP tests and the
+stage-1 live smoke.
+
+**Server-side/contract**: 5 new endpoints (`discard`, `amend`, `branches`,
+`checkout`, `branch`), all 13 git routes accept device identity
+(`TestDeviceGitAuth`), `GitBranch.remote`, 4 new audit events; `make test`
+green. Out of scope and still web/terminal: blame, stash, rebase/merge UI,
+conflict resolution beyond listing, tags, remotes.

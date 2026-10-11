@@ -35,6 +35,16 @@ stored token, nothing to steal.
   docs/DESIGN_ANDROID_PARITY.md; on-device E2E recorded in
   docs/IMPLEMENTATION_PLAN.md Slice 26. Everything in the next line
   stays web-only except what those docs move into the app.
+- **Round 2 shipped** (2026-10-10): an icon-only workspace tab bar
+  (Terminal / Journal / Files / Source Control) and the **Source Control**
+  tab — branch header with ahead/behind, grouped Staged/Changes lists with
+  per-file and bulk stage/unstage, unified diff overlay, commit and
+  commit-all, pull (conflicts listed, never resolved) and push (reports a
+  newly published branch), history, discard (tracked changes only, with
+  confirmation), amend (the runtime refuses once pushed), and a branch
+  dialog (checkout while clean, create). Every git route accepts the device
+  signature. Details: docs/DESIGN_ANDROID_SCM.md; E2E in
+  docs/IMPLEMENTATION_PLAN.md Slice 27.
 
 ## Auth (ADR-053)
 
