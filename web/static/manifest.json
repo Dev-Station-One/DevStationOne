@@ -2,11 +2,13 @@
   "name": "DevStationOne",
   "short_name": "DevStation",
   "start_url": "/projects.html",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0B1220",
   "theme_color": "#0B1220",
   "icons": [
-    { "src": "/assets/logo/favicon-256.png", "sizes": "256x256", "type": "image/png" },
-    { "src": "/assets/logo/favicon-512.png", "sizes": "512x512", "type": "image/png" }
+    { "src": "/assets/logo/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/logo/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/logo/pwa-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
