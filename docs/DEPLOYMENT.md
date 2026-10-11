@@ -244,3 +244,74 @@ if it's online, and its stored token hash can never authenticate a new
 connection again — the running `devstationone-runtime` process is left in
 place (it just can't reconnect) and should be stopped/uninstalled
 separately if the machine itself is being decommissioned.
+
+## Installing with install.sh
+
+`install.sh` installs prebuilt binaries and systemd units.
+
+```bash
+# Control Server (root; creates the unprivileged `devstationone` system user)
+curl -fsSL https://raw.githubusercontent.com/Dev-Station-One/DevStationOne/main/install.sh | sudo bash -s -- --server
+sudoedit /etc/devstationone/server.env
+sudo systemctl enable --now devstationone-server
+
+# Development Runtime (normal user; installs to ~/.local/bin)
+curl -fsSL https://raw.githubusercontent.com/Dev-Station-One/DevStationOne/main/install.sh | bash -s -- --runtime
+```
+
+Create the database first:
+
+```bash
+sudo -u postgres psql -c "CREATE ROLE devstation LOGIN PASSWORD 'choose-a-strong-password';"
+sudo -u postgres psql -c "CREATE DATABASE devstation OWNER devstation;"
+```
+
+`server.env` needs `DEVSTATIONONE_DATABASE_URL`; `install.sh` generates
+`DEVSTATIONONE_DB_ENCRYPTION_KEY` (back it up, docs/BACKUPS.md). Seed or reset
+an administrator (same command recovers a lost password):
+
+```bash
+set -a; source /etc/devstationone/server.env; set +a
+echo 'a-strong-password' | devstationone-admin --email you@example.com
+```
+
+Runtime enrollment file `~/.config/devstationone/runtime.env` (mode 600):
+
+```bash
+DEVSTATIONONE_SERVER_URL=wss://your-server
+DEVSTATIONONE_RUNTIME_TOKEN=<token from Runtimes → Add runtime>
+```
+
+then `systemctl --user enable --now devstationone-runtime` and
+`loginctl enable-linger`. Re-running `install.sh` upgrades binaries and keeps
+config; restart the service afterwards.
+
+## Removing
+
+```bash
+# Runtime
+systemctl --user disable --now devstationone-runtime
+rm ~/.local/bin/devstationone-runtime ~/.config/systemd/user/devstationone-runtime.service
+rm -r ~/.config/devstationone
+
+# Server
+sudo systemctl disable --now devstationone-server
+sudo rm -r /etc/devstationone /usr/local/bin/devstationone-server /usr/local/bin/devstationone-admin /usr/local/share/devstationone
+sudo userdel devstationone
+```
+
+Revoke the runtime in the UI too, and drop the PostgreSQL database if done.
+
+## Troubleshooting
+
+- **Runtime never shows online:** `journalctl --user -u devstationone-runtime -f`.
+  Check `DEVSTATIONONE_SERVER_URL` matches how the browser reaches the server
+  (`wss://` behind TLS), the token is not revoked, and the machine clock is sane.
+- **`systemctl --user` fails over SSH / service stops at logout:** run
+  `loginctl enable-linger $USER` once.
+- **Terminal opens then disconnects:** `journalctl -u devstationone-server -f`;
+  a proxy missing the `Upgrade`/`Connection` headers breaks WebSockets.
+- **Lost admin password:** rerun `devstationone-admin --email ...` (see above).
+- **Database panel connection fails:** connections are made by the runtime
+  from the dev machine; the database must be reachable from there.
+- **Port in use:** set `DEVSTATIONONE_SERVER_ADDR=:9090` and restart.
