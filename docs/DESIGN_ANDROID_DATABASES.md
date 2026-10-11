@@ -234,8 +234,8 @@ security entries.
 
 ## 11. Status
 
-Design approved 2026-10-10. Slices 1-7 complete (slices 2-7 with on-device
-E2E passed); slice 8 (backups) built, device verification pending. Progress
+Design approved 2026-10-10. All 8 slices complete; slices 2-8 passed
+on-device E2E (round 3 closed 2026-10-11). Progress
 and E2E records: `IMPLEMENTATION_PLAN.md` Slice 28.
 
 Deviations from this design:

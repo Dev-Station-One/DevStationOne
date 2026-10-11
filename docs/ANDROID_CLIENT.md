@@ -45,15 +45,15 @@ stored token, nothing to steal.
   dialog (checkout while clean, create). Every git route accepts the device
   signature. Details: docs/DESIGN_ANDROID_SCM.md; E2E in
   docs/IMPLEMENTATION_PLAN.md Slice 27.
-- **Round 3 built** (2026-10-11): a fifth **Databases** tab — connection
+- **Round 3 shipped** (2026-10-11): a fifth **Databases** tab — connection
   list with add/edit/test/delete, schema + table browsing, structure
   (columns, indexes, constraints, triggers), a data browser (raw filter,
   sort, paging) with row insert/edit/delete keyed on the primary key, a SQL
   editor (non-read-only statements ask first), users and grants, and
   backups (create, schedule, download, restore, delete). Database routes
   accept the device signature. `extra_params` stays web-only. On-device
-  E2E for slices 1-7 recorded in docs/IMPLEMENTATION_PLAN.md Slice 28;
-  slice 8 pending. Details: docs/DESIGN_ANDROID_DATABASES.md.
+  E2E recorded in docs/IMPLEMENTATION_PLAN.md Slice 28. Details:
+  docs/DESIGN_ANDROID_DATABASES.md.
 
 ## Auth (ADR-053)
 
