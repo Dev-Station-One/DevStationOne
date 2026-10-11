@@ -317,4 +317,4 @@ a11y label "Run") per user request; the "no projects for this runtime" empty
 state of FR-3.4 is unreachable because D7 lists only runtimes that have
 projects, so it was not built. The completion popup is canvas-drawn and
 not visible to uiautomator; its logic is covered by `DbCompletionTest`.
-Round 5: not started; ordered after round 4 per the user.
+Round 5: tabled by the user for a later date (see DESIGN_ANDROID_ROUND5.md §7).

@@ -1,7 +1,7 @@
 # DESIGN_ANDROID_ROUND5.md — Round 5: MariaDB engine
 
 Implements the "Round 5" section of `docs/REQUIREMENTS_ANDROID_ROUND4.md`.
-Status: **design draft 2026-10-11** — no code yet. Ships **after round 4**
+Status: **tabled 2026-10-11** (design draft, no code; see §7). Ships **after round 4**
 (`docs/DESIGN_ANDROID_ROUND4.md`) as its own slices, per the user. Despite the
 filename it is a full-stack round: migration, API, runtime, web and Android.
 
@@ -135,4 +135,5 @@ any `mariadb` connection is created; slice 4 ships as a release APK.
 
 ## 7. Status
 
-Design draft 2026-10-11 for review. Not started; ordered after round 4.
+**Tabled 2026-10-11** by the user, to be picked up at a later date. Design draft
+unchanged and not started; round 4 (its prerequisite) shipped in `c85bf06`.
