@@ -249,6 +249,10 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 	// (hub.Forward) for every session of this runtime. One worker per
 	// connection keeps per-session envelope ordering; binary frames stay on
 	// the read loop (they only touch the hub's in-memory fast path).
+	// owned caches BelongsToRuntime results for binary frames, which arrive
+	// far too often for a lookup each. A session's runtime never changes.
+	// Only this read loop touches it.
+	owned := make(map[string]bool)
 	envCh := make(chan protocol.Envelope, 64)
 	done := make(chan struct{})
 	go func() {
@@ -269,7 +273,17 @@ func handleRuntimeConnection(ctx context.Context, conn *websocket.Conn, db *data
 
 		if msgType == websocket.MessageBinary {
 			if sessionID, payload, ok := protocol.DecodeFrame(data); ok {
-				hub.Forward(sessionID, payload)
+				own, seen := owned[sessionID]
+				if !seen {
+					own = sessions.BelongsToRuntime(ctx, db.Pool, sessionID, rt.ID)
+					if len(owned) >= 4096 {
+						clear(owned)
+					}
+					owned[sessionID] = own
+				}
+				if own {
+					hub.Forward(sessionID, payload)
+				}
 			}
 			continue
 		}
@@ -327,6 +341,16 @@ func sweepDisconnectedRuntime(ctx context.Context, db *database.DB, hub *session
 // handleRuntimeEnvelope dispatches one control-plane JSON message received
 // from a connected runtime.
 func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *database.DB, registry *runtimes.Registry, hub *sessions.Hub, bus *events.Bus, editorHub *editor.Hub, logsHub *dockerLogsHub, logger *slog.Logger, runtimeID string) {
+	// A runtime may only act on its own sessions (a compromised one must not
+	// be able to end or write into another runtime's sessions).
+	owns := func(sessionID string) bool {
+		if sessions.BelongsToRuntime(ctx, db.Pool, sessionID, runtimeID) {
+			return true
+		}
+		logger.Warn("runtime message for a session it does not own dropped", "runtime_id", runtimeID, "type", env.Type, "session_id", sessionID)
+		return false
+	}
+
 	switch env.Type {
 	case protocol.MessageHeartbeat:
 		if err := runtimes.Heartbeat(ctx, db.Pool, runtimeID); err != nil {
@@ -338,6 +362,9 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 		if json.Unmarshal(env.Payload, &p) != nil {
 			return
 		}
+		if !owns(p.SessionID) {
+			return
+		}
 		if err := sessions.MarkDetached(ctx, db.Pool, p.SessionID); err != nil {
 			logger.Error("session mark detached failed", "session_id", p.SessionID, "error", err)
 		}
@@ -346,6 +373,9 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 	case protocol.MessageSessionError:
 		var p protocol.SessionErrorPayload
 		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		if !owns(p.SessionID) {
 			return
 		}
 		if err := sessions.MarkFailed(ctx, db.Pool, p.SessionID, p.Error); err != nil {
@@ -362,6 +392,9 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 	case protocol.MessageSessionExit:
 		var p protocol.SessionExitPayload
 		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		if !owns(p.SessionID) {
 			return
 		}
 		if err := sessions.MarkExited(ctx, db.Pool, p.SessionID, p.ExitCode); err != nil {
@@ -389,6 +422,9 @@ func handleRuntimeEnvelope(ctx context.Context, env protocol.Envelope, db *datab
 	case protocol.MessageSessionClosed:
 		var p protocol.SessionClosedPayload
 		if json.Unmarshal(env.Payload, &p) != nil {
+			return
+		}
+		if !owns(p.SessionID) {
 			return
 		}
 		hub.Discard(p.SessionID)

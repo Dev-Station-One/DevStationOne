@@ -417,16 +417,23 @@ func SetTrustedProxies(spec string) {
 // clientIP returns the client IP for rate limiting, audit records, and
 // session rows. By default that is the TCP peer address. Only when the peer
 // itself is a configured trusted proxy (DEVSTATIONONE_TRUSTED_PROXIES) is
-// the leftmost valid X-Forwarded-For entry used instead — a client
-// connecting directly cannot spoof the header.
+// the rightmost X-Forwarded-For entry that is not itself a trusted proxy is
+// used instead. Proxies append, so anything left of that entry is
+// client-controlled and never trusted; a malformed entry stops the walk and
+// falls back to the peer address.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
 	if peer, err := netip.ParseAddr(host); err == nil && trustedProxy(peer) {
-		for _, part := range strings.Split(r.Header.Get("X-Forwarded-For"), ",") {
-			if ip, err := netip.ParseAddr(strings.TrimSpace(part)); err == nil {
+		parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		for i := len(parts) - 1; i >= 0; i-- {
+			ip, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+			if err != nil {
+				break
+			}
+			if !trustedProxy(ip) {
 				return ip.String()
 			}
 		}

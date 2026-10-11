@@ -31,13 +31,25 @@ func GenerateTOTPKey(accountEmail string) (*otp.Key, error) {
 // ValidateTOTPCode checks code against secret allowing +/-1 time step
 // (~90s total) of authenticator clock drift.
 func ValidateTOTPCode(secret, code string) bool {
-	ok, err := totp.ValidateCustom(code, secret, time.Now(), totp.ValidateOpts{
-		Period:    30,
-		Skew:      1,
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	return err == nil && ok
+	_, ok := matchTOTPStep(secret, code, time.Now())
+	return ok
+}
+
+// matchTOTPStep returns the 30-second time step (unix/30) within +/-1 of now
+// that code is valid for, so login can record it and refuse a replay.
+func matchTOTPStep(secret, code string, now time.Time) (int64, bool) {
+	cur := now.Unix() / 30
+	for s := cur + 1; s >= cur-1; s-- {
+		ok, err := totp.ValidateCustom(code, secret, time.Unix(s*30, 0), totp.ValidateOpts{
+			Period:    30,
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if err == nil && ok {
+			return s, true
+		}
+	}
+	return 0, false
 }
 
 // sealTOTPSecret encrypts secret with AES-256-GCM under key
@@ -135,5 +147,15 @@ func VerifyTOTPForUser(ctx context.Context, pool *pgxpool.Pool, userID string, k
 	if err != nil {
 		return false, err
 	}
-	return ValidateTOTPCode(secret, code), nil
+	step, ok := matchTOTPStep(secret, code, time.Now())
+	if !ok {
+		return false, nil
+	}
+	// A step is accepted once: the conditional update fails for a code whose
+	// step (or a later one) was already used, including a concurrent replay.
+	tag, err := pool.Exec(ctx, `UPDATE user_totp SET last_used_step = $2 WHERE user_id = $1 AND last_used_step < $2`, userID, step)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }

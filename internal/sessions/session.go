@@ -78,6 +78,21 @@ func ListForProject(ctx context.Context, pool *pgxpool.Pool, projectID string) (
 	return list(ctx, pool, ` WHERE project_id = $1`, projectID)
 }
 
+// BelongsToRuntime reports whether sessionID is a session of a project bound
+// to runtimeID. Runtime-originated messages are only honored for sessions the
+// sending runtime owns; a malformed ID simply reports false.
+func BelongsToRuntime(ctx context.Context, pool *pgxpool.Pool, sessionID, runtimeID string) bool {
+	var ok bool
+	err := pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM terminal_sessions
+			JOIN projects ON projects.id = terminal_sessions.project_id
+			WHERE terminal_sessions.id = $1 AND projects.runtime_id = $2
+		)
+	`, sessionID, runtimeID).Scan(&ok)
+	return err == nil && ok
+}
+
 // LiveSessionIDsForRuntime returns the ids of the runtime's sessions still
 // in a pre-terminal state (requested/starting/running/detached) — the sweep
 // source when a runtime connection drops (ADR-050): an exit event that

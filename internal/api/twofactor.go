@@ -379,6 +379,7 @@ func twoFactorVerifyHandler(db *database.DB, dbEncryptionKey []byte) http.Handle
 			return
 		}
 		if !verified {
+			auth.RecordChallengeFailure(req.ChallengeToken)
 			audit.Record(r.Context(), db.Pool, audit.EventTwoFactorVerifyFailed, audit.Actor{UserID: user.ID, Email: user.Email}, "user", user.ID, map[string]any{"method": req.Method}, clientIP(r))
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid code"})
 			return

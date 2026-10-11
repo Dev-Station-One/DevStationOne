@@ -1129,7 +1129,7 @@ first factor is itself what completes that login.
 
 **Login step-up** (all unauthenticated, driven by `challenge_token` from `/auth/login`):
 
-- `POST /api/v1/auth/2fa/verify` `{challenge_token, method: "totp"|"email"|"backup_code", code, trust_device}` → session cookie + user, same as a normal login. Failed attempts are audited (`auth.2fa_verify_failed`) and re-trigger Turnstile on the next `/auth/login` for that email (docs/DECISIONS.md ADR-044) — no separate rate-limit counter.
+- `POST /api/v1/auth/2fa/verify` `{challenge_token, method: "totp"|"email"|"backup_code", code, trust_device}` → session cookie + user, same as a normal login. Failed attempts are audited (`auth.2fa_verify_failed`) and re-trigger Turnstile on the next `/auth/login` for that email (docs/DECISIONS.md ADR-044) — a challenge is destroyed after 5 failed verifications (the client must log in again), and a TOTP code is accepted only once (a later login with the same 30-second step is rejected).
 - `POST /api/v1/auth/2fa/email/request-code` `{challenge_token}` → `204`, emails a 6-digit code (5 minute expiry, tied to the challenge). Must be called explicitly — picking "email" as the method doesn't silently send mail on every password attempt.
 - `POST /api/v1/auth/2fa/webauthn/login/begin` `{challenge_token}` → `{options}` (`CredentialRequestOptions` for `navigator.credentials.get()`), scoped to the account's own credentials.
 - `POST /api/v1/auth/2fa/webauthn/login/finish?challenge_token=...&trust_device=true` (body is the raw assertion JSON) → session cookie + user.

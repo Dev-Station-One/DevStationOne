@@ -3,11 +3,13 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -523,4 +525,74 @@ func mustUserID(t *testing.T, db *database.DB, email string) string {
 		t.Fatalf("look up %s: %v", email, err)
 	}
 	return u.ID
+}
+
+// loginChallengeFor logs email in with password and returns the 2FA challenge token.
+func loginChallengeFor(t *testing.T, router http.Handler, email, password string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"email": email, "password": password})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewReader(body)))
+	var c struct {
+		ChallengeToken string `json:"challenge_token"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&c); err != nil || c.ChallengeToken == "" {
+		t.Fatalf("login challenge: %v, body = %s", err, rec.Body.String())
+	}
+	return c.ChallengeToken
+}
+
+// verify2FA posts a verification from a fresh client IP each call, so the
+// per-IP login limiter does not mask the per-challenge failure cap.
+var verifyIPSeq atomic.Int32
+
+func verify2FA(router http.Handler, token, method, code string) int {
+	body, _ := json.Marshal(map[string]any{"challenge_token": token, "method": method, "code": code})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/2fa/verify", bytes.NewReader(body))
+	req.RemoteAddr = fmt.Sprintf("198.51.100.%d:4000", verifyIPSeq.Add(1))
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec.Code
+}
+
+func TestTwoFactor_ChallengeDiesAfterFailedGuesses(t *testing.T) {
+	db := testDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	if _, err := auth.CreateUser(t.Context(), db.Pool, "cap@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, secret := enrollTOTP(t, router, "cap@example.com", "password123")
+
+	token := loginChallengeFor(t, router, "cap@example.com", "password123")
+	for i := 0; i < 5; i++ {
+		if got := verify2FA(router, token, "backup_code", "WRONGCODE"); got != http.StatusUnauthorized {
+			t.Fatalf("guess %d: status = %d, want 401", i+1, got)
+		}
+	}
+	// Challenge is gone: even a correct TOTP code cannot complete this login.
+	code, _ := totp.GenerateCode(secret, time.Now())
+	if got := verify2FA(router, token, "totp", code); got != http.StatusUnauthorized {
+		t.Fatalf("correct code after cap: status = %d, want 401", got)
+	}
+}
+
+func TestTwoFactor_TOTPCodeWorksOnce(t *testing.T) {
+	db := testDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	if _, err := auth.CreateUser(t.Context(), db.Pool, "replay@example.com", "password123", false); err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+	_, secret := enrollTOTP(t, router, "replay@example.com", "password123")
+	code, _ := totp.GenerateCode(secret, time.Now())
+
+	if got := verify2FA(router, loginChallengeFor(t, router, "replay@example.com", "password123"), "totp", code); got != http.StatusOK {
+		t.Fatalf("first use: status = %d, want 200", got)
+	}
+	if got := verify2FA(router, loginChallengeFor(t, router, "replay@example.com", "password123"), "totp", code); got != http.StatusUnauthorized {
+		t.Fatalf("replayed code: status = %d, want 401", got)
+	}
 }

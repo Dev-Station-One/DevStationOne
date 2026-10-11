@@ -42,6 +42,7 @@ type LoginChallenge struct {
 	// challenge (empty until /2fa/email/request-code is called).
 	EmailCode string
 	expires   time.Time
+	failures  int
 }
 
 var (
@@ -120,6 +121,26 @@ func SetChallengeEmailCode(token, code string) bool {
 	}
 	c.EmailCode = code
 	return true
+}
+
+// maxChallengeFailures is how many wrong second-factor guesses one login
+// challenge tolerates before it is destroyed and the user must log in again.
+const maxChallengeFailures = 5
+
+// RecordChallengeFailure counts one failed verification against token and
+// deletes the challenge once it reaches maxChallengeFailures, so a challenge
+// cannot be used to brute-force a code.
+func RecordChallengeFailure(token string) {
+	challengeMu.Lock()
+	defer challengeMu.Unlock()
+	c, ok := challengeStore[token]
+	if !ok {
+		return
+	}
+	c.failures++
+	if c.failures >= maxChallengeFailures {
+		delete(challengeStore, token)
+	}
 }
 
 // ConsumeChallenge removes and returns a challenge so its token cannot be

@@ -184,30 +184,50 @@ func csrfProtect(next http.Handler) http.Handler {
 
 // ipLimiter is a per-client-IP token-bucket rate limiter.
 //
-// ponytail: limiters never expire, so a very large number of distinct
-// client IPs grows this map without bound. Fine at MVP/self-hosted scale
-// (docs/PRD.md — one customer's own infrastructure, not a public multi-
-// tenant service); add TTL eviction if that stops being true.
+// Entries idle longer than limiterIdleTTL are dropped (a bucket idle that
+// long has fully refilled, including the 10-per-15-minute pairing limiter),
+// swept at most once per limiterPruneEvery on the next allow call.
 type ipLimiter struct {
 	mu       sync.Mutex
-	limiters map[string]*rate.Limiter
+	limiters map[string]*limiterEntry
+	pruned   time.Time
 	r        rate.Limit
 	b        int
 }
 
+type limiterEntry struct {
+	lim  *rate.Limiter
+	last time.Time
+}
+
+const (
+	limiterIdleTTL    = 20 * time.Minute
+	limiterPruneEvery = time.Minute
+)
+
 func newIPLimiter(r rate.Limit, b int) *ipLimiter {
-	return &ipLimiter{limiters: make(map[string]*rate.Limiter), r: r, b: b}
+	return &ipLimiter{limiters: make(map[string]*limiterEntry), pruned: time.Now(), r: r, b: b}
 }
 
 func (l *ipLimiter) allow(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	lim, ok := l.limiters[ip]
-	if !ok {
-		lim = rate.NewLimiter(l.r, l.b)
-		l.limiters[ip] = lim
+	now := time.Now()
+	if now.Sub(l.pruned) >= limiterPruneEvery {
+		for k, e := range l.limiters {
+			if now.Sub(e.last) > limiterIdleTTL {
+				delete(l.limiters, k)
+			}
+		}
+		l.pruned = now
 	}
-	return lim.Allow()
+	e, ok := l.limiters[ip]
+	if !ok {
+		e = &limiterEntry{lim: rate.NewLimiter(l.r, l.b)}
+		l.limiters[ip] = e
+	}
+	e.last = now
+	return e.lim.Allow()
 }
 
 // rateLimit rejects a request with 429 once ip's bucket is empty.

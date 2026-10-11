@@ -241,3 +241,30 @@ func TestBackupManagerListDeleteRead(t *testing.T) {
 		t.Fatalf("file still exists after delete: %v", err)
 	}
 }
+
+// A symlink already present in the restore directory (not in the archive)
+// must not redirect an archive entry's write outside it.
+func TestRestoreProjectRejectsPreexistingSymlinkEscape(t *testing.T) {
+	root := t.TempDir()
+	withBackupsRoot(t, root)
+	writeMaliciousArchive(t, root, "evil5", []tar.Header{
+		{Name: "link/pwned", Typeflag: tar.TypeReg, Mode: 0o644, Size: 0},
+	})
+
+	outside := t.TempDir()
+	dest := filepath.Join(t.TempDir(), "restored")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dest, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	err := restoreProject(protocol.BackupCommandPayload{FileName: "projects/evil5.tar.gz", RestoreDir: dest})
+	if err == nil {
+		t.Fatal("restoreProject followed a pre-existing symlink out of the restore directory")
+	}
+	if _, statErr := os.Stat(filepath.Join(outside, "pwned")); statErr == nil {
+		t.Fatal("file was written outside the restore directory")
+	}
+}

@@ -48,7 +48,7 @@ embedded copy — which only changes when the binary is rebuilt.
 | `DEVSTATIONONE_SMTP_USERNAME` / `DEVSTATIONONE_SMTP_PASSWORD` | no | Relay credentials (e.g. a Postmark Server Token). Never logged. |
 | `DEVSTATIONONE_SMTP_FROM` | no | Sender address — for Postmark it must be a verified sender signature for the account's server token. |
 | `DEVSTATIONONE_SMTP_STREAM` | no (default unset) | Provider message stream, sent as `X-PM-Message-Stream` (Postmark). |
-| `DEVSTATIONONE_TRUSTED_PROXIES` | no (default unset — RemoteAddr only) | Comma-separated IPs/CIDR ranges of proxies whose `X-Forwarded-For` headers are trusted for rate limiting, audit `client_ip`, and session records. The header is honored only when the TCP peer itself is trusted; a direct client cannot spoof it. Set this on the public deployment (TLS-terminating proxy in front of the server) so external clients don't share one rate-limit bucket. |
+| `DEVSTATIONONE_TRUSTED_PROXIES` | no (default unset — RemoteAddr only) | Comma-separated IPs/CIDR ranges of proxies whose `X-Forwarded-For` headers are trusted for rate limiting, audit `client_ip`, and session records. The header is honored only when the TCP peer itself is trusted, and then the client is the rightmost entry that is not itself a trusted proxy (entries to its left are client-supplied and ignored); a direct client cannot spoof it. Set this on the public deployment (TLS-terminating proxy in front of the server) so external clients don't share one rate-limit bucket. |
 
 See `internal/config` for the authoritative list.
 

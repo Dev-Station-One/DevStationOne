@@ -81,6 +81,8 @@ requirement.
 
 ## ADR-013 — Project ownership: `created_by`, not a shared workspace
 
+> Access-control half superseded by ADR-054: the code is a shared workspace.
+
 Projects are scoped by `created_by` (the DevStationOne account that created
 them), separate from `os_user` (the OS account the runtime executes the
 Project's sessions as, e.g. "brian" in PRD §3). A non-admin user's project
@@ -2022,3 +2024,35 @@ because the API never returns `extra_params` and a client that cannot see
 them must not wipe what the web UI set; an explicit `""` still clears.
 Covered by `TestDeviceDatabasesAuth` and
 `TestDatabaseConnectionHTTP_PatchSecretKeepsExtraParams`.
+
+## ADR-054 — Single-tenant trust model; security hardening pass
+
+**Supersedes the access-control half of ADR-013.** Authorization in the code
+is, and is now documented as, a shared workspace: every authenticated user
+may access every project, and therefore every runtime's terminals, files,
+databases, Docker and services (`authorizedProject`). Ownership
+(`created_by`) only gates editing and deleting a project definition.
+Accounts are created by an administrator, so every account is trusted with
+code execution as the runtime user on every runtime. Per-project membership
+was considered and deferred: it needs a schema, API, web and Android change
+for a deployment shape (one operator's own infrastructure) that does not need
+it yet. Revisit if the installation ever hosts mutually untrusting users.
+
+Hardening shipped with this decision:
+
+1. **Client IP**: `clientIP` takes the rightmost `X-Forwarded-For` entry that
+   is not a trusted proxy (proxies append; the left side is client-supplied).
+   A malformed entry stops the walk and falls back to the peer address. The
+   per-IP limiter evicts entries idle for 20 minutes (swept at most once a
+   minute), so the map cannot grow without bound.
+2. **2FA**: a login challenge is deleted after 5 failed verifications, and
+   `user_totp.last_used_step` (migration 0024) makes each TOTP step
+   single-use via a conditional update, closing replay and concurrent
+   replay. WebAuthn login is signature-based, not guessable, and is left out.
+3. **Runtime messages**: `session.ready/error/exit/closed` and terminal
+   frames from a runtime are honored only for sessions of projects bound to
+   that runtime (`sessions.BelongsToRuntime`; frame results cached per
+   connection). Anything else is dropped with a warning.
+4. **Project restore**: extraction writes through an `os.Root` on the
+   restore directory, so symlinks already on disk cannot redirect writes,
+   with ceilings of 5,000,000 entries and 64 GiB extracted.

@@ -572,6 +572,13 @@ func archiveDir(sourceDir, out, backupID string) error {
 	return os.WriteFile(strings.TrimSuffix(out, ".tar.gz")+".json", mb, 0o644)
 }
 
+// Restore ceilings against decompression bombs.
+// ponytail: fixed caps, no config knob unless a real project needs more.
+const (
+	maxRestoreEntries       = 5_000_000
+	maxRestoreBytes   int64 = 64 << 30
+)
+
 // restoreProject extracts the archive at cmd.FileName into cmd.RestoreDir,
 // after validating its manifest. Every entry is containment-checked: names
 // must stay inside the target, symlink targets must stay inside it too.
@@ -622,7 +629,17 @@ func restoreProject(cmd protocol.BackupCommandPayload) error {
 	if err := os.MkdirAll(absTarget, 0o755); err != nil {
 		return err
 	}
+	// Every write goes through an os.Root so that symlinks already present
+	// in the restore directory (not just ones in the archive) cannot redirect
+	// a write outside it — same containment as internal/filesystem.
+	dir, err := os.OpenRoot(absTarget)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
 
+	var entries int
+	var total int64
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -631,6 +648,9 @@ func restoreProject(cmd protocol.BackupCommandPayload) error {
 		}
 		if err != nil {
 			return fmt.Errorf("read archive: %w", err)
+		}
+		if entries++; entries > maxRestoreEntries {
+			return fmt.Errorf("archive has more than %d entries", maxRestoreEntries)
 		}
 		// Containment check: reject absolute names, anything escaping the
 		// target (rejected outright, never silently clamped to the root —
@@ -644,45 +664,49 @@ func restoreProject(cmd protocol.BackupCommandPayload) error {
 		if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("archive entry %q escapes the restore directory", name)
 		}
-		dest := filepath.Join(absTarget, clean)
-		if dest != absTarget && !strings.HasPrefix(dest, absTarget+string(filepath.Separator)) {
-			return fmt.Errorf("archive entry %q escapes the restore directory", name)
+		if clean == "." {
+			continue
 		}
 		if hdr.Typeflag == tar.TypeSymlink {
 			linkDest := filepath.FromSlash(hdr.Linkname)
-			var resolved string
 			if filepath.IsAbs(linkDest) {
 				return fmt.Errorf("archive symlink %q is absolute", name)
 			}
-			resolved = filepath.Join(filepath.Dir(dest), linkDest)
+			resolved := filepath.Join(absTarget, filepath.Dir(clean), linkDest)
 			if !strings.HasPrefix(resolved, absTarget+string(filepath.Separator)) {
 				return fmt.Errorf("archive symlink %q escapes the restore directory", name)
 			}
-			_ = os.Remove(dest)
-			if err := os.Symlink(linkDest, dest); err != nil {
+			if err := dir.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
+				return err
+			}
+			_ = dir.Remove(clean)
+			if err := dir.Symlink(linkDest, clean); err != nil {
 				return err
 			}
 			continue
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(dest, os.FileMode(hdr.Mode)|0o700); err != nil {
+			if err := dir.MkdirAll(clean, os.FileMode(hdr.Mode)|0o700); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			if err := dir.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
 				return err
 			}
-			_ = os.Remove(dest)
-			outF, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode)&0o777|0o600)
+			_ = dir.Remove(clean)
+			outF, err := dir.OpenFile(clean, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode)&0o777|0o600)
 			if err != nil {
 				return err
 			}
-			if _, err := io.Copy(outF, tr); err != nil {
-				outF.Close()
+			n, err := io.Copy(outF, io.LimitReader(tr, maxRestoreBytes-total+1))
+			outF.Close()
+			if err != nil {
 				return err
 			}
-			outF.Close()
+			if total += n; total > maxRestoreBytes {
+				return fmt.Errorf("archive expands beyond %d bytes", int64(maxRestoreBytes))
+			}
 		default:
 			// Hard links, devices, fifos: skip rather than fail the whole
 			// restore on entries a dev project archive realistically never

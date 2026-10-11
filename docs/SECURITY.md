@@ -7,7 +7,7 @@ Assume:
 - clients may be compromised
 - browser requests may be maliciously modified
 - runtimes may disconnect/reconnect
-- users may attempt cross-project access
+- authenticated users are trusted with every project and runtime (ADR-054); an unauthenticated or device-less caller must never reach one
 - filesystem paths may contain traversal or symlink attacks
 - database credentials are sensitive
 - terminal sessions provide arbitrary code execution by design
@@ -21,6 +21,12 @@ Authentication and authorization.
 ### Control Server → Runtime
 
 Cryptographically authenticated runtime identity.
+
+### Runtime → Control Server
+
+A runtime authenticates with its enrollment token and may only affect the
+sessions of projects bound to it: session lifecycle messages and terminal
+frames for any other session are dropped (ADR-054).
 
 ### Runtime → Operating System
 
@@ -60,9 +66,18 @@ needs a client build that supports it (a MariaDB-flavored `mysqldump`/
 `mysql` does not). Project-archive extraction re-validates every entry's
 containment (rejects `..`, absolute paths, and symlink targets escaping the
 destination) independently of anything the Control Server already checked,
-the same discipline as `internal/filesystem`.
+and writes through an `os.Root` so symlinks already present in the
+destination cannot redirect a write; it also caps entries and extracted
+bytes. Same discipline as `internal/filesystem`.
 
 ## Authorization
+
+Trust model (ADR-054): single-tenant. Accounts are created by an
+administrator, and every authenticated user may access every project and
+runtime, including terminals (code execution as the runtime user), files,
+databases, Docker and services. Ownership gates only editing and deleting a
+project definition. There is no cross-user isolation to rely on; do not
+create accounts for people you would not give a shell on every runtime.
 
 Every request must establish:
 - authenticated principal
@@ -181,7 +196,15 @@ one instance per Control Server process:
   exempt — the UI polls read endpoints by design (runtime/session/service
   status), and the actual abuse surface is state-changing requests.
 
-Exceeding a bucket returns `429`.
+Exceeding a bucket returns `429`. The client IP is the rightmost
+`X-Forwarded-For` entry that is not a trusted proxy (only when the TCP peer
+is one, `DEVSTATIONONE_TRUSTED_PROXIES`), so a client cannot rotate a
+spoofed address to reset its bucket. Idle buckets are evicted after 20
+minutes.
+
+A second-factor challenge is destroyed after 5 failed verifications, and a
+TOTP step is accepted only once, so a code cannot be brute-forced against
+one challenge or replayed.
 
 Optional, additional to the rate limit above: Cloudflare Turnstile on
 login (docs/DECISIONS.md ADR-044), configured via
