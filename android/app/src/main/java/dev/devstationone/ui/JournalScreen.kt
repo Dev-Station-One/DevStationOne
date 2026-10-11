@@ -130,7 +130,7 @@ internal fun Tool(label: String, onClick: () -> Unit) {
  * created note) opens it straight into edit mode.
  */
 @Composable
-fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary, Boolean) -> Unit) {
+fun JournalScreen(server: Server, projectID: String, refresh: Int = 0, onOpen: (JournalNoteSummary, Boolean) -> Unit) {
     val scope = rememberCoroutineScope()
     val api = remember { Api(server) }
     var notes by remember { mutableStateOf<List<JournalNoteSummary>>(emptyList()) }
@@ -155,6 +155,29 @@ fun JournalScreen(server: Server, projectID: String, onOpen: (JournalNoteSummary
         }
     }
     LaunchedEffect(projectID) { loadMore() }
+
+    // The list stays composed under the note overlay, so an edit or delete
+    // there is invisible here until it reloads. Replaces what is loaded with
+    // a fresh first page at least as long as the current list.
+    // ponytail: server page cap is 100, so a list scrolled past that is
+    // trimmed back to 100 on refresh; scrolling pages in the rest again.
+    fun reload() {
+        if (busy) return
+        busy = true
+        val limit = notes.size.coerceIn(25, 100)
+        scope.launch {
+            try {
+                val p = withContext(Dispatchers.IO) { api.journal(projectID, limit, 0) }
+                total = p.total
+                notes = p.notes
+                error = null
+            } catch (e: Exception) {
+                error = "Journal failed to refresh: ${e.message?.take(200)}"
+            }
+            busy = false
+        }
+    }
+    LaunchedEffect(refresh) { if (refresh > 0) reload() }
 
     fun create() {
         if (busy) return
@@ -378,7 +401,9 @@ fun NoteScreen(server: Server, projectID: String, projectName: String, noteID: S
 
     fun exec(cmd: String, value: String? = null) {
         val v = webView.value ?: return
-        v.requestFocus() // keep the DOM selection: toolbar taps moved focus out of the WebView
+        // No requestFocus: the WebView renders only (IME is owned by the
+        // native capture view inside HtmlPanel); the DOM selection sits in
+        // the contenteditable and toolbar commands apply to it.
         v.evaluateJavascript(
             "exec('${jsString(cmd)}', ${value?.let { "'${jsString(it)}'" } ?: "null"})",
             null,

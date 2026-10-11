@@ -223,7 +223,7 @@ integration tests.
 | LGPL-2.1 in distributed APK | Unmodified Maven AAR dependency + notice; no source fork. Documented in VENDOR.md |
 | `execCommand` deprecation | Works in WebView today; scope is a fixed minimal toolbar; revisit only if Chrome removes it |
 | TextMate grammar weight / load jank | Subset + lazy grammar load on file open; measured in on-device E2E |
-| contenteditable + IME quirks (Chinese/Japanese…) | Round-1 note editing is plain-text-shaped HTML; watch E2E; terminal IME path unchanged |
+| ~~contenteditable + IME quirks (Chinese/Japanese…)~~ **Realized (2026-10-11, Pixel 8a release 0.1.0):** the WebView in this app never delivers IME text into a contenteditable — the keyboard appears but commits never mutate the DOM, with or without a live `WebEditText` connection. The terminal's answer applies to notes too: `HtmlPanel` composes a rendering-only WebView (`isFocusable=false`) plus a focusable 1x1 `NoteCaptureView` (the `KeyCaptureView` pattern, sink = page ops); the page's `askIme()` bridge shows the IME on it, and commits arrive as `insert(b64)`/`key(name)` (`execCommand('insertText')`/`delete`/`insertLineBreak`/caret `Selection.modify`) at the DOM caret, which body taps move freely. `KeyCaptureView` itself is untouched (terminal-verified path) |
 | sora-editor release-mode R8 issues | Keep rules already shipped by the lib; re-run `assembleRelease` in slice 5 before merge |
 | Attachment URLs inside body_html | All go through the intercept rule (§5); no unsanitized render |
 

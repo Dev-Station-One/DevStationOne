@@ -1,9 +1,11 @@
 package dev.devstationone.ui
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Base64
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -87,17 +89,31 @@ fun HtmlPanel(
     var rendered by remember { mutableStateOf("") }
     var editingOn by remember { mutableStateOf(false) }
     val latestOnHtml by rememberUpdatedState(onHtml)
+    // Factory runs once; the holder survives recompositions so update() can
+    // reach the WebView the factory built. [0] = WebView, [1] = capture view.
+    val views = remember { arrayOfNulls<android.view.View>(2) }
 
     AndroidView(
         modifier = modifier,
         factory = { c ->
-            WebView(c).apply {
+            // Terminal-pane shape (TerminalPaneView): the WebView renders only —
+            // its Chromium IME path is unreliable in this app and never moves IME
+            // text into a contenteditable — while a NoteCaptureView owns the soft
+            // keyboard and forwards text/keys into the page. The WebView is left
+            // unfocusable so taps reposition the DOM caret without stealing the
+            // IME connection from the capture view.
+            // The capture view is created after the WebView (its lambdas call
+            // into the page); the bridge resolves it through this holder.
+            val keysRef = arrayOfNulls<NoteCaptureView>(1)
+            val wv = WebView(c).apply {
                 settings.javaScriptEnabled = true
                 settings.allowFileAccess = false // the android_asset page needs none
                 settings.allowContentAccess = false
                 setBackgroundColor(android.graphics.Color.TRANSPARENT)
                 isVerticalScrollBarEnabled = false
                 overScrollMode = View.OVER_SCROLL_NEVER
+                isFocusable = false
+                isFocusableInTouchMode = false
                 webViewClient = object : WebViewClient() {
                     // the note page never navigates anywhere
                     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = true
@@ -113,6 +129,18 @@ fun HtmlPanel(
                         Handler(Looper.getMainLooper()).post { ready = true }
                     }
 
+                    /** The page (a tap in the body or editOn) wants the IME. */
+                    @android.webkit.JavascriptInterface
+                    fun ime() {
+                        Handler(Looper.getMainLooper()).post {
+                            keysRef[0]?.let { k ->
+                                k.requestFocus()
+                                (context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                                    .showSoftInput(k, InputMethodManager.SHOW_IMPLICIT)
+                            }
+                        }
+                    }
+
                     /** Sanitized-edit snapshot pushed by the page; UTF-8 HTML in base64. */
                     @android.webkit.JavascriptInterface
                     fun html(b64: String) {
@@ -123,18 +151,39 @@ fun HtmlPanel(
                 }, "Android")
                 loadUrl(NOTE_PAGE)
             }
+            val keys = NoteCaptureView(
+                c,
+                // The page's insert() expects base64 UTF-8 (quotes/HTML can't
+                // break the JS string) — encode the IME's raw commit here.
+                onText = { text: String ->
+                    val b64 = Base64.encodeToString(text.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+                    wv.evaluateJavascript("insert('$b64')", null)
+                },
+                onKey = { name: String ->
+                    wv.evaluateJavascript("key('$name')", null)
+                },
+            )
+            webViewRef?.value = wv
+            keysRef[0] = keys
+            views[0] = wv
+            views[1] = keys
+            android.widget.FrameLayout(c).apply {
+                addView(wv, android.widget.FrameLayout.LayoutParams(
+                    android.widget.FrameLayout.LayoutParams.MATCH_PARENT, android.widget.FrameLayout.LayoutParams.MATCH_PARENT))
+                addView(keys, android.widget.FrameLayout.LayoutParams(1, 1))
+            }
         },
-        update = { v ->
-            if (webViewRef != null) webViewRef.value = v
-            if (ready) {
+        update = {
+            val wv = views[0] as? WebView
+            if (ready && wv != null) {
                 when {
                     editing && !editingOn -> {
                         editingOn = true
                         if (html != rendered) {
                             rendered = html
-                            v.evaluateJavascript("setBody('${Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)}')", null)
+                            wv.evaluateJavascript("setBody('${Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)}')", null)
                         }
-                        v.evaluateJavascript("editOn()", null)
+                        wv.evaluateJavascript("editOn()", null)
                     }
                     !editing && editingOn -> {
                         editingOn = false
@@ -144,10 +193,10 @@ fun HtmlPanel(
                 // base64 keeps quotes/HTML out of the JS string
                 if (html != rendered && !editingOn) {
                     rendered = html
-                    v.evaluateJavascript("setBody('${Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)}')", null)
+                    wv.evaluateJavascript("setBody('${Base64.encodeToString(html.toByteArray(), Base64.NO_WRAP)}')", null)
                 }
             }
         },
-        onRelease = { it.destroy() },
+        onRelease = { (views[0] as? WebView)?.destroy() },
     )
 }

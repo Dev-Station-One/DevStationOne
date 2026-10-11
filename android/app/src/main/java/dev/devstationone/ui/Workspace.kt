@@ -68,6 +68,7 @@ fun WorkspaceScreen(
     LaunchedEffect(tab) { ui.setTab(server.id, projectID, tab) }
     var noteID by remember { mutableStateOf<String?>(null) }
     var noteStartEdit by remember { mutableStateOf(false) }
+    var journalRefresh by remember { mutableIntStateOf(0) } // bumped when a note closes: list reloads
     var filePath by remember { mutableStateOf<String?>(null) }
     var diff by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
 
@@ -105,7 +106,7 @@ fun WorkspaceScreen(
                         TerminalBodyContent(ctrl, active = tab == 0, shortcuts, onShortcuts)
                     }
                     Box(Modifier.fillMaxSize().hiddenOther(tab != 1)) {
-                        JournalScreen(server, projectID, onOpen = { n, startEdit ->
+                        JournalScreen(server, projectID, refresh = journalRefresh, onOpen = { n, startEdit ->
                             noteID = n.id
                             noteStartEdit = startEdit
                         })
@@ -123,7 +124,7 @@ fun WorkspaceScreen(
             }
             // Full-screen overlays: the workspace stays alive underneath.
             noteID?.let { id ->
-                NoteScreen(server, projectID, projectName, id, startEdit = noteStartEdit, onBack = { noteID = null })
+                NoteScreen(server, projectID, projectName, id, startEdit = noteStartEdit, onBack = { noteID = null; journalRefresh++ })
             }
             filePath?.let { p ->
                 CodeScreen(server, projectID, projectName, p, onBack = { filePath = null })

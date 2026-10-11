@@ -66,11 +66,22 @@ var pushTimer = null;
 function push() {
   Android.html(b64enc(DOMPurify.sanitize(body.innerHTML)));
 }
+// Native input path (round 1, see HtmlPanel): the WebView's own IME handling
+// is unreliable in this app — keyboard text never reached the contenteditable
+// (E2E-verified on a Pixel 8a) — so HtmlPanel's NoteCaptureView owns the IME
+// and calls into the page. askIme shows the keyboard on the native capture
+// view; body.focus() first keeps the DOM caret (the insert point for
+// insertText, and what taps move).
+function askIme() {
+  if (window.Android && Android.ime) Android.ime();
+}
 function editOn() {
   body.contentEditable = 'true';
   body.focus();
+  askIme();
   push(); // first snapshot: arms Save and plants the draft (NFR-3)
 }
+body.addEventListener('pointerdown', askIme);
 function editOff() {
   body.contentEditable = 'false';
 }
@@ -78,6 +89,36 @@ body.addEventListener('input', function () {
   if (pushTimer) clearTimeout(pushTimer);
   pushTimer = setTimeout(push, 600); // debounced draft autosave
 });
+
+// insert(b64): IME text commits, inserted at the current caret.
+function insert(b64) {
+  try {
+    exec('insertText', b64dec(b64));
+  } catch (e) { /* malformed input on a coding bug: drop, never insert garbage */ }
+}
+// key(name): backspace/delete/enter and caret moves from the capture view.
+function key(name) {
+  switch (name) {
+    case 'backspace':
+      exec('delete');
+      break;
+    case 'forwardDelete': {
+      var s = window.getSelection();
+      if (s.modify) s.modify('extend', 'forward', 'character');
+      exec('delete');
+      break;
+    }
+    case 'enter':
+      exec('insertLineBreak');
+      break;
+    case 'left': case 'right': case 'up': case 'down': {
+      var s = window.getSelection();
+      if (s.modify) s.modify('move', (name === 'left' || name === 'up') ? 'backward' : 'forward',
+                             (name === 'left' || name === 'right') ? 'character' : 'line');
+      break;
+    }
+  }
+}
 function exec(cmd, val) {
   document.execCommand(cmd, false, val || null);
 }

@@ -224,3 +224,93 @@ class KeyCaptureView(ctx: Context, private val enc: InputEncoder) : View(ctx) {
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean =
         enc.keyEvent(event) || super.onKeyDown(keyCode, event)
 }
+
+/**
+ * The note editor's counterpart to [KeyCaptureView]: an invisible focusable
+ * view that owns the soft keyboard (the WebView's own IME handling is
+ * unreliable in this app, and the Chromium path never moves text into a
+ * contenteditable here — verified by E2E, release build on a Pixel 8a).
+ * Commits become page operations via [onText] (base64 UTF-8) and [onKey]
+ * (a small key vocabulary), which HtmlPanel forwards into note.html.
+ */
+class NoteCaptureView(
+    ctx: Context,
+    private val onText: (String) -> Unit,
+    private val onKey: (String) -> Unit,
+) : View(ctx) {
+    private var composing = ""
+
+    init {
+        isFocusable = true
+        isFocusableInTouchMode = true
+    }
+
+    // Multi-line prose, not terminal keystrokes: suggestions allowed.
+    override fun onCheckIsTextEditor() = true
+
+    override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        outAttrs.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+            InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+        outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_FULLSCREEN or
+            EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_ACTION_NONE
+        composing = ""
+        return object : BaseInputConnection(this, false) {
+            override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean =
+                applyComposing(text.toString(), keepComposing = true)
+            override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean =
+                applyComposing(text.toString(), keepComposing = false)
+            override fun finishComposingText(): Boolean {
+                composing = ""
+                return true
+            }
+            override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
+                composing = ""
+                repeat(beforeLength) { onKey("backspace") }
+                if (afterLength > 0) onKey("forwardDelete")
+                return true
+            }
+            override fun performEditorAction(actionCode: Int): Boolean {
+                onKey("enter")
+                return true
+            }
+            override fun sendKeyEvent(event: KeyEvent): Boolean {
+                if (event.action == KeyEvent.ACTION_DOWN) {
+                    forwardKeyEvent(event)?.let { return it }
+                }
+                return super.sendKeyEvent(event)
+            }
+            override fun getTextBeforeCursor(n: Int, flags: Int): CharSequence = ""
+            override fun getTextAfterCursor(n: Int, flags: Int): CharSequence = ""
+        }
+    }
+
+    /** Maps a key event to a page operation; null = not handled here. */
+    private fun forwardKeyEvent(event: KeyEvent): Boolean? = when (event.keyCode) {
+        KeyEvent.KEYCODE_DEL -> onKey("backspace").let { true }
+        KeyEvent.KEYCODE_FORWARD_DEL -> onKey("forwardDelete").let { true }
+        KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER -> onKey("enter").let { true }
+        KeyEvent.KEYCODE_SPACE -> onText(" ").let { true }
+        KeyEvent.KEYCODE_DPAD_LEFT -> onKey("left").let { true }
+        KeyEvent.KEYCODE_DPAD_RIGHT -> onKey("right").let { true }
+        KeyEvent.KEYCODE_DPAD_UP -> onKey("up").let { true }
+        KeyEvent.KEYCODE_DPAD_DOWN -> onKey("down").let { true }
+        else -> {
+            val ch = event.getUnicodeChar(event.metaState and KeyEvent.META_CTRL_MASK.inv())
+            if (ch != 0 && event.isPrintingKey) onText(String(Character.toChars(ch)))
+            ch != 0 && event.isPrintingKey
+        }
+    }
+
+    /**
+     * Diff the IME's composing text so autocorrect replaces instead of appending.
+     * The page receives only what changed.
+     */
+    private fun applyComposing(new: String, keepComposing: Boolean): Boolean {
+        var i = 0
+        while (i < composing.length && i < new.length && composing[i] == new[i]) i++
+        if (composing.length > i) repeat(composing.length - i) { onKey("backspace") }
+        if (new.length > i) onText(new.substring(i))
+        composing = if (keepComposing) new else ""
+        return true
+    }
+}

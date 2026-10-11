@@ -1552,6 +1552,12 @@ server routes changed — a prod deploy):
    hidden), JournalScreen list, NoteScreen view with `HtmlPanel`
    (DOMPurify + Sig-header interception). Tests: `JournalModelsTest`.
 2. Note edit: contenteditable + native execCommand toolbar, `Api.putNote`,
+   **2026-10-11 fix**: IME text never reached the contenteditable through the
+   WebView in this app (keyboard showed, DOM stayed empty). Note editing now
+   uses the terminal's native-input pattern: non-focusable rendering WebView
+   + `NoteCaptureView` (Input.kt) owning the keyboard; commits become
+   `insert(b64)`/`key(name)` page ops; taps in the body move the DOM caret.
+   See DESIGN_ANDROID_PARITY risk table and the fix's commit.
    `NoteDraftStore` (draft removed only after a successful PUT),
    sanitize-on-save. Tests: `NoteEditArgsTest`.
 3. Attachments: multipart upload (camera via FileProvider + document
