@@ -5,15 +5,22 @@
 <h1 align="center">DevStationOne</h1>
 
 <p align="center">
-  <strong>Your development machines, in your browser. Self-hosted.</strong><br>
-  Terminals, files, Git, databases, Docker, and services for every dev box you own, behind one private web UI.
+  <strong>Close the laptop. Your dev environment keeps running.</strong><br>
+  Every machine you code on, in one browser tab. Self-hosted, with zero inbound ports.
 </p>
 
 ---
 
-DevStationOne turns your development machines into browser-accessible workspaces. Run a **Control Server** on hardware you control, install a small **Runtime** agent on each machine you develop on, and open those machines from any browser or from the Android client.
+Your code lives on a laptop, a homelab box, a GPU rig, a cloud VM. Reaching each one means SSH sessions, tmux, port forwards, and a VPN you hope is up. DevStationOne replaces all of it with one private URL.
 
-There is no vendor relay. The Control Server and PostgreSQL are yours, and runtimes connect *out* to the server, so dev machines need no inbound ports and no SSH juggling.
+Run a **Control Server** on hardware you own, and drop a small **Runtime** agent on each dev machine. The agent dials out to your server, and from then on any browser or your phone opens that machine as a full workspace: the shell, the dev server, and the Claude Code session you left running are all still there. Terminals are real PTYs that outlive your browser, so you reattach instead of restarting.
+
+- **Sessions that never die.** Lose Wi-Fi, switch devices, come back tomorrow, and pick up mid-command.
+- **Nothing to open on the firewall.** Runtimes connect out, so NAT, CGNAT, and home routers just work.
+- **More than a shell.** Files, an editor, Git, four database engines, Docker, and systemd services sit beside your terminals in the same project tab.
+- **Your hardware, your data.** No vendor relay and no hosted account. The server and its PostgreSQL run where you put them.
+- **Built for AI CLIs.** Claude Code and friends run as ordinary processes in the project directory, so `CLAUDE.md`, skills, and MCP config just work.
+- **API-first.** Everything the UI does is a documented REST/WebSocket call, so you can script it.
 
 ## What you get
 
