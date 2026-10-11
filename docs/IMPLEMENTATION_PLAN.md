@@ -1693,4 +1693,15 @@ never reports rows affected, update/delete re-fetch the page and
 `editLanded` flags "No row matched — nothing changed" when the row is still
 present and unchanged. `DbLogicTest` covers type coercion, blocked reasons,
 changed-column-only updates, NULL/invalid rejection and the landed check.
-Stages 6-8 (connection CRUD, principals/grants, backups) **Not Started**.
+Stage 6 (connection CRUD) **Complete in code, not yet verified on device**
+— `Api.dbSave`/`dbDelete`/`dbTest`, `ConnectionForm` (engine chips locked
+once saved, fields per engine, SQLite = name + file path, port defaults,
+`validateConnection` mirroring the server rules), `+ Add` and per-card
+`Edit` on the Connections list, delete confirm, Test against the saved
+record only (no draft-test route). Password is held in plain `remember`
+(never saveable or logged), cleared on save; on edit a blank password
+omits `secret` so the stored one is kept, and `extra_params` is never sent
+(D4), so the phone cannot clear a stored password. No server change: the
+existing POST/PATCH/DELETE/test routes were already covered by
+`TestDeviceDatabasesAuth`. Stages 7-8 (principals/grants, backups) **Not
+Started**.

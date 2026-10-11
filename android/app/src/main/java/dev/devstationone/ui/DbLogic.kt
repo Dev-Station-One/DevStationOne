@@ -19,6 +19,8 @@ sealed interface DbRoute {
     data object Connections : DbRoute
     data class Tables(val conn: DbConnection) : DbRoute
     data class Sql(val conn: DbConnection) : DbRoute
+    /** [conn] null = new connection. */
+    data class Form(val conn: DbConnection?) : DbRoute
     data class Data(val conn: DbConnection, val schema: String, val table: String) : DbRoute
     data class Structure(val conn: DbConnection, val schema: String, val table: String) : DbRoute
 }
@@ -128,6 +130,24 @@ internal const val SQL_HISTORY_MAX = 20
 /** Newest-first, de-duplicated, capped history after running [sql]. */
 internal fun pushHistory(history: List<String>, sql: String): List<String> =
     (listOf(sql.trim()) + history.filter { it != sql.trim() }).take(SQL_HISTORY_MAX)
+
+// ---- connection form (design §5) ----
+
+internal fun defaultPort(engine: String): Int = when (engine) {
+    "postgresql" -> 5432
+    "mysql" -> 3306
+    "mssql" -> 1433
+    else -> 0
+}
+
+/** Mirrors the server's validateConnectionFields plus a port range check; null = ok. */
+internal fun validateConnection(engine: String, name: String, host: String, port: String, database: String): String? = when {
+    name.isBlank() -> "Name is required"
+    engine != "sqlite" && host.isBlank() -> "Host is required"
+    engine != "sqlite" && port.isNotBlank() && port.trim().toIntOrNull()?.let { it in 1..65535 } != true -> "Port must be 1–65535"
+    database.isBlank() -> if (engine == "sqlite") "File path is required" else "Database is required"
+    else -> null
+}
 
 // ---- row editing (design D3/D5) ----
 

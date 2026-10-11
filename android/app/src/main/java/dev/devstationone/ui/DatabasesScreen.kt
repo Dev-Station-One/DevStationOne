@@ -62,10 +62,16 @@ import kotlinx.coroutines.withContext
 fun DatabasesScreen(server: Server, projectID: String, active: Boolean) {
     val api = remember(server) { Api(server) }
     val stack: SnapshotStateList<DbRoute> = remember(projectID) { mutableStateListOf(DbRoute.Connections) }
+    var rev by remember { mutableIntStateOf(0) } // bumped after a save/delete so the list reloads
     BackHandler(enabled = active && stack.size > 1) { stack.removeLast() }
 
     when (val r = stack.last()) {
-        DbRoute.Connections -> ConnectionsView(api, projectID, onOpen = { stack += DbRoute.Tables(it) })
+        DbRoute.Connections -> ConnectionsView(
+            api, projectID, rev,
+            onOpen = { stack += DbRoute.Tables(it) },
+            onEdit = { stack += DbRoute.Form(it) },
+        )
+        is DbRoute.Form -> ConnectionForm(api, projectID, r, onBack = { stack.removeLast() }, onChanged = { rev++; stack.removeLast() })
         is DbRoute.Tables -> TablesView(
             api, projectID, r.conn,
             onBack = { stack.removeLast() },
@@ -120,11 +126,11 @@ private fun Empty(text: String) =
     Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
 
 @Composable
-private fun ConnectionsView(api: Api, projectID: String, onOpen: (DbConnection) -> Unit) {
+private fun ConnectionsView(api: Api, projectID: String, rev: Int, onOpen: (DbConnection) -> Unit, onEdit: (DbConnection?) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader("Databases")
-        Loaded(projectID, { api.dbConnections(projectID) }) { conns ->
-            if (conns.isEmpty()) Empty("No database connections yet. Add one from the web UI.")
+        ScreenHeader("Databases", actions = { TextButton(onClick = { onEdit(null) }) { Text("+ Add") } })
+        Loaded(projectID to rev, { api.dbConnections(projectID) }) { conns ->
+            if (conns.isEmpty()) Empty("No database connections yet. Tap + Add.")
             LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(conns, key = { it.id }) { c ->
                     MuxCard(onClick = { onOpen(c) }) {
@@ -132,6 +138,7 @@ private fun ConnectionsView(api: Api, projectID: String, onOpen: (DbConnection) 
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Text(c.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                                 Text(engineLabel(c.engine), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Edit", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, modifier = Modifier.clickable { onEdit(c) })
                             }
                             Text(connectionTarget(c), fontSize = 13.sp, fontFamily = FontFamily.Monospace, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

@@ -76,6 +76,16 @@ data class DbRows(
     val rows_affected: Long = 0,
 )
 
+/** Editable connection fields (everything but the secret). Blank [port] is sent as 0 = engine default. */
+class DbConnForm(
+    val name: String, val engine: String, val host: String, val port: Int, val username: String,
+    val database: String, val ssl_mode: String, val instance_name: String, val search_path: String,
+)
+
+/** `/test` answers 200 with ok=false and the driver error for a bad connection — not an HTTP failure. */
+@Serializable
+data class DbTestResult(val ok: Boolean = false, val error: String = "")
+
 /** One row change for the commit call: [original] = primary-key columns only (D3); [values] = changed columns. */
 class DbEdit(val op: String, val original: Map<String, JsonElement> = emptyMap(), val values: Map<String, JsonElement> = emptyMap())
 
@@ -179,3 +189,40 @@ fun Api.dbCommit(projectID: String, connID: String, schema: String, table: Strin
     }.toString().toRequestBody("application/json".toMediaType())
     Api.netClient.newCall(request("PATCH", dbTableUrl(projectID, connID, schema, table, "rows"), body)).execute().use { check(it) }
 }
+
+private fun jsonBody(obj: JsonObject) = obj.toString().toRequestBody("application/json".toMediaType())
+
+private fun DbConnForm.fields(b: kotlinx.serialization.json.JsonObjectBuilder) = b.apply {
+    put("name", name); put("engine", engine); put("host", host); put("port", port); put("username", username)
+    put("database", database); put("ssl_mode", ssl_mode); put("instance_name", instance_name); put("search_path", search_path)
+}
+
+/**
+ * Creates ([id] null) or updates a connection. Create sends [password] flat; update sends `secret`
+ * only when [password] is non-blank, and omits `extra_params` so the web-set value is kept (D4).
+ */
+fun Api.dbSave(projectID: String, id: String?, f: DbConnForm, password: String): DbConnection {
+    val req = if (id == null) {
+        request("POST", dbUrl(projectID), jsonBody(buildJsonObject { f.fields(this); put("password", password) }))
+    } else {
+        request("PATCH", dbUrl(projectID, id), jsonBody(buildJsonObject {
+            f.fields(this)
+            if (password.isNotEmpty()) put("secret", buildJsonObject { put("password", password) })
+        }))
+    }
+    return Api.client.newCall(req).execute().use {
+        check(it)
+        Api.json.decodeFromString(it.jsonText())
+    }
+}
+
+fun Api.dbDelete(projectID: String, connID: String) {
+    Api.client.newCall(request("DELETE", dbUrl(projectID, connID))).execute().use { check(it) }
+}
+
+/** Tests the *saved* connection (no draft-test route exists). */
+fun Api.dbTest(projectID: String, connID: String): DbTestResult =
+    Api.netClient.newCall(request("POST", dbUrl(projectID, connID, "test"), bodyOf())).execute().use {
+        check(it)
+        Api.json.decodeFromString(it.jsonText())
+    }

@@ -169,6 +169,20 @@ class DbLogicTest {
     }
 
     @Test
+    fun connectionFormValidationMatchesServerRules() {
+        assertEquals(5432, defaultPort("postgresql"))
+        assertEquals(0, defaultPort("sqlite"))
+        assertEquals("Name is required", validateConnection("postgresql", " ", "h", "5432", "d"))
+        assertEquals("Host is required", validateConnection("mysql", "n", "", "3306", "d"))
+        assertEquals("Port must be 1–65535", validateConnection("mysql", "n", "h", "70000", "d"))
+        assertEquals("Port must be 1–65535", validateConnection("mysql", "n", "h", "abc", "d"))
+        assertEquals("Database is required", validateConnection("mssql", "n", "h", "", ""))
+        assertEquals("File path is required", validateConnection("sqlite", "n", "", "", ""))
+        assertEquals(null, validateConnection("sqlite", "n", "", "", "/data/x.db")) // host/port ignored
+        assertEquals(null, validateConnection("postgresql", "n", "h", "", "d")) // blank port = default
+    }
+
+    @Test
     fun connectionTargetForServerAndFileEngines() {
         val pg = DbConnection("1", "p", "postgresql", host = "db", port = 5432, database = "app")
         assertEquals("db:5432/app", connectionTarget(pg))
