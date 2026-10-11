@@ -1674,7 +1674,7 @@ only, no captured-fixture decode tests yet). Stage 3 (data browser)
 (raw filter, has_more paging at 100 rows, row bottom sheet), Structure now
 reached from the Data header; `DbLogicTest` covers sort cycle, page label,
 cell text, width clamp and a `DbRows` decode with nulls. Stage 4 (SQL editor)
-**Complete in code, not yet verified on device** — `Api.dbQuery` (suspend;
+**Complete; on-device E2E passed (reported by the user, 2026-10-11, release build on Pixel 8a against prod)** — `Api.dbQuery` (suspend;
 cancelling the coroutine cancels the HTTP call), `SqlView` (monospace
 editor, Run/Cancel, rows-affected banner, 500-row truncation notice, shared
 `ResultGrid` + `RowSheet`), `isReadOnlySql` classifier (quote-aware comment
