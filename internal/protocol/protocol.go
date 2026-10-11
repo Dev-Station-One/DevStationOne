@@ -508,12 +508,14 @@ type FileResultPayload struct {
 // read (status/diff) to it with a git pathspec rather than the whole
 // repository, in case Root is a subdirectory of a larger git checkout.
 type GitCommandPayload struct {
-	// Action is one of: status, diff, stage, unstage, commit, log, pull, push.
+	// Action is one of: status, diff, stage, unstage, commit, log, pull,
+	// push, discard, amend, branches, checkout, branch.
 	Action string `json:"action"`
 	Root   string `json:"root"`
-	// Path scopes a "diff"/"stage"/"unstage" request, relative to Root. "" or
-	// "." means the whole Project root for "diff"; required (non-empty) for
-	// "stage"/"unstage".
+	// Path scopes a "diff"/"stage"/"unstage"/"discard" request, relative to
+	// Root. "" or "." means the whole Project root for "diff"; required
+	// (non-empty) for "stage"/"unstage"/"discard". For "checkout"/"branch"
+	// it is the branch name instead (a single git argv token).
 	Path string `json:"path,omitempty"`
 	// Staged selects `git diff --cached` (staged vs HEAD) instead of the
 	// default working-tree-vs-index diff, for a "diff" request.
@@ -557,6 +559,16 @@ type GitBranchStatus struct {
 	HasRemote bool `json:"has_remote"`
 }
 
+// GitBranchInfo is one local branch (or, display-only, one remote branch)
+// from a "branches" request.
+type GitBranchInfo struct {
+	Name string `json:"name"`
+	// Current is true when the branch is checked out ("*" in %(HEAD) from
+	// git for-each-ref); always false for remote entries.
+	Current  bool   `json:"current"`
+	Upstream string `json:"upstream,omitempty"`
+}
+
 // GitResultPayload is the payload of a MessageGitResult envelope. Which
 // fields are populated depends on the request's Action ("stage"/"unstage"
 // populate none of them — success is the empty result).
@@ -574,6 +586,9 @@ type GitResultPayload struct {
 	Diff    string           `json:"diff,omitempty"`
 	Commit  string           `json:"commit,omitempty"`
 	Commits []GitCommitInfo  `json:"commits,omitempty"`
+	// Branches is set by a "branches" request: local branches (current one
+	// marked) followed by remote branches, display-only.
+	Branches []GitBranchInfo `json:"branches,omitempty"`
 	// PushedNewUpstream is true when a "push" request had no upstream
 	// configured and set one (`push -u origin HEAD`) — lets the UI report
 	// "published this branch" instead of a plain "pushed".

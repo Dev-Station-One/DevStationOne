@@ -441,3 +441,83 @@ func TestDeviceFilesAuth(t *testing.T) {
 		}
 	}
 }
+
+// TestDeviceGitAuth proves all 13 git routes accept the paired-device Sig
+// header while keeping cookie sessions working — the git routes switched to
+// requireIdentity with the app's Source Control tab (docs/DESIGN_ANDROID_SCM.md
+// slice 1). No runtime is connected, so an authenticated device proves it
+// reached the handler by getting 409 — owner and stranger alike (every
+// authenticated user sees every project); the 401 asserts the route stays
+// closed to anonymous traffic.
+func TestDeviceGitAuth(t *testing.T) {
+	db := testDB(t)
+	ctx := context.Background()
+
+	owner, err := auth.CreateUser(ctx, db.Pool, "git-owner@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create owner: %v", err)
+	}
+	stranger, err := auth.CreateUser(ctx, db.Pool, "git-stranger@example.com", "password123", false)
+	if err != nil {
+		t.Fatalf("create stranger: %v", err)
+	}
+
+	keyOwner, _ := devices.GenerateKey()
+	keyStranger, _ := devices.GenerateKey()
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+
+	dOwner := pairCode(t, router, pairingCode(ctx, t, db, owner.ID, "Git owner phone"), keyOwner)
+	dStranger := pairCode(t, router, pairingCode(ctx, t, db, stranger.ID, "Git stranger phone"), keyStranger)
+
+	rt, _, err := runtimes.Create(ctx, db.Pool, "git-auth-runtime", owner.ID)
+	if err != nil {
+		t.Fatalf("create runtime: %v", err)
+	}
+	proj, err := projects.Create(ctx, db.Pool, projects.Fields{
+		Name:             "git-auth-project",
+		RuntimeID:        rt.ID,
+		WorkingDirectory: "/tmp",
+		Shell:            "/bin/bash",
+	}, owner.ID)
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+
+	for _, uri := range []string{
+		"GET  /api/v1/projects/" + proj.ID + "/git/status",
+		"GET  /api/v1/projects/" + proj.ID + "/git/diff?path=.",
+		"POST /api/v1/projects/" + proj.ID + "/git/stage",
+		"POST /api/v1/projects/" + proj.ID + "/git/unstage",
+		"POST /api/v1/projects/" + proj.ID + "/git/commit",
+		"GET  /api/v1/projects/" + proj.ID + "/git/log",
+		"POST /api/v1/projects/" + proj.ID + "/git/pull",
+		"POST /api/v1/projects/" + proj.ID + "/git/push",
+		"POST /api/v1/projects/" + proj.ID + "/git/discard",
+		"POST /api/v1/projects/" + proj.ID + "/git/amend",
+		"GET  /api/v1/projects/" + proj.ID + "/git/branches",
+		"POST /api/v1/projects/" + proj.ID + "/git/checkout",
+		"POST /api/v1/projects/" + proj.ID + "/git/branch",
+	} {
+		method, uri := uri[:3], strings.TrimSpace(uri[3:])
+		// The device wall runs before the handler decodes a body, so every
+		// POST gets the same 409 (runtime-offline) without one.
+		req := signedRequest(t, keyOwner, dOwner, method, uri, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("owner device %s: got %d (%s), want 409", method, rec.Code, rec.Body.String())
+		}
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, signedRequest(t, keyStranger, dStranger, method, uri, nil))
+		if rec.Code != http.StatusConflict {
+			t.Fatalf("stranger device %s: got %d, want 409", method, rec.Code)
+		}
+		rec = httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(method, "http://example.com"+uri, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("anonymous %s: got %d, want 401", method, rec.Code)
+		}
+	}
+}

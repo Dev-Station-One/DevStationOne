@@ -392,3 +392,173 @@ func TestExecuteGit_RenameDetected(t *testing.T) {
 		t.Errorf("rename entry = %+v, want new.txt <- old.txt", result.Files[0])
 	}
 }
+
+func TestExecuteGit_DiscardTrackedModified(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "a.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "discard", Root: dir, Path: "a.txt"}); err != nil {
+		t.Fatalf("discard: %v", err)
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "hello\n" {
+		t.Errorf("a.txt content = %q, want restored", content)
+	}
+
+	// An untracked path is refused and left alone.
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "discard", Root: dir, Path: "b.txt"}); err == nil {
+		t.Error("discard of an untracked path should be refused")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "b.txt")); err != nil {
+		t.Errorf("b.txt should still exist after the refused discard: %v", err)
+	}
+
+	// A clean path is refused.
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "discard", Root: dir, Path: "a.txt"}); err == nil {
+		t.Error("discard of a clean path should be refused")
+	}
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "discard", Root: dir, Path: "../escape.txt"}); err == nil {
+		t.Error("discard with a traversal path should fail")
+	}
+}
+
+func TestExecuteGit_Amend(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "a.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "initial")
+	before := runSetupGitOutput(t, dir, "rev-parse", "HEAD")
+
+	// Blank message refused (same rule as commit).
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "amend", Root: dir, Message: "  "}); err == nil {
+		t.Error("amend with a blank message should fail")
+	}
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "amend", Root: dir, Message: "amended subject"})
+	if err != nil {
+		t.Fatalf("amend: %v", err)
+	}
+	if len(result.Commit) != 40 || result.Commit == strings.TrimSpace(before) {
+		t.Errorf("amend commit = %q (before %q), want a new 40-char sha", result.Commit, before)
+	}
+	if subject := strings.TrimSpace(runSetupGitOutput(t, dir, "log", "-1", "--pretty=%s")); subject != "amended subject" {
+		t.Errorf("amended subject = %q", subject)
+	}
+
+	// Once pushed, amend is refused (HEAD is an ancestor of the upstream).
+	dirR, _ := initGitRepoWithRemote(t)
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "amend", Root: dirR, Message: "rewrite"}); err == nil {
+		t.Error("amend after push should be refused")
+	}
+	// But HEAD ahead of the upstream amends fine.
+	if err := os.WriteFile(filepath.Join(dirR, "b.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dirR, "add", "b.txt")
+	runSetupGit(t, dirR, "commit", "-q", "-m", "local only")
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "amend", Root: dirR, Message: "local-only amended"}); err != nil {
+		t.Fatalf("amend of an unpushed commit: %v", err)
+	}
+
+	// An unborn repo (no HEAD): git's own error surfaces.
+	empty := initGitRepo(t)
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "amend", Root: empty, Message: "x"}); err == nil {
+		t.Error("amend with no HEAD should fail")
+	}
+}
+
+func TestExecuteGit_BranchesCurrentAndUpstream(t *testing.T) {
+	dir, _ := initGitRepoWithRemote(t)
+	// initGitRepoWithRemote's push -u set the default branch's upstream; add
+	// a second branch without one.
+	runSetupGit(t, dir, "checkout", "-qb", "feature")
+	runSetupGit(t, dir, "checkout", "-q", "master")
+
+	result, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "branches", Root: dir})
+	if err != nil {
+		t.Fatalf("branches: %v", err)
+	}
+	current := 0
+	byName := map[string]protocol.GitBranchInfo{}
+	for _, b := range result.Branches {
+		byName[b.Name] = b
+		if !strings.Contains(b.Name, "/") {
+			current++
+		}
+	}
+	if current != 2 {
+		t.Errorf("local branches = %d, want 2", current)
+	}
+	main, ok := byName["master"]
+	if !ok {
+		t.Fatalf("branches = %+v, want master", result.Branches)
+	}
+	if !main.Current || main.Upstream != "origin/master" {
+		t.Errorf("master = %+v, want current with origin/master upstream", main)
+	}
+	feature, ok := byName["feature"]
+	if !ok || feature.Current {
+		t.Errorf("feature = %+v, want present and not current", feature)
+	}
+	if _, ok := byName["origin/master"]; !ok {
+		t.Errorf("remote origin/master missing from %+v", result.Branches)
+	}
+}
+
+func TestExecuteGit_CheckoutAndBranchCreate(t *testing.T) {
+	dir := initGitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runSetupGit(t, dir, "add", "a.txt")
+	runSetupGit(t, dir, "commit", "-q", "-m", "initial")
+	runSetupGit(t, dir, "branch", "-m", "main")
+
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "branch", Root: dir, Path: "topic"}); err != nil {
+		t.Fatalf("branch create: %v", err)
+	}
+	if head := strings.TrimSpace(runSetupGitOutput(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); head != "topic" {
+		t.Errorf("HEAD after branch create = %q", head)
+	}
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "checkout", Root: dir, Path: "main"}); err != nil {
+		t.Fatalf("checkout: %v", err)
+	}
+	if head := strings.TrimSpace(runSetupGitOutput(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); head != "main" {
+		t.Errorf("HEAD after checkout = %q", head)
+	}
+
+	// Guards: empty/dash-prefixed names, duplicate create, dirty tree.
+	for _, bad := range []string{"", "-b main"} {
+		if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "branch", Root: dir, Path: bad}); err == nil {
+			t.Errorf("branch %q should be refused", bad)
+		}
+	}
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "branch", Root: dir, Path: "topic"}); err == nil {
+		t.Error("re-creating an existing branch should fail")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "checkout", Root: dir, Path: "topic"}); err == nil {
+		t.Error("checkout with a dirty tree should be refused")
+	}
+	// The refusal names the dirty count.
+	if _, err := executeGit(context.Background(), protocol.GitCommandPayload{Action: "checkout", Root: dir, Path: "topic"}); err != nil && !strings.Contains(err.Error(), "working tree is dirty (1 changes)") {
+		t.Errorf("checkout refusal = %v, want a dirty-count message", err)
+	}
+}

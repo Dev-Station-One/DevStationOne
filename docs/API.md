@@ -345,6 +345,17 @@ credential helper are already configured for the runtime's OS user
 | log | `GET /api/v1/projects/{projectID}/git/log?limit=` — recent commits (SHA, subject, author, datetime), newest first; feeds the journal commit picker. A repo with no commits yet is a 502 |
 | pull | `POST /api/v1/projects/{projectID}/git/pull` — merges (never rebases) the current branch's upstream; replies `{"conflicts": [...]}`, empty on a clean pull. A merge conflict is a 200 with populated `conflicts`, not an error — the worktree is left conflicted for the user to resolve via the Terminal tab |
 | push | `POST /api/v1/projects/{projectID}/git/push` — pushes the current branch only, never forces; auto-sets upstream on a first push (`push -u origin HEAD`) and replies `{"pushed_new_upstream": bool}` |
+| discard | `POST /api/v1/projects/{projectID}/git/discard` `{"path"}` — restores the path's worktree changes from the index (staged changes stay); refused on untracked ("untracked — nothing to discard") and no-worktree-change paths |
+| amend | `POST /api/v1/projects/{projectID}/git/amend` `{"message"}` — amends HEAD, replying `{"commit": "<sha>"}`; refused when the branch is already published (HEAD is an ancestor of its upstream) |
+| branches | `GET /api/v1/projects/{projectID}/git/branches` — local branches (current one flagged, each with its upstream) then remote branches, display-only |
+| checkout | `POST /api/v1/projects/{projectID}/git/checkout` `{"name"}` — switches to an existing local branch; refused while the status records any change ("working tree is dirty — commit or discard first") |
+| branch | `POST /api/v1/projects/{projectID}/git/branch` `{"name"}` — `git checkout -b`, creates the branch and switches to it |
+
+The Android client calls these routes with the paired-device signature
+(ADR-053: every git route accepts the `Sig` header or a session cookie).
+Discard's and amend's runtime refusals are the single authority — a client
+may disable or warn about the same conditions, but the runtime's answer is
+the truth it surfaces verbatim.
 
 `status`/`diff` are scoped to the Project's working directory with a git
 pathspec (`-- .` or the given path) even when it is a subdirectory of a

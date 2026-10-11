@@ -180,6 +180,14 @@ Branch sheet      local branches (current ✓), upstream muted, remotes
 
 - Design complete 2026-10-10; OQ-1..OQ-9 closed
   (`docs/REQUIREMENTS_ANDROID_SCM.md`), OQ-7 resolved here (§1/§3).
-- Slice 1 not started. The Android side inherits the stage-1..5
+- **Slice 1 complete 2026-10-10.** Two implementation notes recorded here:
+  git 2.43's `for-each-ref` does not expand `%x` escapes (log `--pretty`
+  does), so the branches format string embeds the raw 0x1f byte — refnames
+  cannot contain control characters, so it parses identically; and
+  `%(upstream:short)` (e.g. `origin/main`) is used so branch upstreams
+  match `GitBranchStatus.Upstream`'s shape. Discard treats a staged-only
+  change ("A ." — no worktree half) as nothing to discard, since `git
+  restore` is worktree-only. Deployed to dev and prod before device work.
+- Slices 2-4 not started. The Android side inherits the stage-1..5
   component/style precedents; no new patterns are introduced beyond the
   ones recorded above.

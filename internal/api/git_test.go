@@ -349,3 +349,152 @@ func TestGitHTTP_OwnershipEnforced(t *testing.T) {
 		t.Errorf("cross-user status: status = %d, want 200", rec.Code)
 	}
 }
+
+func TestGitHTTP_Discard(t *testing.T) {
+	router, cookie, projectID, dir, _ := gitTestSetup(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, dir, "add", "a.txt")
+	runGitSetup(t, dir, "commit", "-q", "-m", "initial")
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("new\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Untracked path refused with 502 (runtime error text passed through).
+	rec := gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/discard", ""), []byte(`{"path":"b.txt"}`))
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("discard untracked: %d (%s), want 502 refusal", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "untracked") {
+		t.Errorf("refusal = %s", rec.Body.String())
+	}
+	// Clean path refused.
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/discard", ""), []byte(`{"path":"nonexistent.txt"}`))
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("discard clean: %d (%s), want 502 refusal", rec.Code, rec.Body.String())
+	}
+	// Traversal refused with 400.
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/discard", ""), []byte(`{"path":"../escape.txt"}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("discard traversal: %d, want 400", rec.Code)
+	}
+	// Tracked-modified path restored.
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/discard", ""), []byte(`{"path":"a.txt"}`))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("discard: %d (%s), want 204", rec.Code, rec.Body.String())
+	}
+	content, err := os.ReadFile(filepath.Join(dir, "a.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(content) != "hello\n" {
+		t.Errorf("a.txt content = %q, want restored", content)
+	}
+}
+
+func TestGitHTTP_Amend(t *testing.T) {
+	router, cookie, projectID, dir, _ := gitTestSetup(t)
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGitSetup(t, dir, "add", "a.txt")
+	runGitSetup(t, dir, "commit", "-q", "-m", "initial")
+	before := runGitSetupOutput(t, dir, "rev-parse", "HEAD")
+
+	rec := gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/amend", ""), []byte(`{"message":""}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty amend message: %d, want 400", rec.Code)
+	}
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/amend", ""), []byte(`{"message":"amended subject"}`))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("amend: %d (%s), want 200", rec.Code, rec.Body.String())
+	}
+	var body map[string]string
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body["commit"]) != 40 || body["commit"] == strings.TrimSpace(before) {
+		t.Errorf("amend commit = %q", body["commit"])
+	}
+	if subject := strings.TrimSpace(runGitSetupOutput(t, dir, "log", "-1", "--pretty=%s")); subject != "amended subject" {
+		t.Errorf("amended subject = %q", subject)
+	}
+}
+
+func TestGitHTTP_AmendAfterPushRefused(t *testing.T) {
+	router, cookie, projectID, _, _ := gitTestSetupWithRemote(t)
+	rec := gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/amend", ""), []byte(`{"message":"rewrite"}`))
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("amend after push: %d (%s), want 502 refusal", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "already on the remote") {
+		t.Errorf("refusal = %s", rec.Body.String())
+	}
+}
+
+func TestGitHTTP_BranchesCheckoutBranch(t *testing.T) {
+	router, cookie, projectID, dir, _ := gitTestSetupWithRemote(t)
+
+	rec := gitReq(t, router, cookie, http.MethodGet, gitURL(projectID, "/branches", ""), nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("branches: %d (%s)", rec.Code, rec.Body.String())
+	}
+	var branches []protocol.GitBranchInfo
+	if err := json.NewDecoder(rec.Body).Decode(&branches); err != nil {
+		t.Fatal(err)
+	}
+	if len(branches) == 0 {
+		t.Fatal("branches = [], want at least the current branch")
+	}
+	var found bool
+	for _, b := range branches {
+		if b.Name == "master" {
+			found = true
+			if !b.Current {
+				t.Errorf("master = %+v, want current", b)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("branches = %+v, want master", branches)
+	}
+
+	// Empty / dash-prefixed names are 400 client-side.
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/branch", ""), []byte(`{"name":""}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("empty branch name: %d, want 400", rec.Code)
+	}
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/checkout", ""), []byte(`{"name":"-b main"}`))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("dash branch name: %d, want 400", rec.Code)
+	}
+
+	// Create-and-switch, then switch back.
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/branch", ""), []byte(`{"name":"topic"}`))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("branch: %d (%s), want 204", rec.Code, rec.Body.String())
+	}
+	if head := strings.TrimSpace(runGitSetupOutput(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); head != "topic" {
+		t.Errorf("HEAD after branch = %q", head)
+	}
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/checkout", ""), []byte(`{"name":"master"}`))
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("checkout: %d (%s), want 204", rec.Code, rec.Body.String())
+	}
+	if head := strings.TrimSpace(runGitSetupOutput(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); head != "master" {
+		t.Errorf("HEAD after checkout = %q", head)
+	}
+
+	// Checkout is refused on a dirty tree.
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("dirty\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec = gitReq(t, router, cookie, http.MethodPost, gitURL(projectID, "/checkout", ""), []byte(`{"name":"topic"}`))
+	if rec.Code != http.StatusBadGateway || !strings.Contains(rec.Body.String(), "working tree is dirty") {
+		t.Fatalf("checkout dirty: %d (%s), want 502 dirty refusal", rec.Code, rec.Body.String())
+	}
+}

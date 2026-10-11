@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"devstationone/internal/audit"
@@ -196,5 +197,105 @@ func gitCommitHandler(db *database.DB, registry *runtimes.Registry) http.Handler
 		user, _ := userFromContext(r.Context())
 		audit.Record(r.Context(), db.Pool, audit.EventGitCommitted, audit.Actor{UserID: user.ID, Email: user.Email}, "git", result.Commit, map[string]any{"project_id": r.PathValue("projectID")}, clientIP(r))
 		writeJSON(w, http.StatusOK, map[string]string{"commit": result.Commit})
+	}
+}
+
+// gitAmendHandler POST .../git/amend {"message"} — amends the current HEAD
+// commit, replying with the new SHA. The runtime refuses when the branch is
+// already published (its error text is surfaced verbatim).
+func gitAmendHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		var body struct {
+			Message string `json:"message"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Message == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message is required"})
+			return
+		}
+		result, ok := gitCommand(w, r, conn, protocol.GitCommandPayload{Action: "amend", Root: root, Message: body.Message})
+		if !ok {
+			return
+		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventGitAmended, audit.Actor{UserID: user.ID, Email: user.Email}, "git", result.Commit, map[string]any{"project_id": r.PathValue("projectID")}, clientIP(r))
+		writeJSON(w, http.StatusOK, map[string]string{"commit": result.Commit})
+	}
+}
+
+// gitDiscardHandler POST .../git/discard {"path"} — restores one path's
+// worktree changes from the index; refused on an untracked or clean path.
+func gitDiscardHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		var body struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			return
+		}
+		p, err := filesystem.Clean(body.Path)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if _, ok := gitCommand(w, r, conn, protocol.GitCommandPayload{Action: "discard", Root: root, Path: p}); !ok {
+			return
+		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, audit.EventGitDiscarded, audit.Actor{UserID: user.ID, Email: user.Email}, "git", p, map[string]any{"project_id": r.PathValue("projectID")}, clientIP(r))
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// gitBranchesHandler GET .../git/branches — local branches (current one
+// marked) first, then remote branches display-only.
+func gitBranchesHandler(db *database.DB, registry *runtimes.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		result, ok := gitCommand(w, r, conn, protocol.GitCommandPayload{Action: "branches", Root: root})
+		if !ok {
+			return
+		}
+		if result.Branches == nil {
+			result.Branches = []protocol.GitBranchInfo{}
+		}
+		writeJSON(w, http.StatusOK, result.Branches)
+	}
+}
+
+// gitBranchNameHandler builds the POST .../git/checkout and .../git/branch
+// handlers — both take {"name"} (the branch, a single git argv token) and
+// reply 204. "checkout" switches to an existing branch; "branch" creates and
+// switches.
+func gitBranchNameHandler(db *database.DB, registry *runtimes.Registry, action, eventType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		conn, root, ok := fileRoot(w, r, db, registry)
+		if !ok {
+			return
+		}
+		var body struct {
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Name) == "" || strings.HasPrefix(strings.TrimSpace(body.Name), "-") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid branch name"})
+			return
+		}
+		if _, ok := gitCommand(w, r, conn, protocol.GitCommandPayload{Action: action, Root: root, Path: strings.TrimSpace(body.Name)}); !ok {
+			return
+		}
+		user, _ := userFromContext(r.Context())
+		audit.Record(r.Context(), db.Pool, eventType, audit.Actor{UserID: user.ID, Email: user.Email}, "git", strings.TrimSpace(body.Name), map[string]any{"project_id": r.PathValue("projectID")}, clientIP(r))
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -85,11 +85,15 @@ const (
 
 	// EventGitStaged/EventGitUnstaged cover a stage/unstage RPC; the path is
 	// carried in Detail["path"].
-	EventGitStaged    = "git.staged"
-	EventGitUnstaged  = "git.unstaged"
-	EventGitCommitted = "git.committed"
-	EventGitPulled    = "git.pulled"
-	EventGitPushed    = "git.pushed"
+	EventGitStaged        = "git.staged"
+	EventGitUnstaged      = "git.unstaged"
+	EventGitCommitted     = "git.committed"
+	EventGitAmended       = "git.amended"
+	EventGitDiscarded     = "git.discarded"
+	EventGitCheckout      = "git.checkout"
+	EventGitBranchCreated = "git.branch_created"
+	EventGitPulled        = "git.pulled"
+	EventGitPushed        = "git.pushed"
 
 	EventJournalCreated         = "journal.created"
 	EventJournalUpdated         = "journal.updated"

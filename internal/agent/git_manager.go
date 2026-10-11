@@ -205,6 +205,129 @@ func executeGit(ctx context.Context, cmd protocol.GitCommandPayload) (protocol.G
 		}
 		return protocol.GitResultPayload{Commits: parseGitLog(out)}, nil
 
+	case "discard":
+		p, err := filesystem.Clean(cmd.Path)
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		out, err := runGit(ctx, cmd.Root, "", "status", "--porcelain=v2", "-z", "--", p)
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		entries := parseGitStatus(out)
+		// git restore only reverts the worktree from the index, so an
+		// untracked path is refused outright and a path with no worktree
+		// change (clean or staged-only) has nothing to discard.
+		for _, f := range entries {
+			if f.Worktree == "?" {
+				return protocol.GitResultPayload{}, fmt.Errorf("untracked — nothing to discard")
+			}
+		}
+		if len(entries) == 0 {
+			return protocol.GitResultPayload{}, fmt.Errorf("nothing to discard")
+		}
+		dirty := false
+		for _, f := range entries {
+			if f.Worktree != "." {
+				dirty = true
+			}
+		}
+		if !dirty {
+			return protocol.GitResultPayload{}, fmt.Errorf("nothing to discard — the change is staged only")
+		}
+		if _, err := runGit(ctx, cmd.Root, "", "restore", "--", p); err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{}, nil
+
+	case "amend":
+		// OQ-5: one authority, the runtime. HEAD being an ancestor of its
+		// upstream means the branch is already published — rewriting it would
+		// require a force push, so amend is refused. Without an upstream (or
+		// with HEAD ahead of it) an unpushed amend is safe.
+		if upstream, err := runGit(ctx, cmd.Root, "", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"); err == nil && strings.TrimSpace(upstream) != "" {
+			if _, err := runGit(ctx, cmd.Root, "", "merge-base", "--is-ancestor", "HEAD", "@{u}"); err == nil {
+				return protocol.GitResultPayload{}, fmt.Errorf("amend refused: these commits are already on the remote")
+			}
+		}
+		msg := strings.TrimSpace(cmd.Message)
+		if msg == "" {
+			return protocol.GitResultPayload{}, fmt.Errorf("commit message is required")
+		}
+		if _, err := runGit(ctx, cmd.Root, cmd.Message, "commit", "--amend", "-F", "-"); err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		sha, err := runGit(ctx, cmd.Root, "", "rev-parse", "HEAD")
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{Commit: strings.TrimSpace(sha)}, nil
+
+	case "branches":
+		// Local branches with the current-branch marker and each one's
+		// upstream; remote branches follow, display-only. Unlike log's
+		// --pretty, for-each-ref does not expand %x escapes, so the 0x1f
+		// separator is embedded raw (refnames cannot contain control
+		// characters, so it is unambiguous).
+		out, err := runGit(ctx, cmd.Root, "", "for-each-ref", "refs/heads",
+			"--format=%(HEAD)\x1f%(refname:short)\x1f%(upstream:short)")
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		var branches []protocol.GitBranchInfo
+		for _, line := range splitLines(out) {
+			f := strings.Split(line, "\x1f")
+			if len(f) != 3 {
+				continue
+			}
+			branches = append(branches, protocol.GitBranchInfo{
+				Name: f[1], Current: strings.TrimSpace(f[0]) == "*", Upstream: f[2],
+			})
+		}
+		remoteOut, err := runGit(ctx, cmd.Root, "", "for-each-ref", "refs/remotes", "--format=%(refname:short)")
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		for _, name := range splitLines(remoteOut) {
+			// origin/HEAD is the remote's default-branch symbolic ref, not a
+			// checkoutable branch line.
+			if name == "" || strings.HasSuffix(name, "/HEAD") {
+				continue
+			}
+			branches = append(branches, protocol.GitBranchInfo{Name: name})
+		}
+		return protocol.GitResultPayload{Branches: branches}, nil
+
+	case "checkout":
+		name := strings.TrimSpace(cmd.Path)
+		if name == "" || strings.HasPrefix(name, "-") {
+			return protocol.GitResultPayload{}, fmt.Errorf("invalid branch name")
+		}
+		out, err := runGit(ctx, cmd.Root, "", "status", "--porcelain=v2", "-z", "--", ".")
+		if err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		if dirty := len(parseGitStatus(out)); dirty > 0 {
+			return protocol.GitResultPayload{}, fmt.Errorf("working tree is dirty (%d changes) — commit or discard first", dirty)
+		}
+		if _, err := runGit(ctx, cmd.Root, "", "checkout", name); err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{}, nil
+
+	case "branch":
+		name := strings.TrimSpace(cmd.Path)
+		if name == "" || strings.HasPrefix(name, "-") {
+			return protocol.GitResultPayload{}, fmt.Errorf("invalid branch name")
+		}
+		// Creates the branch and switches to it. The name is a single argv
+		// token and no shell exists (ADR-028), so injection is impossible by
+		// construction; git itself validates the refname.
+		if _, err := runGit(ctx, cmd.Root, "", "checkout", "-b", name); err != nil {
+			return protocol.GitResultPayload{}, err
+		}
+		return protocol.GitResultPayload{}, nil
+
 	default:
 		return protocol.GitResultPayload{}, fmt.Errorf("unknown git action %q", cmd.Action)
 	}
@@ -295,6 +418,17 @@ func splitFields(tok string, n int) []string {
 		return nil
 	}
 	return f
+}
+
+// splitLines trims trailing newline and splits output into non-empty lines.
+func splitLines(out string) []string {
+	var lines []string
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
 
 func statusFromXY(xy, path string) protocol.GitFileStatus {

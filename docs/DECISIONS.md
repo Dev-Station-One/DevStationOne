@@ -2001,10 +2001,11 @@ Server without a browser session cookie and without shipping password or
 3. **Device identity resolves to its pairing user and rides one middleware
    (`requireIdentity`) on the routes the client calls** (projects read,
    project/session CRUD + stream, journal read/write + attachments, files
-   list/search/stat/content, device management); admin pages and every
-   other surface stay cookie-only. RBAC composes unchanged — an admin's
-   paired device is an admin's session. Device management UI extends the
-   existing Settings (own devices) and Users (per-user, admin) pages
-   rather than a new page.
+   list/search/stat/content, device management, git — all 13 git routes
+   switched from `requireSession` in the same slice that added the
+   Android-Source-Control routes); admin pages and every other surface stay
+   cookie-only. RBAC composes unchanged — an admin's paired device is an
+   admin's session. Device management UI extends the existing Settings
+   (own devices) and Users (per-user, admin) pages rather than a new page.
 4. **Host/URI are signed as received** — same proxy constraint muxalot
    documents: the fronting proxy must not rewrite path or Host.

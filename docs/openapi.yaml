@@ -2771,6 +2771,7 @@ paths:
       operationId: gitStatus
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2810,6 +2811,7 @@ paths:
       operationId: gitDiff
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2858,6 +2860,7 @@ paths:
       operationId: gitStage
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2896,6 +2899,7 @@ paths:
       operationId: gitUnstage
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2934,6 +2938,7 @@ paths:
       operationId: gitCommit
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -2981,6 +2986,7 @@ paths:
       operationId: gitLog
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3021,6 +3027,7 @@ paths:
       operationId: gitPull
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3058,6 +3065,7 @@ paths:
       operationId: gitPush
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3083,6 +3091,211 @@ paths:
           description: The project's runtime is not currently connected
         "502":
           description: The runtime's git command failed (e.g. no remote configured, auth failure, network error)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/discard:
+    post:
+      summary: Discard a path's worktree changes
+      description: Restores the path from the index (`git restore`), throwing away unstaged changes while keeping staged ones. Refused on an untracked path ("untracked — nothing to discard") and on a path with no worktree change ("nothing to discard").
+      tags: [Git]
+      operationId: gitDiscard
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [path]
+              properties:
+                path:
+                  type: string
+                  description: Root-relative path, same values as a git/stage call.
+      responses:
+        "204":
+          description: Discarded
+        "400":
+          description: Invalid or missing path
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (refusals included — untracked or nothing-to-discard)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/amend:
+    post:
+      summary: Amend the current HEAD commit
+      description: Replaces HEAD with a new commit carrying the staged index and the given message. Refused when the branch is already published (HEAD is an ancestor of its upstream — a 502 whose error text begins "amend refused:"). Un-pushed and upstream-less branches amend freely.
+      tags: [Git]
+      operationId: gitAmend
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+      responses:
+        "200":
+          description: The amended commit's SHA
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [commit]
+                properties:
+                  commit:
+                    type: string
+        "400":
+          description: Missing message
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (refusal when already published, nothing staged, no HEAD yet)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/branches:
+    get:
+      summary: List branches
+      description: Live RPC to the runtime (`git for-each-ref`). Local branches come first (the checked-out one carries "current"), then remote branches (display-only; no current flag, no upstream).
+      tags: [Git]
+      operationId: gitBranches
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Local then remote branches
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GitBranch"
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (e.g. not a git repository)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/checkout:
+    post:
+      summary: Check out a branch
+      description: Switches to an existing local branch (`git checkout <name>`, argv-only, no shell). Refused while the Project's status records any change ("working tree is dirty (N changes) — commit or discard first"); the UI disables it under the same condition.
+      tags: [Git]
+      operationId: gitCheckout
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: An existing local branch (e.g. "main").
+      responses:
+        "204":
+          description: Checked out
+        "400":
+          description: Missing or invalid branch name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (dirty-tree refusal included)
+        "504":
+          description: The runtime did not respond within the timeout
+  /api/v1/projects/{projectID}/git/branch:
+    post:
+      summary: Create a branch and switch to it
+      description: "`git checkout -b <name>` — creates a new local branch and checks it out."
+      tags: [Git]
+      operationId: gitCreateBranch
+      security:
+        - cookieAuth: []
+        - deviceSig: []
+      parameters:
+        - name: projectID
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: The new branch's name.
+      responses:
+        "204":
+          description: Branch created and checked out
+        "400":
+          description: Missing or invalid branch name
+        "401":
+          description: Not authenticated
+        "404":
+          description: Project not found
+        "409":
+          description: The project's runtime is not currently connected
+        "502":
+          description: The runtime's git command failed (an existing branch of that name, invalid refname)
         "504":
           description: The runtime did not respond within the timeout
   /api/v1/projects/{projectID}/journal:
@@ -6379,6 +6592,20 @@ components:
         updated_at:
           type: string
           format: date-time
+    GitBranch:
+      type: object
+      description: One branch from a git/branches call — local branches carry the current flag and their tracking branch; remote branches are display-only. Not a stored resource.
+      required: [name, current]
+      properties:
+        name:
+          type: string
+          description: e.g. "main", or "origin/main" for a remote branch.
+        current:
+          type: boolean
+          description: Whether this branch is the one checked out. Always false for remote entries.
+        upstream:
+          type: string
+          description: A local branch's tracking branch, e.g. "origin/main". Absent otherwise.
     GitCommitInfo:
       type: object
       description: One recent commit from a git log call. Not a stored resource.
