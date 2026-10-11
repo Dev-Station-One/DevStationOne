@@ -452,7 +452,12 @@ fields don't cover) alongside the fields above; `has_secret` in the response
 reports whether a secret is stored, nothing more. `PATCH` only touches the
 stored secret when the request includes a `"secret": {"password",
 "extra_params"}` object — omitting it (the normal case: editing the name,
-host, etc.) leaves the existing encrypted credential untouched. This is how
+host, etc.) leaves the existing encrypted credential untouched. Inside
+`secret`, an omitted `extra_params` keeps the stored value (the API never
+returns it); send `""` to clear. Every route under
+`/projects/{projectID}/databases/{connectionID}` — including backups,
+schedule, download and restore — accepts the paired-device signature in
+addition to the session cookie (`requireIdentity`). This is how
 the edit form's "leave password blank to keep the existing one" behavior
 works: the UI only sends `secret` when the user actually typed a new
 password.

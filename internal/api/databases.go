@@ -48,10 +48,12 @@ type databaseConnectionPatchRequest struct {
 	InstanceName *string `json:"instance_name"`
 	SearchPath   *string `json:"search_path"`
 	// Secret is only set when the caller wants to replace the stored
-	// password/extra-params; omitted (nil) keeps the existing secret.
+	// password/extra-params; omitted (nil) keeps the existing secret. An
+	// omitted extra_params inside it keeps the stored extra-params (the API
+	// never returns them, so a client that can't see them must not wipe them).
 	Secret *struct {
-		Password    string `json:"password"`
-		ExtraParams string `json:"extra_params"`
+		Password    string  `json:"password"`
+		ExtraParams *string `json:"extra_params"`
 	} `json:"secret"`
 }
 
@@ -249,7 +251,17 @@ func patchDatabaseConnectionHandler(db *database.DB, registry *runtimes.Registry
 
 		var secret *dbconnections.SecretUpdate
 		if req.Secret != nil {
-			secret = &dbconnections.SecretUpdate{Password: req.Secret.Password, ExtraParams: req.Secret.ExtraParams}
+			secret = &dbconnections.SecretUpdate{Password: req.Secret.Password}
+			if req.Secret.ExtraParams != nil {
+				secret.ExtraParams = *req.Secret.ExtraParams
+			} else {
+				p, err := dbconnections.ResolveParams(r.Context(), db.Pool, existing.ID, key)
+				if err != nil {
+					writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update database connection"})
+					return
+				}
+				secret.ExtraParams = p.ExtraParams
+			}
 		}
 
 		c, err := dbconnections.Update(r.Context(), db.Pool, existing.ID, fields, secret, key)

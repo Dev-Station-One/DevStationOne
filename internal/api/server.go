@@ -185,15 +185,15 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/docker/compose/{dockerAction}", requireSession(db, dockerComposeHandler(db, registry)))
 
 	// Backups (ADR-041/042) and schedules, per database connection.
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups", requireSession(db, listDBBackupsHandler(db)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/backups", requireSession(db, createDBBackupHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireSession(db, getDBBackupScheduleHandler(db)))
-	mux.HandleFunc("PUT /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireSession(db, putDBBackupScheduleHandler(db)))
-	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireSession(db, deleteDBBackupScheduleHandler(db)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}", requireSession(db, getDBBackupHandler(db)))
-	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}", requireSession(db, deleteDBBackupHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/download", requireSession(db, downloadDBBackupHandler(db, registry)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/restore", requireSession(db, restoreDBBackupHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups", requireIdentity(db, listDBBackupsHandler(db)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/backups", requireIdentity(db, createDBBackupHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireIdentity(db, getDBBackupScheduleHandler(db)))
+	mux.HandleFunc("PUT /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireIdentity(db, putDBBackupScheduleHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/schedule", requireIdentity(db, deleteDBBackupScheduleHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}", requireIdentity(db, getDBBackupHandler(db)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}", requireIdentity(db, deleteDBBackupHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/download", requireIdentity(db, downloadDBBackupHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/backups/{backupID}/restore", requireIdentity(db, restoreDBBackupHandler(db, registry, dbEncryptionKey)))
 
 	// Project backups.
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/backups", requireSession(db, listProjectBackupsHandler(db)))
@@ -248,51 +248,51 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	mux.HandleFunc("POST /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments", requireIdentity(db, uploadJournalAttachmentHandler(db)))
 	mux.HandleFunc("GET /api/v1/projects/{projectID}/journal/notes/{noteID}/attachments/{attachmentID}", requireIdentity(db, downloadJournalAttachmentHandler(db)))
 
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireSession(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireSession(db, listDatabaseConnectionsHandler(db)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, getDatabaseConnectionHandler(db)))
-	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, patchDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}", requireSession(db, deleteDatabaseConnectionHandler(db, registry)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/test", requireSession(db, testDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases", requireIdentity(db, createDatabaseConnectionHandler(db, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases", requireIdentity(db, listDatabaseConnectionsHandler(db)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}", requireIdentity(db, getDatabaseConnectionHandler(db)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}", requireIdentity(db, patchDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}", requireIdentity(db, deleteDatabaseConnectionHandler(db, registry)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/test", requireIdentity(db, testDatabaseConnectionHandler(db, registry, dbEncryptionKey)))
 
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/schemas", requireSession(db, listSchemasHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables", requireSession(db, listTablesHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/columns", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "columns", func(r protocol.DBResultPayload) any {
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/schemas", requireIdentity(db, listSchemasHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables", requireIdentity(db, listTablesHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/columns", requireIdentity(db, tableStructureHandler(db, registry, dbEncryptionKey, "columns", func(r protocol.DBResultPayload) any {
 		if r.Columns == nil {
 			return []protocol.DBColumnInfo{}
 		}
 		return r.Columns
 	})))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/indexes", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "indexes", func(r protocol.DBResultPayload) any {
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/indexes", requireIdentity(db, tableStructureHandler(db, registry, dbEncryptionKey, "indexes", func(r protocol.DBResultPayload) any {
 		if r.Indexes == nil {
 			return []protocol.DBIndexInfo{}
 		}
 		return r.Indexes
 	})))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/constraints", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "constraints", func(r protocol.DBResultPayload) any {
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/constraints", requireIdentity(db, tableStructureHandler(db, registry, dbEncryptionKey, "constraints", func(r protocol.DBResultPayload) any {
 		if r.Constraints == nil {
 			return []protocol.DBConstraintInfo{}
 		}
 		return r.Constraints
 	})))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/triggers", requireSession(db, tableStructureHandler(db, registry, dbEncryptionKey, "triggers", func(r protocol.DBResultPayload) any {
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/triggers", requireIdentity(db, tableStructureHandler(db, registry, dbEncryptionKey, "triggers", func(r protocol.DBResultPayload) any {
 		if r.Triggers == nil {
 			return []protocol.DBTriggerInfo{}
 		}
 		return r.Triggers
 	})))
 
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows", requireSession(db, listRowsHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows", requireSession(db, commitRowsHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/query", requireSession(db, runQueryHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows", requireIdentity(db, listRowsHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}/tables/{table}/rows", requireIdentity(db, commitRowsHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/query", requireIdentity(db, runQueryHandler(db, registry, dbEncryptionKey)))
 
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/principals", requireSession(db, listPrincipalsHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals", requireSession(db, createPrincipalHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}", requireSession(db, deletePrincipalHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}", requireSession(db, setPrincipalPasswordHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants", requireSession(db, listGrantsHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants", requireSession(db, grantPrivilegeHandler(db, registry, dbEncryptionKey)))
-	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants/revoke", requireSession(db, revokePrivilegeHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/principals", requireIdentity(db, listPrincipalsHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals", requireIdentity(db, createPrincipalHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("DELETE /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}", requireIdentity(db, deletePrincipalHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("PATCH /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}", requireIdentity(db, setPrincipalPasswordHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("GET /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants", requireIdentity(db, listGrantsHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants", requireIdentity(db, grantPrivilegeHandler(db, registry, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/projects/{projectID}/databases/{connectionID}/principals/{principal}/grants/revoke", requireIdentity(db, revokePrivilegeHandler(db, registry, dbEncryptionKey)))
 
 	mux.HandleFunc("GET /api/v1/audit", requireAdmin(db, listAuditEventsHandler(db)))
 	mux.HandleFunc("GET /api/v1/audit/settings", requireAdmin(db, getAuditSettingsHandler(db)))

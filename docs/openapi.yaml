@@ -3819,6 +3819,7 @@ paths:
       operationId: createDatabaseConnection
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3850,6 +3851,7 @@ paths:
       operationId: listDatabaseConnections
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3876,6 +3878,7 @@ paths:
       operationId: getDatabaseConnection
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3900,11 +3903,12 @@ paths:
           description: Project or connection not found
     patch:
       summary: Update a database connection
-      description: Only replaces the stored secret when the request body includes a "secret" object; omitting it leaves the existing password/extra_params untouched.
+      description: Only replaces the stored secret when the request body includes a "secret" object; omitting it leaves the existing password/extra_params untouched. Inside "secret", an omitted extra_params keeps the stored value (it is never returned by the API); send an empty string to clear it.
       tags: [Databases]
       operationId: patchDatabaseConnection
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3950,6 +3954,7 @@ paths:
                       type: string
                     extra_params:
                       type: string
+                      description: Optional; omitted keeps the stored extra_params.
       responses:
         "200":
           description: The updated connection
@@ -3969,6 +3974,7 @@ paths:
       operationId: deleteDatabaseConnection
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -3995,6 +4001,7 @@ paths:
       operationId: testDatabaseConnection
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4035,6 +4042,7 @@ paths:
       operationId: listDatabaseSchemas
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4071,6 +4079,7 @@ paths:
       operationId: listDatabaseTables
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4112,6 +4121,7 @@ paths:
       operationId: listDatabaseColumns
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4157,6 +4167,7 @@ paths:
       operationId: listDatabaseIndexes
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4202,6 +4213,7 @@ paths:
       operationId: listDatabaseConstraints
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4247,6 +4259,7 @@ paths:
       operationId: listDatabaseTriggers
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4292,6 +4305,7 @@ paths:
       operationId: listDatabaseRows
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4359,6 +4373,7 @@ paths:
       operationId: commitDatabaseRows
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4420,6 +4435,7 @@ paths:
       operationId: runDatabaseQuery
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4471,6 +4487,7 @@ paths:
       operationId: listDatabasePrincipals
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4508,6 +4525,7 @@ paths:
       operationId: createDatabasePrincipal
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4556,6 +4574,7 @@ paths:
       operationId: deleteDatabasePrincipal
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4592,6 +4611,7 @@ paths:
       operationId: setDatabasePrincipalPassword
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4647,6 +4667,7 @@ paths:
       operationId: listDatabaseGrants
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4689,6 +4710,7 @@ paths:
       operationId: grantDatabasePrivilege
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4749,6 +4771,7 @@ paths:
       operationId: revokeDatabasePrivilege
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4808,6 +4831,7 @@ paths:
       operationId: listDatabaseBackups
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4839,6 +4863,7 @@ paths:
       operationId: createDatabaseBackup
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4874,6 +4899,7 @@ paths:
       operationId: getDatabaseBackupSchedule
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4902,6 +4928,7 @@ paths:
       operationId: putDatabaseBackupSchedule
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4938,6 +4965,7 @@ paths:
       operationId: deleteDatabaseBackupSchedule
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4963,6 +4991,7 @@ paths:
       operationId: getDatabaseBackup
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -4997,6 +5026,7 @@ paths:
       operationId: deleteDatabaseBackup
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -5030,6 +5060,7 @@ paths:
       operationId: downloadDatabaseBackup
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path
@@ -5068,6 +5099,7 @@ paths:
       operationId: restoreDatabaseBackup
       security:
         - cookieAuth: []
+        - deviceSig: []
       parameters:
         - name: projectID
           in: path

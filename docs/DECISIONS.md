@@ -2009,3 +2009,16 @@ Server without a browser session cookie and without shipping password or
    (own devices) and Users (per-user, admin) pages rather than a new page.
 4. **Host/URI are signed as received** — same proxy constraint muxalot
    documents: the fronting proxy must not rewrite path or Host.
+
+**Addendum (database routes, round 3 slice 1).** All 31 per-connection
+database routes (connection CRUD + test, schemas/tables/columns/indexes/
+constraints/triggers, rows list/commit, query, principals + grants, and the
+per-connection backup/schedule/download/restore routes) moved from
+`requireSession` to `requireIdentity` for the Android Databases tab
+(`docs/DESIGN_ANDROID_DATABASES.md`). Project-level backups stay
+cookie-only. `PATCH …/databases/{id}` also changed: an omitted
+`secret.extra_params` now keeps the stored value instead of clearing it,
+because the API never returns `extra_params` and a client that cannot see
+them must not wipe what the web UI set; an explicit `""` still clears.
+Covered by `TestDeviceDatabasesAuth` and
+`TestDatabaseConnectionHTTP_PatchSecretKeepsExtraParams`.

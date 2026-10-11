@@ -1650,3 +1650,16 @@ stage-1 live smoke.
 (`TestDeviceGitAuth`), `GitBranch.remote`, 4 new audit events; `make test`
 green. Out of scope and still web/terminal: blame, stash, rebase/merge UI,
 conflict resolution beyond listing, tags, remotes.
+
+## Slice 28: Android parity round 3 — Databases tab (ADR-053 follow-on)
+
+Requirements: `docs/REQUIREMENTS_ANDROID_DATABASES.md`; design:
+`docs/DESIGN_ANDROID_DATABASES.md`; mock: `docs/ANDROID_CLIENT_MOCK.html`.
+
+**Status**: Stage 1 (server auth switch) **Complete** — 31 per-connection
+database/backup routes on `requireIdentity` with openapi `deviceSig`,
+`secret.extra_params` optional on PATCH, `TestDeviceDatabasesAuth` and
+`TestDatabaseConnectionHTTP_PatchSecretKeepsExtraParams`. Stages 2-8
+(shell + browse, data browser, SQL editor, row edit, connection CRUD,
+principals/grants, backups) **Not Started**. Not yet deployed to dev/prod;
+deploy before any on-device E2E.

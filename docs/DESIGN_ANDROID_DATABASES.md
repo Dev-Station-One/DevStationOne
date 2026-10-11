@@ -125,7 +125,7 @@ moves `requireSession` → `requireIdentity`; web path unchanged.
 | `POST /{c}/test` | `dbTest` | error text verbatim |
 | `GET /{c}/schemas`, `/tables`, `/tables/{t}/{columns,indexes,constraints,triggers}` | `dbSchemas`, `dbTables`, `dbStructure(kind)` | `schema` query param |
 | `GET /{c}/tables/{t}/rows` | `dbRows(limit,offset,sort,sortDesc,filter)` | `has_more` paging |
-| `POST /{c}/tables/{t}/rows` | `dbCommit(edits)` | `{edits:[{op,original,values}]}` (verify body key in slice 4) |
+| `PATCH /{c}/tables/{t}/rows` | `dbCommit(edits)` | body `{edits:[{op,original,values}]}`, one transaction (verified against `commitRowsHandler`) |
 | `POST /{c}/query?limit=` | `dbQuery(sql,limit)` | `is_exec`, `rows_affected` |
 | `GET/POST /{c}/principals`, `DELETE`, `PUT password`, `GET/POST grants`, `POST grants/revoke` | `dbPrincipals`… | sqlite → 400 "no server-side users" mapped to the unsupported state, not an error |
 | `GET/POST /{c}/backups`, `GET/DELETE /{c}/backups/{b}` | `dbBackups`… | |
@@ -234,4 +234,5 @@ security entries.
 
 ## 11. Status
 
-Design draft; slice 1 not started.
+Design approved 2026-10-10. Slice 1 (server auth switch) complete — see
+`IMPLEMENTATION_PLAN.md` Slice 28; slices 2-8 not started.

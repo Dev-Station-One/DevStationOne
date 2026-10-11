@@ -145,8 +145,8 @@ func TestDatabaseConnectionHTTP_EditInvalidatesCachedPool(t *testing.T) {
 	// Break the credentials via PATCH — must invalidate the cached pool.
 	patchBody, _ := json.Marshal(databaseConnectionPatchRequest{
 		Secret: &struct {
-			Password    string `json:"password"`
-			ExtraParams string `json:"extra_params"`
+			Password    string  `json:"password"`
+			ExtraParams *string `json:"extra_params"`
 		}{Password: "definitely-wrong"},
 	})
 	r := httptest.NewRequest(http.MethodPatch, "/api/v1/projects/"+projectID+"/databases/"+c.ID, bytes.NewReader(patchBody))
