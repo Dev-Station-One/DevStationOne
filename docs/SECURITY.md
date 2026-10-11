@@ -100,6 +100,46 @@ For a shell session, intentionally execute the configured shell through a PTY, b
 - Use least privilege where possible.
 - Execute database operations on the runtime.
 
+### Android client: database access and app lock (ADR-053)
+
+The Android Databases tab (docs/DESIGN_ANDROID_DATABASES.md) exposes the
+same database surface as the web UI: browse, row edit/insert/delete, a SQL
+editor that runs **any** statement, user/grant management, and backup
+download/restore. Authorization is unchanged — the Control Server resolves
+the paired device to its user and applies that user's project access on
+every request — but the device is the only gate on the phone side:
+
+- The device's ECDSA key lives in the Android Keystore and is **not**
+  user-authentication-bound: it signs requests without a prompt whenever the
+  app is running. Anyone holding the phone with the app open can browse data
+  and run SQL.
+- The app's own lock is the mitigation, and it is **opt-in** (Settings → app
+  lock, default off). When on, the app asks for the device PIN/pattern/
+  password on cold start, whenever the screen turns off, and after being in
+  the background longer than 60 seconds. Turning the lock on or off requires
+  the same credential. It is a UI gate, not key protection: it does not stop
+  a rooted device or a debugger from using the key.
+- Recommendation for anyone who pairs a phone to a project with production
+  databases: enable the app lock and a device screen lock, and keep the
+  Android screenshot protection (FLAG_SECURE) on (it hides the app from
+  screenshots, screen recording and the recents thumbnail; debug builds
+  allow screenshots).
+- A lost or stolen phone: revoke the device in the web UI (Settings → Paired
+  devices; admins can also use the Users manager). Revocation takes effect on
+  the next request. Rotate any database credential or backup the phone could
+  have reached if the phone may have been used before revocation.
+- Saved SQL history (last 20 statements per connection) is stored in the
+  app's private storage, so it persists on the phone and can contain
+  whatever was typed, including secrets pasted into a statement. It is
+  cleared only by clearing the app's data or uninstalling.
+- Database passwords typed on the phone (connection form, new user,
+  password change) are held in memory only for the dialog and are never
+  logged or saved; the server never returns stored passwords.
+- Statements that look like writes ask for confirmation, but that
+  classifier is a UX aid only and is not a security control; a data-modifying
+  `WITH` statement is treated as read-only. The server and runtime apply the
+  same checks as for web requests.
+
 ## WebSocket security
 
 Validate:
