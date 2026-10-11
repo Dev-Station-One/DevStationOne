@@ -500,7 +500,8 @@ func TestDeviceGitAuth(t *testing.T) {
 		"POST /api/v1/projects/" + proj.ID + "/git/checkout",
 		"POST /api/v1/projects/" + proj.ID + "/git/branch",
 	} {
-		method, uri := uri[:3], strings.TrimSpace(uri[3:])
+		method, uri, _ := strings.Cut(uri, " ")
+		uri = strings.TrimSpace(uri)
 		// The device wall runs before the handler decodes a body, so every
 		// POST gets the same 409 (runtime-offline) without one.
 		req := signedRequest(t, keyOwner, dOwner, method, uri, nil)
