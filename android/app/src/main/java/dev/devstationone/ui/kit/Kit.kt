@@ -214,6 +214,16 @@ object MuxIcons {
             lineTo(9.2f, 13.8f)
         }
     }
+    // Databases tab: a cylinder (top ellipse, two bands).
+    val Database = icon("database") {
+        stroke {
+            moveTo(4f, 6f)
+            arcTo(8f, 3f, 0f, true, true, 20f, 6f)
+            arcTo(8f, 3f, 0f, true, true, 4f, 6f)
+        }
+        stroke { moveTo(4f, 6f); lineTo(4f, 18f); arcTo(8f, 3f, 0f, false, false, 20f, 18f); lineTo(20f, 6f) }
+        stroke { moveTo(4f, 12f); arcTo(8f, 3f, 0f, false, false, 20f, 12f) }
+    }
 
 }
 

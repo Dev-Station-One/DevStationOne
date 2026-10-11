@@ -234,5 +234,7 @@ security entries.
 
 ## 11. Status
 
-Design approved 2026-10-10. Slice 1 (server auth switch) complete — see
-`IMPLEMENTATION_PLAN.md` Slice 28; slices 2-8 not started.
+Design approved 2026-10-10. Slices 1 (server auth switch) and 2 (shell +
+browse) complete — see `IMPLEMENTATION_PLAN.md` Slice 28; slices 3-8 not
+started. Slice 2 deviation: Connections, Tables and Structure live in one
+file (`DatabasesScreen.kt`) instead of three; split when slices 3+ grow it.

@@ -167,7 +167,7 @@ class Api(private val server: Server) {
     private val base = server.url.trimEnd('/').toHttpUrl()
 
     companion object {
-        private val json = Json { ignoreUnknownKeys = true }
+        internal val json = Json { ignoreUnknownKeys = true }
         private val jsonMime = "application/json".toMediaType()
         val client: OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
@@ -202,16 +202,16 @@ class Api(private val server: Server) {
     fun url(vararg segs: String): HttpUrl =
         base.newBuilder().apply { segs.forEach { addPathSegment(it) } }.build()
 
-    private fun request(method: String, url: HttpUrl, body: RequestBody? = null): Request =
+    internal fun request(method: String, url: HttpUrl, body: RequestBody? = null): Request =
         Request.Builder().url(url).method(method, body)
             .header("Authorization", Auth.header(server, method, url)).build()
 
     private fun bodyOf(vararg pairs: Pair<String, String>): RequestBody =
         buildJsonObject { pairs.forEach { (k, v) -> put(k, v) } }.toString().toRequestBody(jsonMime)
 
-    private fun Response.jsonText(): String = body?.string().orEmpty()
+    internal fun Response.jsonText(): String = body?.string().orEmpty()
 
-    private fun check(r: Response, want: IntRange = 200..299) {
+    internal fun check(r: Response, want: IntRange = 200..299) {
         if (r.code !in want) throw ApiException(r.code, r.jsonText().trim().ifEmpty { "HTTP ${r.code}" })
     }
 

@@ -39,7 +39,7 @@ import dev.devstationone.ui.kit.stateColor
 /**
  * The project workspace: an icon-top tab bar over the project's surfaces
  * (docs/DESIGN_ANDROID_SCM.md OQ-9 / round 2): Terminal, Journal, Files,
- * Source Control. Icons are 24 dp `MuxIcons` strokes; each Tab's Icon carries
+ * Source Control, Databases (round 3). Icons are 24 dp `MuxIcons` strokes; each Tab's Icon carries
  * the a11y label, the selected state comes from Tab's semantics. The
  * documented fallback if icons-only proves unclear on device: text on the
  * selected tab.
@@ -94,6 +94,7 @@ fun WorkspaceScreen(
                     Tab(selected = tab == 1, onClick = { tab = 1 }, icon = { Icon(MuxIcons.Note, "Journal") })
                     Tab(selected = tab == 2, onClick = { tab = 2 }, icon = { Icon(MuxIcons.Folder, "Files") })
                     Tab(selected = tab == 3, onClick = { tab = 3 }, icon = { Icon(MuxIcons.Branch, "Source Control") })
+                    Tab(selected = tab == 4, onClick = { tab = 4 }, icon = { Icon(MuxIcons.Database, "Databases") })
                 }
                 Box(Modifier.weight(1f).fillMaxSize()) {
                     Box(Modifier.fillMaxSize().hiddenOther(tab != 0)) {
@@ -110,6 +111,9 @@ fun WorkspaceScreen(
                     }
                     Box(Modifier.fillMaxSize().hiddenOther(tab != 3)) {
                         ScmScreen(server, projectID, onOpenDiff = { path, staged -> diff = path to staged })
+                    }
+                    Box(Modifier.fillMaxSize().hiddenOther(tab != 4)) {
+                        DatabasesScreen(server, projectID, active = tab == 4)
                     }
                 }
             }

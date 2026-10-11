@@ -1659,7 +1659,15 @@ Requirements: `docs/REQUIREMENTS_ANDROID_DATABASES.md`; design:
 **Status**: Stage 1 (server auth switch) **Complete** — 31 per-connection
 database/backup routes on `requireIdentity` with openapi `deviceSig`,
 `secret.extra_params` optional on PATCH, `TestDeviceDatabasesAuth` and
-`TestDatabaseConnectionHTTP_PatchSecretKeepsExtraParams`. Stages 2-8
-(shell + browse, data browser, SQL editor, row edit, connection CRUD,
-principals/grants, backups) **Not Started**. Not yet deployed to dev/prod;
-deploy before any on-device E2E.
+`TestDatabaseConnectionHTTP_PatchSecretKeepsExtraParams`; deployed to prod
+2026-10-10. Stage 2 (shell + browse) **Complete** — Databases tab (5th
+workspace tab, `MuxIcons.Database`), `net/DbApi.kt` read methods,
+`ui/DatabasesScreen.kt` (Connections → Tables with schema picker →
+Structure: columns/indexes/constraints/triggers, PK marker), `ui/DbLogic.kt`
++ `DbLogicTest`. Phone E2E on prod (Pixel 8a, release build updated in
+place): tab opens, device-signed `GET /databases` returned 200 and the empty
+state rendered; Tables/Structure against a live connection not exercised on
+device (prod project has no connection; Android-side parsing is unit-tested
+only, no captured-fixture decode tests yet). Stages 3-8 (data browser, SQL
+editor, row edit, connection CRUD, principals/grants, backups) **Not
+Started**.
