@@ -42,6 +42,20 @@ Claude Code and other AI CLIs need no special integration. A terminal starts in 
 
 Everything the web UI does goes through the OpenAPI-described API at `/api/v1` ([docs/openapi.yaml](docs/openapi.yaml)).
 
+## Take it anywhere
+
+One server, every screen. Your workspaces follow you, and so do your running sessions.
+
+| Client | Status | Why you'll want it |
+|---|---|---|
+| **Browser** | Available | Nothing to install. Open your server's URL on any laptop, tablet, or borrowed machine and you're in your workspace. |
+| **Android** | Available | A native app, not a shrunken website: real terminals, journal, source control, and databases in your pocket. Each phone is paired and signs every request with a key that never leaves the device. See [docs/ANDROID_CLIENT.md](docs/ANDROID_CLIENT.md). |
+| **Windows desktop** | Coming soon | Your whole fleet in a dedicated window with its own taskbar icon and notifications. No browser tab to lose. |
+| **macOS desktop** | Coming soon | The same workspace as a first-class Mac app. |
+| **Linux desktop** | Coming soon | A native client for the platform most of your dev machines already run. |
+
+Every client talks to the same documented API, so a session started on your desktop is waiting on your phone.
+
 ## How it works
 
 ```text
@@ -106,11 +120,6 @@ Then:
 4. **Projects → New project**, pick the runtime, user, working directory, and shell, and open a terminal.
 
 The server needs a PostgreSQL database first (`CREATE ROLE` + `CREATE DATABASE`). Configuration variables, reverse proxy setup, upgrading, removal, and troubleshooting are in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. Back up the database and `DEVSTATIONONE_DB_ENCRYPTION_KEY` per [docs/BACKUPS.md](docs/BACKUPS.md).
-
-## Clients
-
-- **Browser:** the primary client, served by the Control Server.
-- **Android:** native client in [`android/`](android/) with device-signature auth. See [docs/ANDROID_CLIENT.md](docs/ANDROID_CLIENT.md) for scope, build, and pairing.
 
 ## Building from source
 
