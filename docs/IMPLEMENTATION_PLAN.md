@@ -1634,4 +1634,4 @@ bar icons + SCM core) **Complete** — `PrimaryTabRow` icon-only tab bar,
 `ScmScreen`/`DiffScreen`, Api git methods, `ScmScreenLogicTest` (8 tests);
 verified on the Pixel 8a against prod (tab bar, branch header, status groups,
 commit/pull/push enabled states, history) and signed off by the user. Stage 3
-(discard + amend + branch sheet UI) and stage 4 (docs roundoff) **Not Started**.
+(discard + amend + branch dialog UI) **Complete**; stage 4 (docs roundoff) **Not Started**.

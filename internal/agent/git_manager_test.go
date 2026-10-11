@@ -515,8 +515,11 @@ func TestExecuteGit_BranchesCurrentAndUpstream(t *testing.T) {
 	if !ok || feature.Current {
 		t.Errorf("feature = %+v, want present and not current", feature)
 	}
-	if _, ok := byName["origin/master"]; !ok {
-		t.Errorf("remote origin/master missing from %+v", result.Branches)
+	if r, ok := byName["origin/master"]; !ok || !r.Remote {
+		t.Errorf("remote origin/master = %+v, want present with Remote", r)
+	}
+	if main.Remote || feature.Remote {
+		t.Error("local branches must not be flagged Remote")
 	}
 }
 

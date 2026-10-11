@@ -294,7 +294,7 @@ func executeGit(ctx context.Context, cmd protocol.GitCommandPayload) (protocol.G
 			if name == "" || strings.HasSuffix(name, "/HEAD") {
 				continue
 			}
-			branches = append(branches, protocol.GitBranchInfo{Name: name})
+			branches = append(branches, protocol.GitBranchInfo{Name: name, Remote: true})
 		}
 		return protocol.GitResultPayload{Branches: branches}, nil
 

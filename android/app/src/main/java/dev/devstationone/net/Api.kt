@@ -159,7 +159,7 @@ data class GitCommitInfo(val sha: String, val subject: String = "", val author: 
 
 /** One branch as git/branches answers: locals first (current flag + upstream), remotes display-only. */
 @Serializable
-data class GitBranchInfo(val name: String, val current: Boolean = false, val upstream: String = "")
+data class GitBranchInfo(val name: String, val current: Boolean = false, val upstream: String = "", val remote: Boolean = false)
 
 class ApiException(val code: Int, message: String) : Exception(message)
 

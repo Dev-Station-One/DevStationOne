@@ -347,7 +347,7 @@ credential helper are already configured for the runtime's OS user
 | push | `POST /api/v1/projects/{projectID}/git/push` — pushes the current branch only, never forces; auto-sets upstream on a first push (`push -u origin HEAD`) and replies `{"pushed_new_upstream": bool}` |
 | discard | `POST /api/v1/projects/{projectID}/git/discard` `{"path"}` — restores the path's worktree changes from the index (staged changes stay); refused on untracked ("untracked — nothing to discard") and no-worktree-change paths |
 | amend | `POST /api/v1/projects/{projectID}/git/amend` `{"message"}` — amends HEAD, replying `{"commit": "<sha>"}`; refused when the branch is already published (HEAD is an ancestor of its upstream) |
-| branches | `GET /api/v1/projects/{projectID}/git/branches` — local branches (current one flagged, each with its upstream) then remote branches, display-only |
+| branches | `GET /api/v1/projects/{projectID}/git/branches` — local branches (current one flagged, each with its upstream) then remote branches (`remote: true`), display-only |
 | checkout | `POST /api/v1/projects/{projectID}/git/checkout` `{"name"}` — switches to an existing local branch; refused while the status records any change ("working tree is dirty — commit or discard first") |
 | branch | `POST /api/v1/projects/{projectID}/git/branch` `{"name"}` — `git checkout -b`, creates the branch and switches to it |
 

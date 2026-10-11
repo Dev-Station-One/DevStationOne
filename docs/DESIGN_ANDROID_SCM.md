@@ -189,6 +189,7 @@ Branch sheet      local branches (current ✓), upstream muted, remotes
   change ("A ." — no worktree half) as nothing to discard, since `git
   restore` is worktree-only. Deployed to dev and prod before device work.
 - **Slice 2 complete 2026-10-10**: icon-only `PrimaryTabRow` (Prompt/Note/Folder/Branch icons, user-approved on device), `ScmScreen` + `DiffScreen`, grouping logic unit-tested, release APK verified on the Pixel against prod. PrimaryTabRow still needs `@OptIn(ExperimentalMaterial3Api)` at the BOM in use (2024.10.01). Pull/push use a 150 s read-timeout client (server allows the runtime 2 min).
-- Slices 3-4 not started. The Android side inherits the stage-1..5
+- **Slice 3 complete 2026-10-10**: per-row and "discard all" (tracked worktree changes only; red, confirm dialog naming the files), "Amend…" (confirm dialog; runtime refusal "already on the remote" surfaces verbatim), "Branch ▾" dialog (locals with ✓/upstream, remotes display-only, checkout disabled with a "commit or discard first" note while status has any change, "New branch…"). Deviations: the branch picker is an `AlertDialog` list rather than a bottom sheet (ModalBottomSheet is still experimental at this BOM; same content, revisit if it feels cramped); `GitBranchInfo` gained `remote` (omitted for locals) because remote names cannot be told from `feature/x`-style locals client-side — backend, runtime and openapi updated and redeployed to dev + prod.
+- Slice 4 not started. The Android side inherits the stage-1..5
   component/style precedents; no new patterns are introduced beyond the
   ones recorded above.

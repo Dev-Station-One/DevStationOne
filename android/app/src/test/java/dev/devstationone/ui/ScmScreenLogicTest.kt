@@ -99,4 +99,24 @@ class ScmScreenLogicTest {
         assertFalse(syncEnabled(s.branch))
         assertTrue(g.staged.isEmpty() && g.changed.isEmpty())
     }
+
+    @Test
+    fun discardOffersTrackedWorktreeChangesOnly() {
+        val g = groupScm(listOf(f("m.txt", ".", "M"), f("new.txt", "?", "?"), f("c.txt", "U", "U"), f("s.txt", "A", ".")))
+        assertEquals(listOf("m.txt"), discardable(g).map { it.file.path })
+    }
+
+    @Test
+    fun checkoutNeedsACleanKnownStatus() {
+        assertFalse(checkoutEnabled(null))
+        assertTrue(checkoutEnabled(GitStatus()))
+        assertFalse(checkoutEnabled(GitStatus(files = listOf(f("a.txt", "?", "?")))))
+    }
+
+    @Test
+    fun amendNeedsHistoryAndMessage() {
+        assertTrue(amendEnabled(true, "x"))
+        assertFalse(amendEnabled(false, "x"))
+        assertFalse(amendEnabled(true, " "))
+    }
 }

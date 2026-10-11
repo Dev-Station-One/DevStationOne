@@ -6603,6 +6603,9 @@ components:
         current:
           type: boolean
           description: Whether this branch is the one checked out. Always false for remote entries.
+        remote:
+          type: boolean
+          description: True for a remote-tracking branch (display-only); omitted for locals.
         upstream:
           type: string
           description: A local branch's tracking branch, e.g. "origin/main". Absent otherwise.

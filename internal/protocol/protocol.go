@@ -567,6 +567,8 @@ type GitBranchInfo struct {
 	// git for-each-ref); always false for remote entries.
 	Current  bool   `json:"current"`
 	Upstream string `json:"upstream,omitempty"`
+	// Remote marks a remote-tracking branch (display-only, not checkoutable).
+	Remote bool `json:"remote,omitempty"`
 }
 
 // GitResultPayload is the payload of a MessageGitResult envelope. Which
