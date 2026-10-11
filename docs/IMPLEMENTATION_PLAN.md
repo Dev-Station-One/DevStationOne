@@ -1669,10 +1669,9 @@ place): tab opens, device-signed `GET /databases` returned 200 and the empty
 state rendered; Tables/Structure against a live connection not exercised on
 device (prod project has no connection; Android-side parsing is unit-tested
 only, no captured-fixture decode tests yet). Stage 3 (data browser)
-**Complete in code, not yet verified on device** — `Api.dbRows`, `ResultGrid`
+**Complete; on-device E2E passed (reported by the user, 2026-10-10, release build on Pixel 8a against prod)** — `Api.dbRows`, `ResultGrid`
 (pinned first column, shared horizontal scroll, header-tap sort), `DataView`
 (raw filter, has_more paging at 100 rows, row bottom sheet), Structure now
 reached from the Data header; `DbLogicTest` covers sort cycle, page label,
-cell text, width clamp and a `DbRows` decode with nulls. On-device browse
-needs a connection in a project the phone can reach. Stages 4-8 (SQL editor,
+cell text, width clamp and a `DbRows` decode with nulls. Stages 4-8 (SQL editor,
 row edit, connection CRUD, principals/grants, backups) **Not Started**.
