@@ -51,13 +51,15 @@ sized for a phone.
    (SQLite: file path), SSL mode, MSSQL instance name, search path.
    Extra params stay web-only unless requested.
 3. Test connection (`/test`) shows success or the runtime's error verbatim.
+   Available only for a saved connection (no draft-test route).
 4. Delete requires a confirm dialog naming the connection.
 5. SQLite hides host/port/user/password/SSL/instance fields.
 
 ### FR-C — Schema browser
 1. Schema selector (PostgreSQL/MSSQL real schemas; MySQL single implicit
    schema; SQLite none — selector hidden).
-2. Table list with kind (table/view) and row estimate if provided.
+2. Table list with kind (table/view). The API provides no row estimates or
+   totals; none are shown.
 3. Table detail with four sections: Columns (name, type, nullable, default,
    PK), Indexes, Constraints, Triggers. Views/triggers shown only where the
    engine supports them.
@@ -81,8 +83,10 @@ sized for a phone.
 2. Insert row (FAB on table view) and Delete row (confirm dialog showing
    the identifying columns).
 3. Tables with no primary key: edit/delete disabled with an explanatory
-   message (the runtime refuses ambiguous `original` matches; the client
-   must not guess).
+   message. The runtime does NOT guard this — it builds `WHERE` from
+   whatever `original` is sent and never reports rows affected — so the
+   client sends primary-key columns only and re-fetches to verify
+   (DESIGN_ANDROID_DATABASES D3).
 4. Failures (constraint violation etc.) surface verbatim, form state kept.
 
 ### FR-F — SQL editor
@@ -113,8 +117,10 @@ sized for a phone.
 2. Schedule: view, set (cadence + retention per existing schema), remove.
 3. Download a backup to device storage via the system document-create
    picker (streamed, not buffered in memory).
-4. Restore from a backup: two-step confirm (type the connection name),
-   progress, result.
+4. Restore from a backup into a `target_database` on the same connection
+   (prefilled with the connection's database); two-step confirm (type the
+   target database name), progress, result. The runtime takes a
+   `pre_restore` backup first.
 
 ### FR-I — Server auth prerequisite
 1. Switch all routes used by FR-B…FR-H to `requireIdentity` one route at a

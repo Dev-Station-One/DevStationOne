@@ -356,8 +356,8 @@ ok   internal/journal <span class="dim">0.62s</span><br>
               <div class="field"><label>Password (write-only — leave blank on edit to keep)</label><div class="in">••••••••••</div></div>
               <div class="field"><label>SSL mode</label><div class="in">prefer ▾</div></div>
               <div class="field"><label>Search path</label><div class="in ph">public</div></div>
-              <div class="banner ok" style="border-color:var(--green)">✓ Connected — PostgreSQL 16.4, 14 tables</div>
-              <div class="btnrow"><div class="btn sec2">Test</div><div class="btn">Save</div></div>
+              <div class="banner">Test is available after the first Save.</div>
+              <div class="btnrow"><div class="btn sec2" style="opacity:.4">Test</div><div class="btn">Save</div></div>
               <div class="btnrow"><div class="btn sec2" style="color:var(--red)" data-go="delconfirm">Delete connection</div></div>
             </div>
           </div>
@@ -373,19 +373,19 @@ ok   internal/journal <span class="dim">0.62s</span><br>
             <div class="dbhead"><span class="bk" data-go="conns">←</span><div class="tt">devstation-dev<small>PostgreSQL · schema public ▾</small></div><button class="txtbtn" data-go="sql">SQL</button><span class="iconbtn" data-go="dbmenu">⋮</span></div>
             <div class="miniseg"><span data-active>Tables · 14</span><span data-go="principals">Users</span><span data-go="backups">Backups</span></div>
             <div class="scroll">
-              <div class="li" data-go="data"><span>▦</span><span class="nm">projects</span><span class="sub">≈ 38</span></div>
-              <div class="li" data-go="data"><span>▦</span><span class="nm">sessions</span><span class="sub">≈ 1,204</span></div>
-              <div class="li" data-go="data"><span>▦</span><span class="nm">users</span><span class="sub">≈ 5</span></div>
-              <div class="li" data-go="data"><span>▦</span><span class="nm">journal_notes</span><span class="sub">≈ 412</span></div>
-              <div class="li" data-go="data"><span>▦</span><span class="nm">database_connections</span><span class="sub">≈ 9</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">projects</span><span class="sub">table</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">sessions</span><span class="sub">table</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">users</span><span class="sub">table</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">journal_notes</span><span class="sub">table</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">database_connections</span><span class="sub">table</span></div>
               <div class="li" data-go="data"><span>◫</span><span class="nm">v_active_sessions</span><span class="pill">view</span></div>
-              <div class="li" data-go="data"><span>▦</span><span class="nm">audit_events</span><span class="sub">≈ 22,870</span></div>
+              <div class="li" data-go="data"><span>▦</span><span class="nm">audit_events</span><span class="sub">table</span></div>
             </div>
           </div>
 
           <!-- V4 data browser -->
           <div class="dbv" data-v="data">
-            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">users<small>public · 5 rows</small></div><button class="txtbtn" data-go="structure">Structure</button></div>
+            <div class="dbhead"><span class="bk" data-go="tables">←</span><div class="tt">users<small>public</small></div><button class="txtbtn" data-go="structure">Structure</button></div>
             <div class="filter"><div class="in">email LIKE '%@local.test'</div><span class="txtbtn">Apply</span></div>
             <div class="grid"><table>
               <tr><th>id ▲</th><th>email</th><th>role</th><th>created_at</th><th>totp</th></tr>
@@ -395,7 +395,7 @@ ok   internal/journal <span class="dim">0.62s</span><br>
               <tr data-go="row"><td>4</td><td>ci@local.test</td><td>member</td><td>2026-10-01 12:30</td><td><span class="null">NULL</span></td></tr>
               <tr data-go="row"><td>5</td><td>guest@local.test</td><td>viewer</td><td>2026-10-07 09:15</td><td>false</td></tr>
             </table></div>
-            <div class="pager"><span>‹ prev</span><span>Rows <b>1–5</b> of 5 · 50/page ▾</span><span>next ›</span></div>
+            <div class="pager"><span>‹ prev</span><span>Rows <b>1–5</b> · 50/page ▾</span><span>next ›</span></div>
             <div class="fab2" data-go="rowedit" style="bottom:56px">＋</div>
           </div>
 
