@@ -94,6 +94,28 @@ data class DbPrincipal(val name: String, val can_login: Boolean = false, val sup
 @Serializable
 data class DbGrant(val privilege: String = "", val schema: String = "", val table: String = "", val raw: String = "")
 
+/** One backup row. Create is async: it starts as `running` and the list is polled until `done`/`failed`. */
+@Serializable
+data class DbBackup(
+    val id: String,
+    val file_name: String = "",
+    val size_bytes: Long = 0,
+    val trigger: String = "", // manual | scheduled | pre_restore
+    val state: String = "", // running | done | failed
+    val error: String = "",
+    val created_at: String = "",
+)
+
+@Serializable
+data class DbSchedule(
+    val cadence: String = "", // hourly | daily | weekly
+    val retention: Int = 0,
+    val next_run_at: String = "",
+    val last_run_at: String? = null,
+    val last_result: String = "",
+    val last_error: String = "",
+)
+
 /** One row change for the commit call: [original] = primary-key columns only (D3); [values] = changed columns. */
 class DbEdit(val op: String, val original: Map<String, JsonElement> = emptyMap(), val values: Map<String, JsonElement> = emptyMap())
 
@@ -254,6 +276,57 @@ fun Api.dbChangeGrant(projectID: String, connID: String, name: String, g: DbGran
     val url = if (revoke) dbUrl(projectID, connID, "principals", name, "grants", "revoke") else dbUrl(projectID, connID, "principals", name, "grants")
     val body = jsonBody(buildJsonObject { put("privilege", g.privilege); put("schema", g.schema); put("table", g.table) })
     Api.client.newCall(request("POST", url, body)).execute().use { check(it) }
+}
+
+// ---- backups (docs/DESIGN_ANDROID_DATABASES.md slice 8) ----
+
+fun Api.dbBackups(projectID: String, connID: String): List<DbBackup> = dbGet(dbUrl(projectID, connID, "backups"))
+
+/** Starts a dump; answers 202 with the `running` row. */
+fun Api.dbCreateBackup(projectID: String, connID: String): DbBackup =
+    Api.client.newCall(request("POST", dbUrl(projectID, connID, "backups"), bodyOf())).execute().use {
+        check(it)
+        Api.json.decodeFromString(it.jsonText())
+    }
+
+fun Api.dbDeleteBackup(projectID: String, connID: String, backupID: String) {
+    Api.client.newCall(request("DELETE", dbUrl(projectID, connID, "backups", backupID))).execute().use { check(it) }
+}
+
+/** The connection's schedule, or null when none is set (the server answers 404 "no schedule"). */
+fun Api.dbSchedule(projectID: String, connID: String): DbSchedule? =
+    Api.client.newCall(request("GET", dbUrl(projectID, connID, "backups", "schedule"))).execute().use {
+        if (it.code == 404) return null
+        check(it)
+        Api.json.decodeFromString(it.jsonText())
+    }
+
+fun Api.dbPutSchedule(projectID: String, connID: String, cadence: String, retention: Int) {
+    val body = jsonBody(buildJsonObject { put("cadence", cadence); put("retention", retention) })
+    Api.client.newCall(request("PUT", dbUrl(projectID, connID, "backups", "schedule"), body)).execute().use { check(it) }
+}
+
+fun Api.dbDeleteSchedule(projectID: String, connID: String) {
+    Api.client.newCall(request("DELETE", dbUrl(projectID, connID, "backups", "schedule"))).execute().use { check(it) }
+}
+
+/** Streams the dump into [out] (the server relays it from the runtime in 4 MiB chunks). */
+fun Api.dbDownloadBackup(projectID: String, connID: String, backupID: String, out: java.io.OutputStream) {
+    Api.netClient.newCall(request("GET", dbUrl(projectID, connID, "backups", backupID, "download"))).execute().use {
+        check(it)
+        it.body?.byteStream()?.copyTo(out)
+    }
+}
+
+// The server waits up to 30 minutes for a restore reply, so the phone must not give up at 150 s.
+private val restoreClient by lazy {
+    Api.netClient.newBuilder().readTimeout(31, java.util.concurrent.TimeUnit.MINUTES).build()
+}
+
+/** Restores into [target] (a database name; a file path for SQLite). Blocks until the runtime finishes. */
+fun Api.dbRestore(projectID: String, connID: String, backupID: String, target: String) {
+    val body = jsonBody(buildJsonObject { put("target_database", target); put("confirm", true) })
+    restoreClient.newCall(request("POST", dbUrl(projectID, connID, "backups", backupID, "restore"), body)).execute().use { check(it) }
 }
 
 /** Tests the *saved* connection (no draft-test route exists). */

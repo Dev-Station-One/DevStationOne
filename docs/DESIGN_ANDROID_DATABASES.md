@@ -234,15 +234,16 @@ security entries.
 
 ## 11. Status
 
-Design approved 2026-10-10. Slices 1 (server auth switch) and 2 (shell +
-browse) complete; slice 3 (data browser) complete, device E2E passed —
-slice 4 (SQL editor) complete, device E2E passed; see
-slice 5 (row edit) complete, device E2E passed; see
-slice 6 (connection CRUD) complete, device E2E passed; see
-slice 7 (principals/grants) complete, device E2E passed; see
-`IMPLEMENTATION_PLAN.md` Slice 28; slice 8 not started. Deviation: the
-password-change route is `PATCH …/principals/{p}` (the §4 table said PUT). The SQL entry is a
-button in the Tables header. Slice 3 shows
-the grid and row sheet only; row-tap opens the read-only sheet (Edit/Delete
-arrive with slice 5). Slice 2 deviation: Connections, Tables and Structure live in one
-file (`DatabasesScreen.kt`) instead of three; split when slices 3+ grow it.
+Design approved 2026-10-10. Slices 1-7 complete (slices 2-7 with on-device
+E2E passed); slice 8 (backups) built, device verification pending. Progress
+and E2E records: `IMPLEMENTATION_PLAN.md` Slice 28.
+
+Deviations from this design:
+- Connections, Tables and Structure live in one file (`DatabasesScreen.kt`)
+  instead of three; split if it grows.
+- SQL is a button in the Tables header; Users and Backups sit in a button row
+  beneath it.
+- The password-change route is `PATCH …/principals/{p}` (§4 said PUT).
+- The §10 async worry did not apply to backups: create is already async
+  (202 + polling), only restore blocks (30 min server deadline), so restore
+  uses a 31-minute client timeout.

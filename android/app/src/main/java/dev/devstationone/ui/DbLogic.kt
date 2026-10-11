@@ -1,5 +1,6 @@
 package dev.devstationone.ui
 
+import dev.devstationone.net.DbBackup
 import dev.devstationone.net.DbColumn
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
@@ -20,6 +21,7 @@ sealed interface DbRoute {
     data object Connections : DbRoute
     data class Tables(val conn: DbConnection) : DbRoute
     data class Sql(val conn: DbConnection) : DbRoute
+    data class Backups(val conn: DbConnection) : DbRoute
     data class Principals(val conn: DbConnection) : DbRoute
     data class Grants(val conn: DbConnection, val principal: String) : DbRoute
     /** [conn] null = new connection. */
@@ -133,6 +135,20 @@ internal const val SQL_HISTORY_MAX = 20
 /** Newest-first, de-duplicated, capped history after running [sql]. */
 internal fun pushHistory(history: List<String>, sql: String): List<String> =
     (listOf(sql.trim()) + history.filter { it != sql.trim() }).take(SQL_HISTORY_MAX)
+
+// ---- backups ----
+
+/** Polling continues only while some backup is still being written. */
+internal fun anyRunning(list: List<DbBackup>): Boolean = list.any { it.state == "running" }
+
+/** Restore needs the target name typed back exactly (design §5; the server only checks `confirm`). */
+internal fun restoreConfirmed(typed: String, target: String): Boolean = target.isNotBlank() && typed.trim() == target.trim()
+
+/** Retention is 1–100 on the server; the cadence comes from fixed chips. */
+internal fun parseRetention(text: String): Int? = text.trim().toIntOrNull()?.takeIf { it in 1..100 }
+
+/** `2026-10-11T04:05:06Z` → `2026-10-11 04:05` (UTC; the server sends ISO text). */
+internal fun whenText(iso: String): String = iso.take(16).replace('T', ' ')
 
 // ---- principals & grants ----
 

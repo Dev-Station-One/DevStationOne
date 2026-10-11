@@ -3,7 +3,9 @@ package dev.devstationone.ui
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbIndex
+import dev.devstationone.net.DbBackup
 import dev.devstationone.net.DbColumn
+import dev.devstationone.net.DbSchedule
 import dev.devstationone.net.DbGrant
 import dev.devstationone.net.DbRows
 import kotlinx.serialization.json.Json
@@ -167,6 +169,33 @@ class DbLogicTest {
         assertTrue(editLanded("update", names, listOf("id"), old, emptyList())) // sorted/filtered away
         assertTrue(editLanded("delete", names, listOf("id"), old, emptyList()))
         assertFalse(editLanded("delete", names, listOf("id"), old, listOf(old)))
+    }
+
+    @Test
+    fun backupHelpers() {
+        fun b(state: String) = DbBackup("i", state = state)
+        assertTrue(anyRunning(listOf(b("done"), b("running"))))
+        assertFalse(anyRunning(listOf(b("done"), b("failed"))))
+        assertTrue(restoreConfirmed(" appdb ", "appdb"))
+        assertFalse(restoreConfirmed("app", "appdb"))
+        assertFalse(restoreConfirmed("", ""))
+        assertEquals(7, parseRetention(" 7 "))
+        assertEquals(null, parseRetention("0"))
+        assertEquals(null, parseRetention("101"))
+        assertEquals(null, parseRetention("x"))
+        assertEquals("2026-10-11 04:05", whenText("2026-10-11T04:05:06Z"))
+    }
+
+    @Test
+    fun backupsAndScheduleDecode() {
+        val j = Json { ignoreUnknownKeys = true }
+        val l = j.decodeFromString<List<DbBackup>>(
+            """[{"id":"a","kind":"db","connection_id":"c","file_name":"db/a.dump","size_bytes":2048,"trigger":"manual","state":"done","error":"","created_at":"2026-10-11T04:05:06Z"}]"""
+        )
+        assertEquals("2 KB", fmtSize(l[0].size_bytes))
+        val s = j.decodeFromString<DbSchedule>("""{"id":"s","cadence":"daily","retention":7,"next_run_at":"2026-10-12T00:00:00Z","last_run_at":null,"last_result":"","last_error":""}""")
+        assertEquals(null, s.last_run_at)
+        assertEquals(7, s.retention)
     }
 
     @Test

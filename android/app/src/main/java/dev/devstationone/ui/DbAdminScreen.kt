@@ -45,7 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Busy/error wrapper for one admin screen; failures show the server text verbatim (design §6). */
-private class Acting(private val scope: kotlinx.coroutines.CoroutineScope) {
+internal class Acting(private val scope: kotlinx.coroutines.CoroutineScope) {
     var busy by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
 

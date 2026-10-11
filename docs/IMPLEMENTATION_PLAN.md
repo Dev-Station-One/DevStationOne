@@ -1712,4 +1712,18 @@ login/superuser flags, create, set password via PATCH, drop with confirm) →
 with confirm; MySQL `raw` grant text is read-only). SQLite shows "no
 server-side users or roles" without calling the API. Passwords are plain
 `remember`, never logged. `DbLogicTest` covers validation, SQLite gating and
-structured/raw grant decode. Stage 8 (backups) **Not Started**.
+structured/raw grant decode. Stage 8 (backups) **Complete in code, not yet
+verified on device** — `Backups` button in the Tables header →
+`BackupsView`: list (polled every 3 s while one is `running`, since create
+answers 202), `+ Backup`, schedule dialog (hourly/daily/weekly, keep 1–100,
+remove), download streamed to a `CreateDocument` target, restore, delete
+with confirm. Restore asks for `target_database` (prefilled with the
+connection's database; file path for SQLite) plus a typed confirm of that
+name, and uses a 31-minute read timeout because the server waits up to 30
+minutes for the runtime; the dialog stays up and asks the user to keep the
+app open (if the phone drops mid-restore the runtime still finishes, but the
+result is lost). OQ-6 (SQLite restore with the file open): code read, not
+run — the runtime restores with `sqlite3 <target> ".restore '<file>'"`, the
+SQLite online-backup API, so it is allowed on device; verify on the phone.
+`DbLogicTest` covers running detection, restore confirm, retention parsing
+and backup/schedule decode (null `last_run_at`).
