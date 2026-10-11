@@ -69,7 +69,12 @@ fun DatabasesScreen(server: Server, projectID: String, active: Boolean) {
         is DbRoute.Tables -> TablesView(
             api, projectID, r.conn,
             onBack = { stack.removeLast() },
-            onOpen = { schema, table -> stack += DbRoute.Structure(r.conn, schema, table) },
+            onOpen = { schema, table -> stack += DbRoute.Data(r.conn, schema, table) },
+        )
+        is DbRoute.Data -> DataView(
+            api, projectID, r,
+            onBack = { stack.removeLast() },
+            onStructure = { stack += DbRoute.Structure(r.conn, r.schema, r.table) },
         )
         is DbRoute.Structure -> StructureView(api, projectID, r, onBack = { stack.removeLast() })
     }
@@ -80,7 +85,7 @@ fun DatabasesScreen(server: Server, projectID: String, active: Boolean) {
  * Failures show the server message verbatim (offline runtime, 504, 400 …).
  */
 @Composable
-private fun <T> Loaded(key: Any?, fetch: () -> T, content: @Composable (T) -> Unit) {
+internal fun <T> Loaded(key: Any?, fetch: () -> T, content: @Composable (T) -> Unit) {
     class Box(val v: T)
     var data by remember(key) { mutableStateOf<Box?>(null) }
     var error by remember(key) { mutableStateOf<String?>(null) }

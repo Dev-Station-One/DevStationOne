@@ -1,6 +1,7 @@
 package dev.devstationone.net
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 import okhttp3.HttpUrl
 
 // ---- project databases (docs/DESIGN_ANDROID_DATABASES.md §4; live RPCs to the runtime) ----
@@ -52,6 +53,16 @@ data class DbConstraint(
 @Serializable
 data class DbTrigger(val name: String, val event: String = "", val timing: String = "")
 
+/** A page of rows (rows/query answer): cells in [columns] order; no total count exists, only [has_more]. */
+@Serializable
+data class DbRows(
+    val columns: List<String> = emptyList(),
+    val rows: List<List<JsonElement>> = emptyList(),
+    val has_more: Boolean = false,
+    val is_exec: Boolean = false,
+    val rows_affected: Long = 0,
+)
+
 private fun Api.dbUrl(projectID: String, vararg segs: String): HttpUrl =
     url("api", "v1", "projects", projectID, "databases", *segs)
 
@@ -86,3 +97,26 @@ fun Api.dbConstraints(projectID: String, connID: String, schema: String, table: 
 
 fun Api.dbTriggers(projectID: String, connID: String, schema: String, table: String): List<DbTrigger> =
     dbGet(dbTableUrl(projectID, connID, schema, table, "triggers"))
+
+/**
+ * One page of a table. [filter] is the user-typed raw expression (design §6); [sort] "" = unsorted.
+ * Uses the long-timeout client — the server still caps the call at 30 s (504).
+ */
+fun Api.dbRows(
+    projectID: String, connID: String, schema: String, table: String,
+    limit: Int, offset: Int, sort: String, sortDesc: Boolean, filter: String,
+): DbRows {
+    val u = dbTableUrl(projectID, connID, schema, table, "rows").newBuilder().apply {
+        addQueryParameter("limit", limit.toString())
+        addQueryParameter("offset", offset.toString())
+        if (sort.isNotEmpty()) {
+            addQueryParameter("sort", sort)
+            if (sortDesc) addQueryParameter("sort_desc", "true")
+        }
+        if (filter.isNotBlank()) addQueryParameter("filter", filter)
+    }.build()
+    return Api.netClient.newCall(request("GET", u)).execute().use {
+        check(it)
+        Api.json.decodeFromString(it.jsonText())
+    }
+}

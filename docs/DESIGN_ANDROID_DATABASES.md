@@ -235,6 +235,8 @@ security entries.
 ## 11. Status
 
 Design approved 2026-10-10. Slices 1 (server auth switch) and 2 (shell +
-browse) complete — see `IMPLEMENTATION_PLAN.md` Slice 28; slices 3-8 not
-started. Slice 2 deviation: Connections, Tables and Structure live in one
+browse) complete; slice 3 (data browser) built, device verification pending —
+see `IMPLEMENTATION_PLAN.md` Slice 28; slices 4-8 not started. Slice 3 shows
+the grid and row sheet only; row-tap opens the read-only sheet (Edit/Delete
+arrive with slice 5). Slice 2 deviation: Connections, Tables and Structure live in one
 file (`DatabasesScreen.kt`) instead of three; split when slices 3+ grow it.

@@ -4,6 +4,9 @@ import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbIndex
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -14,6 +17,7 @@ import kotlinx.serialization.json.jsonPrimitive
 sealed interface DbRoute {
     data object Connections : DbRoute
     data class Tables(val conn: DbConnection) : DbRoute
+    data class Data(val conn: DbConnection, val schema: String, val table: String) : DbRoute
     data class Structure(val conn: DbConnection, val schema: String, val table: String) : DbRoute
 }
 
@@ -59,4 +63,33 @@ internal fun engineLabel(engine: String): String = when (engine) {
     "mssql" -> "SQL Server"
     "sqlite" -> "SQLite"
     else -> engine
+}
+
+internal const val DB_PAGE_SIZE = 100
+
+/** Column sort state; [column] "" = unsorted. */
+internal data class DbSort(val column: String = "", val desc: Boolean = false)
+
+/** Header tap cycles asc → desc → none on one column; a different column starts at asc (design §5). */
+internal fun nextSort(cur: DbSort, column: String): DbSort = when {
+    cur.column != column -> DbSort(column, false)
+    !cur.desc -> DbSort(column, true)
+    else -> DbSort()
+}
+
+/** "Rows 101–200" for a page of [count] rows at [offset]; "No rows" when empty (no totals exist, only has_more). */
+internal fun pageLabel(offset: Int, count: Int): String =
+    if (count == 0) "No rows" else "Rows ${offset + 1}–${offset + count}"
+
+/** Grid/sheet text for one JSON cell: null → NULL, strings unquoted, everything else as its JSON text. */
+internal fun cellText(e: JsonElement): String = when {
+    e is JsonNull -> "NULL"
+    e is JsonPrimitive && e.isString -> e.content
+    else -> e.toString()
+}
+
+/** Grid column width in dp: header and first 20 sampled cells × 7 dp, clamped 72..200 (D2). */
+internal fun columnWidthDp(header: String, rows: List<List<JsonElement>>, col: Int): Int {
+    val longest = maxOf(header.length, rows.take(20).maxOfOrNull { r -> r.getOrNull(col)?.let { cellText(it).length } ?: 0 } ?: 0)
+    return (longest * 7).coerceIn(72, 200)
 }
