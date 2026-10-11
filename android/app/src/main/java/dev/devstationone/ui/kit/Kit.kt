@@ -193,4 +193,35 @@ object MuxIcons {
         stroke { moveTo(4f, 14f); lineTo(20f, 14f); lineTo(20f, 20f); lineTo(4f, 20f); close() }
         stroke(3f) { moveTo(8f, 7f); lineTo(8f, 7.01f); moveTo(8f, 17f); lineTo(8f, 17.01f) }
     }
+    // Workspace-tab round-2 set (docs/DESIGN_ANDROID_SCM.md §2): Prompt =
+    // Terminal, Note = Journal, Branch = Source Control; Folder serves Files.
+    val Prompt = icon("prompt") {
+        stroke { moveTo(4f, 6f); lineTo(10f, 12f); lineTo(4f, 18f) }
+        stroke(3f) { moveTo(13f, 18f); lineTo(20f, 18f) }
+    }
+    val Note = icon("note") {
+        stroke { moveTo(5f, 3f); lineTo(19f, 3f); lineTo(19f, 21f); lineTo(5f, 21f); close() }
+        stroke { moveTo(8f, 8f); lineTo(16f, 8f); moveTo(8f, 12f); lineTo(16f, 12f); moveTo(8f, 16f); lineTo(13f, 16f) }
+    }
+    val Branch = icon("branch") {
+        circle(7f, 6f, 2.2f)
+        circle(17f, 6f, 2.2f)
+        circle(7f, 18f, 2.2f)
+        stroke { moveTo(7f, 8.2f); lineTo(7f, 15.8f) }
+        stroke {
+            moveTo(17f, 8.2f)
+            quadTo(17f, 13f, 10.5f, 13.6f)
+            lineTo(9.2f, 13.8f)
+        }
+    }
+
+}
+
+/** One stroke-outline circle at (cx, cy), drawn as two half arcs. */
+private fun ImageVector.Builder.circle(cx: Float, cy: Float, r: Float) {
+    stroke {
+        moveTo(cx - r, cy)
+        arcTo(r, r, 0f, true, true, cx + r, cy)
+        arcTo(r, r, 0f, true, true, cx - r, cy)
+    }
 }

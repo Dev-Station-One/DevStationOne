@@ -1619,3 +1619,19 @@ identity with web cookie behavior unchanged (`TestDeviceFilesAuth`,
 `TestDeviceJournalAuth` + the full `make test` suite green with the test
 DB attached). Round-2 candidates stay ranked in OQ-6 (Commands, then
 Docker logs).
+
+## Slice 27: Android parity round 2 — Source Control tab
+
+**Goal**: a fourth workspace tab on Android — status/diff/stage/unstage/
+commit/commit-all/pull/push/log, then (stage 3) discard, amend and a branch
+sheet — per `docs/REQUIREMENTS_ANDROID_SCM.md`, design
+`docs/DESIGN_ANDROID_SCM.md`.
+
+**Status**: Stage 1 (backend) **Complete** — 5 new git actions
+(discard/amend/branches/checkout/branch), all 13 git routes on
+`requireIdentity`, audit events, openapi, deployed dev + prod. Stage 2 (tab
+bar icons + SCM core) **Complete** — `PrimaryTabRow` icon-only tab bar,
+`ScmScreen`/`DiffScreen`, Api git methods, `ScmScreenLogicTest` (8 tests);
+verified on the Pixel 8a against prod (tab bar, branch header, status groups,
+commit/pull/push enabled states, history) and signed off by the user. Stage 3
+(discard + amend + branch sheet UI) and stage 4 (docs roundoff) **Not Started**.

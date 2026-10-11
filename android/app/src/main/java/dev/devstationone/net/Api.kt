@@ -125,6 +125,42 @@ data class FileInfo(
     val group_id: Int = 0,
 )
 
+// ---- project git (live RPCs to the runtime; paths project-root-relative) ----
+
+@Serializable
+private data class GitPullResult(val conflicts: List<GitFileStatus> = emptyList())
+
+/** One changed path: index = staged-status code, worktree = unstaged one ("?", ".", "M", "A", "D", "R", "U"), orig_path set for renames. */
+@Serializable
+data class GitFileStatus(
+    val path: String,
+    val orig_path: String = "",
+    val index: String = ".",
+    val worktree: String = ".",
+)
+
+/** The current branch's tracking state (git/status response). */
+@Serializable
+data class GitBranchStatus(
+    val name: String = "", // "" = detached HEAD
+    val upstream: String = "",
+    val ahead: Int = 0,
+    val behind: Int = 0,
+    val has_remote: Boolean = false,
+)
+
+/** {"files": [...], "branch": {...}} as git/status answers. */
+@Serializable
+data class GitStatus(val files: List<GitFileStatus> = emptyList(), val branch: GitBranchStatus = GitBranchStatus())
+
+/** One recent commit as git/log answers (datetime = ISO 8601). */
+@Serializable
+data class GitCommitInfo(val sha: String, val subject: String = "", val author: String = "", val datetime: String = "")
+
+/** One branch as git/branches answers: locals first (current flag + upstream), remotes display-only. */
+@Serializable
+data class GitBranchInfo(val name: String, val current: Boolean = false, val upstream: String = "")
+
 class ApiException(val code: Int, message: String) : Exception(message)
 
 class Api(private val server: Server) {
@@ -141,6 +177,11 @@ class Api(private val server: Server) {
         val wsClient: OkHttpClient = client.newBuilder()
             .readTimeout(0, TimeUnit.MILLISECONDS)
             .pingInterval(20, TimeUnit.SECONDS)
+            .build()
+        /** git pull/push client: the server allows the runtime 2 minutes, so read longer than that. */
+        val netClient: OkHttpClient = client.newBuilder()
+            .readTimeout(150, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
             .build()
 
         /** Exchanges a pairing code + the device's public key for a device id. */
@@ -350,11 +391,105 @@ class Api(private val server: Server) {
     }
 
     /** Raw-byte PUT; the runtime creates the file (0644) when absent, replaces it when present. */
-    fun writeFile(projectID: String, path: String, bytes: ByteArray) {
+    fun writeFile(projectID: String, path: String, byteArray: ByteArray) {
         val u = url("api", "v1", "projects", projectID, "files", "content").newBuilder()
             .addQueryParameter("path", path)
             .build()
-        val body = bytes.toRequestBody("application/octet-stream".toMediaType())
+        val body = byteArray.toRequestBody("application/octet-stream".toMediaType())
         client.newCall(request("PUT", u, body)).execute().use { check(it) }
+    }
+
+    // ---- project git (docs/API.md "Git") ----
+
+    private fun gitUrl(projectID: String, seg: String): HttpUrl =
+        url("api", "v1", "projects", projectID, "git", seg)
+
+    fun gitStatus(projectID: String): GitStatus {
+        client.newCall(request("GET", gitUrl(projectID, "status"))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** One path's unified diff ("" diffs the project root); staged diffs index-vs-HEAD. */
+    fun gitDiff(projectID: String, path: String, staged: Boolean): String {
+        val u = gitUrl(projectID, "diff").newBuilder()
+            .addQueryParameter("path", path)
+            .build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return it.jsonText().let { t -> JSONObject(t).getString("diff") }
+        }
+    }
+
+    fun gitStage(projectID: String, path: String) {
+        client.newCall(request("POST", gitUrl(projectID, "stage"), bodyOf("path" to path))).execute().use { check(it) }
+    }
+
+    fun gitUnstage(projectID: String, path: String) {
+        client.newCall(request("POST", gitUrl(projectID, "unstage"), bodyOf("path" to path))).execute().use { check(it) }
+    }
+
+    /** Commits the staged index; returns the new SHA. */
+    fun gitCommit(projectID: String, message: String): String {
+        client.newCall(request("POST", gitUrl(projectID, "commit"), bodyOf("message" to message))).execute().use {
+            check(it)
+            return JSONObject(it.jsonText()).getString("commit")
+        }
+    }
+
+    /** Pulls and returns the conflict list — empty [] means a clean pull; conflicts are not errors. */
+    fun gitPull(projectID: String): List<GitFileStatus> {
+        netClient.newCall(request("POST", gitUrl(projectID, "pull"), bodyOf())).execute().use {
+            check(it)
+            return json.decodeFromString<GitPullResult>(it.jsonText()).conflicts
+        }
+    }
+
+    /** Pushes the current branch; true when this push published it (set the upstream). */
+    fun gitPush(projectID: String): Boolean {
+        netClient.newCall(request("POST", gitUrl(projectID, "push"), bodyOf())).execute().use {
+            check(it)
+            return JSONObject(it.jsonText()).getBoolean("pushed_new_upstream")
+        }
+    }
+
+    /** Recent commits, newest first. 502 when the repo has no commits yet. */
+    fun gitLog(projectID: String, limit: Int = 50): List<GitCommitInfo> {
+        val u = gitUrl(projectID, "log").newBuilder().addQueryParameter("limit", limit.toString()).build()
+        client.newCall(request("GET", u)).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** Discards a path's worktree changes (staged stay); the runtime refuses untracked/clean paths. */
+    fun gitDiscard(projectID: String, path: String) {
+        client.newCall(request("POST", gitUrl(projectID, "discard"), bodyOf("path" to path))).execute().use { check(it) }
+    }
+
+    /** Amends HEAD; returns the new SHA. 502 "amend refused" when the branch is published. */
+    fun gitAmend(projectID: String, message: String): String {
+        client.newCall(request("POST", gitUrl(projectID, "amend"), bodyOf("message" to message))).execute().use {
+            check(it)
+            return JSONObject(it.jsonText()).getString("commit")
+        }
+    }
+
+    fun gitBranches(projectID: String): List<GitBranchInfo> {
+        client.newCall(request("GET", gitUrl(projectID, "branches"))).execute().use {
+            check(it)
+            return json.decodeFromString(it.jsonText())
+        }
+    }
+
+    /** Checks out an existing local branch; 502 "working tree is dirty" while the status records changes. */
+    fun gitCheckout(projectID: String, branch: String) {
+        client.newCall(request("POST", gitUrl(projectID, "checkout"), bodyOf("name" to branch))).execute().use { check(it) }
+    }
+
+    /** Creates a branch and switches to it (`git checkout -b`). */
+    fun gitCreateBranch(projectID: String, branch: String) {
+        client.newCall(request("POST", gitUrl(projectID, "branch"), bodyOf("name" to branch))).execute().use { check(it) }
     }
 }

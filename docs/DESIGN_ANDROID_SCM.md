@@ -188,6 +188,7 @@ Branch sheet      local branches (current ✓), upstream muted, remotes
   match `GitBranchStatus.Upstream`'s shape. Discard treats a staged-only
   change ("A ." — no worktree half) as nothing to discard, since `git
   restore` is worktree-only. Deployed to dev and prod before device work.
-- Slices 2-4 not started. The Android side inherits the stage-1..5
+- **Slice 2 complete 2026-10-10**: icon-only `PrimaryTabRow` (Prompt/Note/Folder/Branch icons, user-approved on device), `ScmScreen` + `DiffScreen`, grouping logic unit-tested, release APK verified on the Pixel against prod. PrimaryTabRow still needs `@OptIn(ExperimentalMaterial3Api)` at the BOM in use (2024.10.01). Pull/push use a 150 s read-timeout client (server allows the runtime 2 min).
+- Slices 3-4 not started. The Android side inherits the stage-1..5
   component/style precedents; no new patterns are introduced beyond the
   ones recorded above.
