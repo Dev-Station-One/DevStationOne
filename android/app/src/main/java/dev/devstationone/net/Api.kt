@@ -206,7 +206,7 @@ class Api(private val server: Server) {
         Request.Builder().url(url).method(method, body)
             .header("Authorization", Auth.header(server, method, url)).build()
 
-    private fun bodyOf(vararg pairs: Pair<String, String>): RequestBody =
+    internal fun bodyOf(vararg pairs: Pair<String, String>): RequestBody =
         buildJsonObject { pairs.forEach { (k, v) -> put(k, v) } }.toString().toRequestBody(jsonMime)
 
     internal fun Response.jsonText(): String = body?.string().orEmpty()

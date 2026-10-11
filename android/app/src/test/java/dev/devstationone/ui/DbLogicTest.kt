@@ -10,6 +10,7 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DbLogicTest {
@@ -76,6 +77,33 @@ class DbLogicTest {
         assertEquals(listOf("1", "NULL", "true"), r.rows[0].map(::cellText))
         assertEquals("a", cellText(r.rows[1][1]))
         assertEquals(true, r.has_more)
+    }
+
+    @Test
+    fun classifierReadOnly() {
+        listOf(
+            "select 1", "  SELECT * FROM t;", "-- c\nSELECT 1", "/* c */ with x as (select 1) select * from x",
+            "EXPLAIN SELECT 1", "show tables", "PRAGMA table_info(t)", "SELECT 'a--b' FROM t", "SELECT 1; ; ",
+        ).forEach { assertTrue(it, isReadOnlySql(it)) }
+    }
+
+    @Test
+    fun classifierWritesAndMultiStatement() {
+        listOf(
+            "DELETE FROM t", "update t set a=1", "DROP TABLE t", "INSERT INTO t VALUES (1)",
+            "SELECT 1; DROP TABLE t", "SELECT 1 -- x\n; DELETE FROM t", "/* SELECT */ DELETE FROM t",
+            "SELECT '--'; DROP TABLE t", "(SELECT 1)", "", "   ",
+        ).forEach { assertFalse(it, isReadOnlySql(it)) }
+    }
+
+    @Test
+    fun historyDedupesCapsAndOrders() {
+        assertEquals(listOf("b", "a"), pushHistory(listOf("a", "b"), " b "))
+        val full = (1..SQL_HISTORY_MAX).map { "q$it" }
+        val next = pushHistory(full, "new")
+        assertEquals(SQL_HISTORY_MAX, next.size)
+        assertEquals("new", next.first())
+        assertFalse("q$SQL_HISTORY_MAX" in next)
     }
 
     @Test

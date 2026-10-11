@@ -85,3 +85,19 @@ private fun GridRow(
         Row(Modifier.horizontalScroll(scroll)) { for (i in 1 until cells.size) Cell(i) }
     }
 }
+
+/** Every column of one row with its full (untruncated) value. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+internal fun RowSheet(columns: List<String>, row: List<JsonElement>, onDismiss: () -> Unit) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        LazyColumn(Modifier.padding(horizontal = 16.dp)) {
+            itemsIndexed(columns) { i, col ->
+                Column(Modifier.padding(vertical = 6.dp)) {
+                    Text(col, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(row.getOrNull(i)?.let(::cellText) ?: "NULL", fontFamily = FontFamily.Monospace, fontSize = 14.sp)
+                }
+            }
+        }
+    }
+}

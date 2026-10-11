@@ -213,3 +213,16 @@ class FileDraftStore(ctx: Context, serverID: String, projectID: String) {
         file(path).delete()
     }
 }
+
+/** Last SQL statements run per connection (docs/DESIGN_ANDROID_DATABASES.md §5): app-private, newest first. */
+class SqlHistoryStore(ctx: Context) {
+    private val prefs = ctx.getSharedPreferences("sqlhistory", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun load(connID: String): List<String> =
+        prefs.getString(connID, null)?.let { runCatching { json.decodeFromString<List<String>>(it) }.getOrNull() } ?: emptyList()
+
+    fun save(connID: String, list: List<String>) {
+        prefs.edit().putString(connID, json.encodeToString(list)).apply()
+    }
+}

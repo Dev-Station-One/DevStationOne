@@ -2,7 +2,14 @@ package dev.devstationone.net
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import kotlinx.coroutines.suspendCancellableCoroutine
+import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.HttpUrl
+import okhttp3.Response
+import java.io.IOException
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 // ---- project databases (docs/DESIGN_ANDROID_DATABASES.md §4; live RPCs to the runtime) ----
 
@@ -120,3 +127,27 @@ fun Api.dbRows(
         Api.json.decodeFromString(it.jsonText())
     }
 }
+
+/**
+ * Runs any SQL. Cancelling the calling coroutine cancels the HTTP call (D6); the server-side statement
+ * still runs to its 30 s deadline. `has_more` means the result hit [limit] rows.
+ */
+suspend fun Api.dbQuery(projectID: String, connID: String, sql: String, limit: Int = 500): DbRows =
+    suspendCancellableCoroutine { cont ->
+        val u = dbUrl(projectID, connID, "query").newBuilder().addQueryParameter("limit", limit.toString()).build()
+        val call = Api.netClient.newCall(request("POST", u, bodyOf("sql" to sql)))
+        cont.invokeOnCancellation { call.cancel() }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) = cont.resumeWithException(e)
+            override fun onResponse(call: Call, response: Response) {
+                response.use {
+                    try {
+                        check(it)
+                        cont.resume(Api.json.decodeFromString<DbRows>(it.jsonText()))
+                    } catch (e: Exception) {
+                        cont.resumeWithException(e)
+                    }
+                }
+            }
+        })
+    }

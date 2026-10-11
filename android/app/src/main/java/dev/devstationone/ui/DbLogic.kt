@@ -17,6 +17,7 @@ import kotlinx.serialization.json.jsonPrimitive
 sealed interface DbRoute {
     data object Connections : DbRoute
     data class Tables(val conn: DbConnection) : DbRoute
+    data class Sql(val conn: DbConnection) : DbRoute
     data class Data(val conn: DbConnection, val schema: String, val table: String) : DbRoute
     data class Structure(val conn: DbConnection, val schema: String, val table: String) : DbRoute
 }
@@ -93,3 +94,36 @@ internal fun columnWidthDp(header: String, rows: List<List<JsonElement>>, col: I
     val longest = maxOf(header.length, rows.take(20).maxOfOrNull { r -> r.getOrNull(col)?.let { cellText(it).length } ?: 0 } ?: 0)
     return (longest * 7).coerceIn(72, 200)
 }
+
+private val READ_ONLY_FIRST_WORDS = setOf("SELECT", "WITH", "EXPLAIN", "SHOW", "PRAGMA", "DESCRIBE", "VALUES", "TABLE")
+
+/**
+ * D7, UX only — never a security control. Comments are stripped (quote-aware), then the statement is
+ * read-only iff its first keyword is in the read set and no `;` remains before the end. A `;` inside
+ * a string literal counts as a second statement (false positive, the safe direction). Known false
+ * negative: `WITH … DELETE`.
+ */
+internal fun isReadOnlySql(sql: String): Boolean {
+    val code = StringBuilder()
+    var quote = ' '
+    var i = 0
+    while (i < sql.length) {
+        val c = sql[i]
+        when {
+            quote != ' ' -> { code.append(c); if (c == quote) quote = ' ' }
+            c == '\'' || c == '"' || c == '`' -> { quote = c; code.append(c) }
+            sql.startsWith("--", i) -> { i = sql.indexOf('\n', i).let { if (it < 0) sql.length else it }; continue }
+            sql.startsWith("/*", i) -> { i = sql.indexOf("*/", i + 2).let { if (it < 0) sql.length else it + 2 }; code.append(' '); continue }
+            else -> code.append(c)
+        }
+        i++
+    }
+    val body = code.toString().trim().trimEnd { it == ';' || it.isWhitespace() }
+    return ';' !in body && body.takeWhile { it.isLetter() }.uppercase() in READ_ONLY_FIRST_WORDS
+}
+
+internal const val SQL_HISTORY_MAX = 20
+
+/** Newest-first, de-duplicated, capped history after running [sql]. */
+internal fun pushHistory(history: List<String>, sql: String): List<String> =
+    (listOf(sql.trim()) + history.filter { it != sql.trim() }).take(SQL_HISTORY_MAX)

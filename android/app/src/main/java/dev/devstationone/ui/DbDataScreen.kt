@@ -76,16 +76,5 @@ internal fun DataView(api: Api, projectID: String, r: DbRoute.Data, onBack: () -
         }
     }
 
-    open?.let { (page, idx) ->
-        ModalBottomSheet(onDismissRequest = { open = null }) {
-            LazyColumn(Modifier.padding(horizontal = 16.dp)) {
-                itemsIndexed(page.columns) { i, col ->
-                    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                        Text(col, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(page.rows[idx].getOrNull(i)?.let(::cellText) ?: "NULL", fontFamily = FontFamily.Monospace, fontSize = 14.sp)
-                    }
-                }
-            }
-        }
-    }
+    open?.let { (page, idx) -> RowSheet(page.columns, page.rows[idx]) { open = null } }
 }

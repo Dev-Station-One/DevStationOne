@@ -70,7 +70,9 @@ fun DatabasesScreen(server: Server, projectID: String, active: Boolean) {
             api, projectID, r.conn,
             onBack = { stack.removeLast() },
             onOpen = { schema, table -> stack += DbRoute.Data(r.conn, schema, table) },
+            onSql = { stack += DbRoute.Sql(r.conn) },
         )
+        is DbRoute.Sql -> SqlView(api, projectID, r, onBack = { stack.removeLast() })
         is DbRoute.Data -> DataView(
             api, projectID, r,
             onBack = { stack.removeLast() },
@@ -141,9 +143,9 @@ private fun ConnectionsView(api: Api, projectID: String, onOpen: (DbConnection) 
 }
 
 @Composable
-private fun TablesView(api: Api, projectID: String, conn: DbConnection, onBack: () -> Unit, onOpen: (schema: String, table: String) -> Unit) {
+private fun TablesView(api: Api, projectID: String, conn: DbConnection, onBack: () -> Unit, onOpen: (schema: String, table: String) -> Unit, onSql: () -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        ScreenHeader(conn.name, onBack = onBack)
+        ScreenHeader(conn.name, onBack = onBack, actions = { TextButton(onClick = onSql) { Text("SQL") } })
         if (hasSchemas(conn.engine)) {
             Loaded(conn.id, { api.dbSchemas(projectID, conn.id) }) { schemas ->
                 var schema by remember(schemas) { mutableStateOf(defaultSchema(conn.engine, schemas)) }
