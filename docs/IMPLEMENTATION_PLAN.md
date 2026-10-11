@@ -1673,5 +1673,14 @@ only, no captured-fixture decode tests yet). Stage 3 (data browser)
 (pinned first column, shared horizontal scroll, header-tap sort), `DataView`
 (raw filter, has_more paging at 100 rows, row bottom sheet), Structure now
 reached from the Data header; `DbLogicTest` covers sort cycle, page label,
-cell text, width clamp and a `DbRows` decode with nulls. Stages 4-8 (SQL editor,
-row edit, connection CRUD, principals/grants, backups) **Not Started**.
+cell text, width clamp and a `DbRows` decode with nulls. Stage 4 (SQL editor)
+**Complete in code, not yet verified on device** — `Api.dbQuery` (suspend;
+cancelling the coroutine cancels the HTTP call), `SqlView` (monospace
+editor, Run/Cancel, rows-affected banner, 500-row truncation notice, shared
+`ResultGrid` + `RowSheet`), `isReadOnlySql` classifier (quote-aware comment
+stripping, multi-statement guard; `WITH … DELETE` is a known false negative)
+with a confirm dialog for everything else, `SqlHistoryStore` (20 per
+connection, app-private SharedPreferences, so SQL text persists on the
+phone). `DbLogicTest` covers classifier read/write/multi-statement cases and
+history dedupe/cap. Stages 5-8 (row edit, connection CRUD,
+principals/grants, backups) **Not Started**.
