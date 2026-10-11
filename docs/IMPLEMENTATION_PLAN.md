@@ -1682,8 +1682,8 @@ stripping, multi-statement guard; `WITH … DELETE` is a known false negative)
 with a confirm dialog for everything else, `SqlHistoryStore` (20 per
 connection, app-private SharedPreferences, so SQL text persists on the
 phone). `DbLogicTest` covers classifier read/write/multi-statement cases and
-history dedupe/cap. Stage 5 (row edit) **Complete in code, not yet
-verified on device** — `Api.dbCommit` (PATCH `/rows`, one edit per call),
+history dedupe/cap. Stage 5 (row edit) **Complete; on-device E2E
+passed (reported by the user, 2026-10-11, release build on Pixel 8a against prod)** — `Api.dbCommit` (PATCH `/rows`, one edit per call),
 `RowForm` (per-column field, explicit NULL toggle; insert omits untouched
 columns so DB defaults apply), Edit/Delete in the row sheet, `+ Row` in the
 Data header, delete confirm naming the PK values. Row identity is PK columns
