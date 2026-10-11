@@ -238,7 +238,7 @@ Design approved 2026-10-10. Slices 1 (server auth switch) and 2 (shell +
 browse) complete; slice 3 (data browser) complete, device E2E passed —
 slice 4 (SQL editor) complete, device E2E passed; see
 slice 5 (row edit) complete, device E2E passed; see
-slice 6 (connection CRUD) built, device verification pending; see
+slice 6 (connection CRUD) complete, device E2E passed; see
 `IMPLEMENTATION_PLAN.md` Slice 28; slices 7-8 not started. The SQL entry is a
 button in the Tables header. Slice 3 shows
 the grid and row sheet only; row-tap opens the read-only sheet (Edit/Delete

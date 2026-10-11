@@ -1693,8 +1693,8 @@ never reports rows affected, update/delete re-fetch the page and
 `editLanded` flags "No row matched — nothing changed" when the row is still
 present and unchanged. `DbLogicTest` covers type coercion, blocked reasons,
 changed-column-only updates, NULL/invalid rejection and the landed check.
-Stage 6 (connection CRUD) **Complete in code, not yet verified on device**
-— `Api.dbSave`/`dbDelete`/`dbTest`, `ConnectionForm` (engine chips locked
+Stage 6 (connection CRUD) **Complete; on-device E2E passed (reported by
+the user, 2026-10-11, release build on Pixel 8a against prod)** — `Api.dbSave`/`dbDelete`/`dbTest`, `ConnectionForm` (engine chips locked
 once saved, fields per engine, SQLite = name + file path, port defaults,
 `validateConnection` mirroring the server rules), `+ Add` and per-card
 `Edit` on the Connections list, delete confirm, Test against the saved
