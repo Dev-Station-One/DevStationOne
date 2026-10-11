@@ -1,5 +1,6 @@
 package dev.devstationone.ui
 
+import dev.devstationone.data.DbRef
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbIndex
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -242,5 +244,46 @@ class DbLogicTest {
         assertEquals("db:5432/app", connectionTarget(pg))
         assertEquals("db", connectionTarget(pg.copy(port = 0, database = "")))
         assertEquals("/data/x.db", connectionTarget(DbConnection("2", "s", "sqlite", database = "/data/x.db")))
+    }
+
+    // ---- round 4: restore + engine options ----
+
+    private val c1 = DbConnection("c1", "one", "postgresql")
+
+    @Test
+    fun refsOfKeepsOrderAndSkipsRootAndForm() {
+        val stack = listOf(DbRoute.Connections, DbRoute.Tables(c1), DbRoute.Data(c1, "public", "t"), DbRoute.Structure(c1, "public", "t"), DbRoute.Form(c1))
+        assertEquals(
+            listOf(DbRef("tables", "c1"), DbRef("data", "c1", "public", "t"), DbRef("structure", "c1", "public", "t")),
+            refsOf(stack),
+        )
+        assertEquals(DbRef("sql", "c1", schema = "app"), refsOf(listOf(DbRoute.Sql(c1, "app"))).single())
+        assertEquals(DbRef("grants", "c1", user = "bob"), refsOf(listOf(DbRoute.Grants(c1, "bob"))).single())
+        assertEquals(emptyList<DbRef>(), refsOf(listOf(DbRoute.Connections)))
+    }
+
+    @Test
+    fun restoreStackStopsAtFirstFailure() = runBlocking {
+        val refs = listOf(DbRef("tables", "c1"), DbRef("data", "c1", "public", "gone"), DbRef("structure", "c1", "public", "gone"))
+        val r = restoreStack(refs) { ref -> if (ref.kind == "tables") DbRoute.Tables(c1) else null }
+        assertEquals(listOf<DbRoute>(DbRoute.Tables(c1)), r.routes)
+        assertEquals(refs[1], r.failed)
+    }
+
+    @Test
+    fun restoreStackTreatsExceptionAsFailureAndAllGoodAsNoFailure() = runBlocking {
+        val boom = restoreStack(listOf(DbRef("tables", "c1"))) { throw java.io.IOException("offline") }
+        assertEquals(emptyList<DbRoute>(), boom.routes)
+        assertEquals("tables", boom.failed?.kind)
+        val ok = restoreStack(listOf(DbRef("tables", "c1"), DbRef("users", "c1"))) { ref -> if (ref.kind == "tables") DbRoute.Tables(c1) else DbRoute.Principals(c1) }
+        assertEquals(2, ok.routes.size)
+        assertEquals(null, ok.failed)
+    }
+
+    @Test
+    fun engineOptionsMySqlFirstAndUnknownEngineLabelIsRaw() {
+        assertEquals(listOf("mysql", "postgresql", "mssql", "sqlite"), ENGINE_OPTIONS.map { it.value })
+        assertEquals(listOf("MySQL", "PostgreSQL", "SQL Server", "SQLite"), ENGINE_OPTIONS.map { it.text })
+        assertEquals("mariadb", engineLabel("mariadb"))
     }
 }

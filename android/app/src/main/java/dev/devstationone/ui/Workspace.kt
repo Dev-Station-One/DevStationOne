@@ -18,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import dev.devstationone.data.Server
 import dev.devstationone.data.ShortcutStore
 import dev.devstationone.data.TabColorStore
+import dev.devstationone.data.UiStateStore
 import dev.devstationone.ui.kit.MuxIcons
 import dev.devstationone.ui.kit.ScreenHeader
 import dev.devstationone.ui.kit.StatusDot
@@ -61,7 +63,9 @@ fun WorkspaceScreen(
     val scope = rememberCoroutineScope()
     val ctrl = remember(projectID) { TerminalController(server, projectID, scope, TabColorStore(ctx)) }
     val shortcuts = remember { ShortcutStore(ctx).load() }
-    var tab by remember { mutableIntStateOf(0) }
+    val ui = remember { UiStateStore(ctx) }
+    var tab by remember(server.id, projectID) { mutableIntStateOf(restoredTab(ui.tab(server.id, projectID))) }
+    LaunchedEffect(tab) { ui.setTab(server.id, projectID, tab) }
     var noteID by remember { mutableStateOf<String?>(null) }
     var noteStartEdit by remember { mutableStateOf(false) }
     var filePath by remember { mutableStateOf<String?>(null) }

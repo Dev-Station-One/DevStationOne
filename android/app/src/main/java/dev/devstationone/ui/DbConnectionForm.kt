@@ -31,14 +31,12 @@ import dev.devstationone.net.dbDelete
 import dev.devstationone.net.dbSave
 import dev.devstationone.net.dbTest
 import dev.devstationone.ui.kit.MuxButton
-import dev.devstationone.ui.kit.MuxChip
+import dev.devstationone.ui.kit.MuxDropdown
 import dev.devstationone.ui.kit.ScreenHeader
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private val ENGINES = listOf("postgresql", "mysql", "mssql", "sqlite")
 
 /**
  * Add / edit a connection (design §5, slice 6). Engine is fixed once saved. The password lives only
@@ -106,9 +104,7 @@ internal fun ConnectionForm(api: Api, projectID: String, r: DbRoute.Form, onBack
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(if (c == null) "New connection" else "Edit connection", onBack = onBack)
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                ENGINES.forEach { e -> MuxChip(engineLabel(e), selected = engine == e, onClick = { if (c == null) pickEngine(e) }) }
-            }
+            MuxDropdown("Engine", engine, ENGINE_OPTIONS, { pickEngine(it) }, enabled = c == null)
             Field("Name", name) { name = it }
             if (!sqlite) {
                 Field("Host", host, KeyboardType.Uri) { host = it }

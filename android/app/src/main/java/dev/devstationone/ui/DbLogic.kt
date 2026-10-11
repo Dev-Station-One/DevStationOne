@@ -1,11 +1,14 @@
 package dev.devstationone.ui
 
+import dev.devstationone.data.DbRef
 import dev.devstationone.net.DbBackup
 import dev.devstationone.net.DbColumn
 import dev.devstationone.net.DbConnection
 import dev.devstationone.net.DbConstraint
 import dev.devstationone.net.DbGrant
 import dev.devstationone.net.DbIndex
+import dev.devstationone.ui.kit.DropdownOption
+import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -20,7 +23,8 @@ import kotlinx.serialization.json.jsonPrimitive
 sealed interface DbRoute {
     data object Connections : DbRoute
     data class Tables(val conn: DbConnection) : DbRoute
-    data class Sql(val conn: DbConnection) : DbRoute
+    /** [schema] = the schema browsed when SQL was opened; "" for SQLite or when unknown. */
+    data class Sql(val conn: DbConnection, val schema: String = "") : DbRoute
     data class Backups(val conn: DbConnection) : DbRoute
     data class Principals(val conn: DbConnection) : DbRoute
     data class Grants(val conn: DbConnection, val principal: String) : DbRoute
@@ -72,6 +76,39 @@ internal fun engineLabel(engine: String): String = when (engine) {
     "mssql" -> "SQL Server"
     "sqlite" -> "SQLite"
     else -> engine
+}
+
+/** Engine dropdown entries, MySQL first; MariaDB joins in round 5. */
+internal val ENGINE_OPTIONS = listOf("mysql", "postgresql", "mssql", "sqlite").map { DropdownOption(it, engineLabel(it)) }
+
+// ---- Databases route restore (round 4, D3) ----
+
+/** The restorable part of [stack] in order; the Connections root and the (secret-bearing) Form are never stored. */
+internal fun refsOf(stack: List<DbRoute>): List<DbRef> = stack.mapNotNull {
+    when (it) {
+        DbRoute.Connections, is DbRoute.Form -> null
+        is DbRoute.Tables -> DbRef("tables", it.conn.id)
+        is DbRoute.Sql -> DbRef("sql", it.conn.id, schema = it.schema)
+        is DbRoute.Backups -> DbRef("backups", it.conn.id)
+        is DbRoute.Principals -> DbRef("users", it.conn.id)
+        is DbRoute.Grants -> DbRef("grants", it.conn.id, user = it.principal)
+        is DbRoute.Data -> DbRef("data", it.conn.id, it.schema, it.table)
+        is DbRoute.Structure -> DbRef("structure", it.conn.id, it.schema, it.table)
+    }
+}
+
+/** [routes] reopened in order; [failed] is the first ref that no longer resolves (null = all did). */
+internal class Restored(val routes: List<DbRoute>, val failed: DbRef?)
+
+/** Resolves [refs] in order and stops at the first failure so the last valid ancestor stays on top. */
+internal suspend fun restoreStack(refs: List<DbRef>, resolve: suspend (DbRef) -> DbRoute?): Restored {
+    val routes = mutableListOf<DbRoute>()
+    for (ref in refs) {
+        val route = try { resolve(ref) } catch (e: CancellationException) { throw e } catch (_: Exception) { null }
+        if (route == null) return Restored(routes, ref)
+        routes += route
+    }
+    return Restored(routes, null)
 }
 
 internal const val DB_PAGE_SIZE = 100

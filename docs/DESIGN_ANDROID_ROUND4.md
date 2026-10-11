@@ -309,5 +309,12 @@ code must not assume the engine list is closed (finding 7 above, D5).
 
 ## 11. Status
 
-Design draft 2026-10-11 for review. Round 4: slices 1-6 not started.
+Round 4: slices 1-6 **implemented 2026-10-11** (unit tests green, release APK
+smoke-tested on the Pixel 8a: project sort + runtime filter incl. restart, tab
+memory incl. restart, Databases route restore, engine dropdown, SQL editor
+screen). Deviations: the SQL **Run** button is a play icon (`MuxIcons.Play`,
+a11y label "Run") per user request; the "no projects for this runtime" empty
+state of FR-3.4 is unreachable because D7 lists only runtimes that have
+projects, so it was not built. The completion popup is canvas-drawn and
+not visible to uiautomator; its logic is covered by `DbCompletionTest`.
 Round 5: not started; ordered after round 4 per the user.

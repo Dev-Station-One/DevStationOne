@@ -226,3 +226,48 @@ class SqlHistoryStore(ctx: Context) {
         prefs.edit().putString(connID, json.encodeToString(list)).apply()
     }
 }
+
+/**
+ * One restorable Databases route (docs/DESIGN_ANDROID_ROUND4.md D3): ids and names only, never
+ * secrets or typed values. [kind] ∈ tables|data|structure|sql|users|grants|backups.
+ */
+@Serializable
+data class DbRef(val kind: String, val conn: String = "", val schema: String = "", val table: String = "", val user: String = "")
+
+/**
+ * Remembered UI position (round 4, D1): workspace tab and Databases stack per server+project, project
+ * runtime filter per server. Ids and names only (NFR-2), plain app-private storage.
+ */
+class UiStateStore(ctx: Context) {
+    private val prefs = ctx.getSharedPreferences("uistate", Context.MODE_PRIVATE)
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun tab(serverID: String, projectID: String): Int? =
+        prefs.getInt("tab/$serverID/$projectID", -1).takeIf { it >= 0 }
+
+    fun setTab(serverID: String, projectID: String, tab: Int) {
+        prefs.edit().putInt("tab/$serverID/$projectID", tab).apply()
+    }
+
+    fun db(serverID: String, projectID: String): List<DbRef> =
+        prefs.getString("db/$serverID/$projectID", null)
+            ?.let { runCatching { json.decodeFromString<List<DbRef>>(it) }.getOrNull() } ?: emptyList()
+
+    fun setDb(serverID: String, projectID: String, refs: List<DbRef>) {
+        prefs.edit().putString("db/$serverID/$projectID", json.encodeToString(refs)).apply()
+    }
+
+    /** Runtime id; "" = All. */
+    fun filter(serverID: String): String = prefs.getString("filter/$serverID", "").orEmpty()
+
+    fun setFilter(serverID: String, runtimeID: String) {
+        prefs.edit().putString("filter/$serverID", runtimeID).apply()
+    }
+
+    fun forgetServer(serverID: String) {
+        val e = prefs.edit()
+        prefs.all.keys.filter { it.startsWith("tab/$serverID/") || it.startsWith("db/$serverID/") || it == "filter/$serverID" }
+            .forEach { e.remove(it) }
+        e.apply()
+    }
+}

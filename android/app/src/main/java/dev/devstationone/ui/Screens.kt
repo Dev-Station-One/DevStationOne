@@ -32,6 +32,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,10 +43,14 @@ import dev.devstationone.R
 import dev.devstationone.data.DeviceKey
 import dev.devstationone.data.Server
 import dev.devstationone.data.ServerStore
+import dev.devstationone.data.UiStateStore
 import dev.devstationone.net.Api
 import dev.devstationone.net.ApiException
 import dev.devstationone.net.ProjectInfo
+import dev.devstationone.net.RuntimeInfo
+import dev.devstationone.ui.kit.DropdownOption
 import dev.devstationone.ui.kit.MuxButton
+import dev.devstationone.ui.kit.MuxDropdown
 import dev.devstationone.ui.kit.MuxCard
 import dev.devstationone.ui.kit.MuxIcons
 import dev.devstationone.ui.kit.MuxTonalButton
@@ -62,6 +67,7 @@ import java.util.UUID
 fun ServerListScreen(store: ServerStore, onSettings: () -> Unit, onOpen: (Server) -> Unit, onAdd: () -> Unit) {
     var servers by remember { mutableStateOf(store.load()) }
     var deleting by remember { mutableStateOf<Server?>(null) }
+    val ctx = LocalContext.current
     Scaffold { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             ScreenHeader(
@@ -113,7 +119,7 @@ fun ServerListScreen(store: ServerStore, onSettings: () -> Unit, onOpen: (Server
             title = { Text("Remove ${s.name}?") },
             text = { Text("Deletes this phone's key for the server. Also revoke the device in the web UI (Settings → Paired devices) or with DELETE /api/v1/auth/devices.") },
             confirmButton = {
-                TextButton(onClick = { store.remove(s.id); servers = store.load(); deleting = null }) { Text("Remove") }
+                TextButton(onClick = { store.remove(s.id); UiStateStore(ctx).forgetServer(s.id); servers = store.load(); deleting = null }) { Text("Remove") }
             },
             dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
@@ -126,8 +132,13 @@ fun ServerListScreen(store: ServerStore, onSettings: () -> Unit, onOpen: (Server
 fun ProjectsScreen(server: Server, onBack: () -> Unit, onOpen: (ProjectInfo) -> Unit) {
     val scope = rememberCoroutineScope()
     var projects by remember { mutableStateOf<List<ProjectInfo>>(emptyList()) }
-    var runtimeNames by remember { mutableStateOf<Map<String, Pair<String, Boolean>>>(emptyMap()) }
+    var runtimes by remember { mutableStateOf<List<RuntimeInfo>>(emptyList()) }
     var error by remember { mutableStateOf<String?>(null) }
+    val ui = UiStateStore(LocalContext.current)
+    var stored by remember(server.id) { mutableStateOf(ui.filter(server.id)) }
+    val runtimeNames = remember(runtimes) { runtimes.associate { it.id to (it.name to it.online) } }
+    val options = remember(projects, runtimes) { runtimeOptions(projects, runtimes) }
+    val filter = effectiveFilter(stored, options)
     BackHandler(onBack = onBack)
 
     LaunchedEffect(server.id) {
@@ -135,8 +146,8 @@ fun ProjectsScreen(server: Server, onBack: () -> Unit, onOpen: (ProjectInfo) -> 
         try {
             val api = Api(server)
             val (p, r) = withContext(Dispatchers.IO) { api.projects() to api.runtimes() }
-            projects = p
-            runtimeNames = r.associate { it.id to (it.name to it.online) }
+            projects = sortedProjects(p)
+            runtimes = r
         } catch (e: Exception) {
             error = "Failed to load projects: ${e.message?.take(200)}"
         }
@@ -146,8 +157,16 @@ fun ProjectsScreen(server: Server, onBack: () -> Unit, onOpen: (ProjectInfo) -> 
         Column(Modifier.padding(pad).fillMaxSize()) {
             ScreenHeader(title = "Projects · ${server.name}", onBack = onBack)
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp)) }
+            if (options.isNotEmpty()) {
+                MuxDropdown(
+                    "Runtime", filter,
+                    listOf(DropdownOption("", "All")) + options.map { DropdownOption(it.id, "${it.name} · ${if (it.online) "online" else "offline"}") },
+                    { stored = it; ui.setFilter(server.id, it) },
+                    Modifier.padding(horizontal = 8.dp),
+                )
+            }
             LazyColumn(Modifier.weight(1f), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(projects, key = { it.id }) { p ->
+                items(filterProjects(projects, filter), key = { it.id }) { p ->
                     val rName = runtimeNames[p.runtime_id]?.first
                     val rOnline = runtimeNames[p.runtime_id]?.second
                     MuxCard(onClick = { onOpen(p) }) {

@@ -43,17 +43,12 @@ import dev.devstationone.ui.kit.ScreenHeader
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme
 import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
-import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry
-import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry
 import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
-import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel
-import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver
 import io.github.rosemoe.sora.widget.CodeEditor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.put
-import org.eclipse.tm4e.core.registry.IThemeSource
 
 /** Editor transfer guards (DESIGN_ANDROID_PARITY.md §4): hard ceiling, soft warn, binary sniff. */
 internal const val EDITOR_MAX_BYTES = 4 * 1024 * 1024
@@ -117,29 +112,6 @@ internal fun previewIsHtml(fileName: String): Boolean =
 
 /** Settings presets for the editor font, in sp, smallest first. */
 internal val FONT_PRESETS = listOf(12, 14, 16, 18, 20)
-
-// TextMate registries are process-wide statics; one-time setup, guarded.
-@Volatile private var textmateReady = false
-private val textmateLock = Any()
-
-private fun setUpTextmate(ctx: android.content.Context) {
-    if (textmateReady) return
-    synchronized(textmateLock) {
-        if (textmateReady) return
-        FileProviderRegistry.getInstance().addFileProvider(AssetsFileResolver(ctx.assets))
-        ThemeRegistry.getInstance().loadTheme(
-            ThemeModel(
-                IThemeSource.fromInputStream(
-                    FileProviderRegistry.getInstance().tryGetInputStream("textmate/darcula.json"),
-                    "textmate/darcula.json", null,
-                ),
-                "darcula",
-            ).apply { isDark = true }
-        )
-        GrammarRegistry.getInstance().loadGrammars("textmate/languages.json")
-        textmateReady = true
-    }
-}
 
 /**
  * One project file in the sora-editor instance: load with the §4 guards
