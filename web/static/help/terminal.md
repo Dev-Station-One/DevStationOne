@@ -17,6 +17,15 @@ exactly as it would over a normal SSH session.
   instead of starting a new one.
 - The key-send buttons (Ctrl+C, Ctrl+D, Tab, Esc) send real signals/keys —
   useful on mobile keyboards that don't have them.
+- **Dictate to terminal** (the mic button in the toolbar) turns on
+  speech-to-text: spoken text is pasted into the session like typed keys,
+  so you can speak a command instead of typing it. Dictation uses the Web
+  Speech API — currently Chrome and Edge — and asks for microphone
+  permission on first use; the mic button pulses while it is listening.
+  Your browser's speech service processes the audio (nothing is logged by
+  DevStationOne), and nothing is sent to the project's runtime beyond the
+  recognized text. Dictation stops when the session changes and turns
+  itself off if the session loses its connection.
 - **Force stop** kills the underlying process if a session becomes
   unresponsive.
 

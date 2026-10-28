@@ -103,6 +103,48 @@
     .terminal-toolbar .btn {
       min-height: 44px;
     }
+    /* Speech-to-text (Web Speech API): mic toggle + listening pulse + live
+       interim caption. Chrome/Edge only; capability-checked in JS. */
+    .ds-voice-toolbar .ds-mic {
+      position: relative;
+    }
+    .ds-voice-toolbar .ds-mic.ds-on {
+      color: var(--ds-primary);
+    }
+    .ds-voice-toolbar .ds-mic.ds-on::before {
+      content: "";
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ds-primary);
+      animation: ds-mic-pulse 1.2s ease-out infinite;
+    }
+    .ds-dictation-caption {
+      position: absolute;
+      right: 0;
+      top: 100%;
+      z-index: 20;
+      max-width: 26rem;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-top: .25rem;
+      padding: .25rem .5rem;
+      border-radius: var(--tblr-border-radius);
+      background: var(--ds-bg);
+      border: 1px solid var(--tblr-border-color);
+      font-family: var(--tblr-font-monospace);
+      font-size: .8125rem;
+      color: var(--ds-text-muted);
+      font-style: italic;
+    }
+    @keyframes ds-mic-pulse {
+      0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ds-primary) 55%, transparent); }
+      100% { box-shadow: 0 0 0 10px transparent; }
+    }
     #terminal-canvas {
       position: relative;
       background: #000;
@@ -295,12 +337,12 @@
                 <div class="card-body text-secondary"><i class="fa-solid fa-terminal me-1" aria-hidden="true"></i>No terminal sessions yet. Click the + button to start one.</div>
               </div>
               <div id="terminal-active" hidden>
-                <div class="d-flex justify-content-between align-items-center bg-dark-subtle px-2 py-1 terminal-toolbar" style="border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;">
+                <div class="d-flex justify-content-between align-items-center bg-dark-subtle px-2 py-1 terminal-toolbar ds-voice-toolbar" style="border-radius: var(--tblr-border-radius) var(--tblr-border-radius) 0 0;">
                   <div class="btn-group btn-group-sm" role="group" aria-label="Terminal control keys">
                     <button type="button" class="ghost-btn" data-send-key="ctrl-c" title="Send Ctrl+C">Ctrl+C</button>
                     <button type="button" class="ghost-btn" data-send-key="ctrl-d" title="Send Ctrl+D">Ctrl+D</button>
                     <button type="button" class="ghost-btn" data-send-key="tab" title="Send Tab">Tab</button>
-                    <button type="button" class="ghost-btn" data-send-key="esc" title="Send Escape">Esc</button>
+                    <button type="button" class="ghost-btn" data-send-key="esc" title="Send Esc">Esc</button>
                   </div>
                   <div class="d-flex align-items-center gap-2">
                     <select id="terminal-font-select" class="form-select form-select-sm" style="width: auto;" title="Terminal font" aria-label="Terminal font">
@@ -311,6 +353,8 @@
                       <option value="source-code-pro">Font: Source Code</option>
                     </select>
                     <span id="session-status-text" class="text-secondary small me-2">—</span>
+                    <span id="dictation-caption" class="ds-dictation-caption" hidden></span>
+                    <button type="button" id="dictate-toggle" class="icon-btn ds-mic" title="Dictate to terminal" aria-label="Dictate to terminal" aria-pressed="false"><i class="fa-solid fa-microphone" aria-hidden="true"></i></button>
                     <button id="force-stop-btn" class="icon-btn text-danger" title="Send SIGTERM to this session's process" aria-label="Force stop"><i class="fa-solid fa-circle-stop" aria-hidden="true"></i></button>
                   </div>
                 </div>
@@ -1350,6 +1394,109 @@
     $('[data-send-key]').on('click', function () {
       if (!activeSessionID) return;
       sendInput(termState[activeSessionID].ws, keyBytes[$(this).data('send-key')]);
+    });
+
+    // Speech-to-text dictation (Web Speech API — Chrome/Edge; capability-
+    // checked here, not silently assumed). Final results are pasted into
+    // the active session's PTY like typed keys; interim results show in
+    // the caption only and are never logged.
+    var dictateOn = false;
+    var dictateRec = null;
+
+    function dictateActiveSession() {
+      if (!activeSessionID || !termState[activeSessionID]) return null;
+      var st = termState[activeSessionID];
+      if (!st.ws || st.ws.readyState !== WebSocket.OPEN) return null;
+      return st;
+    }
+
+    function dictateSetUI(on, text) {
+      var cap = $('#dictation-caption');
+      if (typeof text === 'string' && text) {
+        cap.text(text + ' …').prop('hidden', false);
+      } else {
+        cap.prop('hidden', true).text('');
+      }
+      $('#dictate-toggle').toggleClass('ds-on', on)
+        .attr('aria-pressed', on ? 'true' : 'false')
+        .attr('title', on ? 'Stop dictation' : 'Dictate to terminal');
+    }
+
+    function dictateStop(silent) {
+      dictateOn = false;
+      if (dictateRec) {
+        dictateRec.onend = dictateRec.onresult = dictateRec.onerror = null;
+        try { dictateRec.stop(); } catch (e) { /* already stopped */ }
+        dictateRec = null;
+      }
+      dictateSetUI(false, '');
+      if (!silent && termState[activeSessionID]) $('#session-status-text').text(statusLabel(termState[activeSessionID].info.status));
+    }
+
+    function dictateStart() {
+      var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+      if (!SR) {
+        DS.error('Speech input is not available in this browser. Dictation works in Chrome and Edge.');
+        return;
+      }
+      if (!dictateActiveSession()) return;
+      dictateOn = true;
+      dictateRec = new SR();
+      dictateRec.continuous = true;   // restart-on-end keeps the mic open
+      dictateRec.interimResults = true;
+      dictateRec.lang = navigator.language || 'en-US';
+
+      dictateRec.onresult = function (event) {
+        var interim = '', finals = '', i, res, alt;
+        for (i = 0; i < event.results.length; i++) {
+          res = event.results[i];
+          if (!res || !res[0]) continue;
+          alt = res[0];
+          if (res.isFinal) finals += alt.transcript + ' ';
+          else interim += alt.transcript;
+        }
+        dictateSetUI(true, interim.trim());
+        if (finals.trim()) {
+          var st = dictateActiveSession();
+          if (st) sendInput(st.ws, finals.replace(/\s+$/, ''));
+          dictateSetUI(true, '');
+        }
+      };
+      dictateRec.onerror = function (event) {
+        if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+          dictateStop(true);
+          DS.error('Microphone access was denied. Allow the mic for this site, then toggle dictation again.');
+        } else if (event.error === 'network') {
+          dictateStop(true);
+          DS.error('Speech recognition is unreachable right now. Check connectivity, then try again.');
+        }
+        // 'no-speech' and 'audio-capture' are retried by the onend restart.
+      };
+      dictateRec.onend = function () {
+        if (!dictateOn) return;
+        var st = dictateActiveSession();
+        if (st && dictateRec) {
+          try { dictateRec.start(); } catch (e) { /* service busy; next toggle retries */ }
+        } else {
+          dictateStop(true);
+        }
+      };
+      dictateSetUI(true, '');
+      try { dictateRec.start(); } catch (e) {
+        dictateStop(true);
+        DS.error('Speech recognition could not start. Toggle dictation again.');
+      }
+    }
+
+    $('#dictate-toggle').on('click', function () {
+      if (dictateOn) dictateStop(false);
+      else dictateStart();
+    });
+
+    // Dictation cannot survive an active-session switch: caption and mic
+    // state are per-session affordances; reset them when the session changes.
+    $(document).on('click', '#session-tabs .nav-link', function () {
+      if (dictateOn) dictateStop(true);
     });
 
     $(window).on('resize', function () {
