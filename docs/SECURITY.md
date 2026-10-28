@@ -221,7 +221,8 @@ login through. See docs/API.md "Authentication" for the endpoint contract.
 
 Every response carries `X-Content-Type-Options: nosniff`,
 `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`,
-`Permissions-Policy` (denying geolocation/camera/microphone), and a
+`Permissions-Policy` (denying geolocation/camera, allowing microphone only
+to the same origin — terminal dictation, ADR-056), and a
 `Content-Security-Policy` restricting everything to same-origin
 (`securityHeaders`, `internal/api/middleware.go`) — plus
 `Strict-Transport-Security` when the request arrived over TLS (directly or
@@ -233,7 +234,11 @@ build step), so a stricter policy would break the app while adding little
 `script-src`/`frame-src` for `https://challenges.cloudflare.com` (optional
 Turnstile login challenge, docs/DECISIONS.md ADR-044) — present even when
 Turnstile is unconfigured, since the allowance is inert without the widget
-script being loaded.
+script being loaded. Servers started with `DEVSTATIONONE_DEV_STATIC` (the
+edit-and-refresh development mode) additionally allow
+`http://localhost:8400` in `script-src`/`connect-src` for the local
+design-iteration helper (ADR-057); embedded and production builds never
+emit that allowance.
 
 ## Observability
 

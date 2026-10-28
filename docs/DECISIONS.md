@@ -2107,3 +2107,74 @@ installed icons were blurry.
 requirement; localhost excepted) and the Control Server must reach the push
 services outbound. Delivery is best-effort with a 24 h TTL. A tab that is
 open but unfocused still gets the OS notification.
+
+## ADR-056 — Terminal speech-to-text: Web Speech API client-side, no server involvement
+
+**Context.** Voice input for the terminal was requested during a live
+design iteration. The terminal is a real PTY; a dictation feature must
+insert recognized text exactly like typed keys, work in the existing
+toolbar grammar, and add no server-side attack surface.
+
+**Decisions.**
+1. **Web Speech API (`SpeechRecognition`) in the browser, no server code.**
+   Dictation is a purely client-side capability: continuous recognition
+   with interim results, final transcripts pasted into the active
+   session's PTY via the existing `sendInput` path (same byte-sending
+   contract as key sends and typing). No API, protocol, or OpenAPI change;
+   there is nothing server-side to fake or stub.
+2. **Capability-honest, opt-in, click-to-talk.** The mic button checks
+   `window.SpeechRecognition || window.webkitSpeechRecognition` and shows a
+   real error dialog on unsupported browsers (Chrome/Edge today), denied
+   mic permission, or an unreachable speech service. The mic pulses while
+   listening (`ds-on`, ADR-055's brand tokens); a caption chip shows interim
+   text only. Auto-restart on silence keeps the mic open until the user
+   toggles it off, switches session, or the session dies.
+3. **No logging anywhere.** Interim text lives in the caption element only;
+   final text goes to the PTY. Terminal input/output already never reaches
+   the audit log.
+4. **`microphone=(self)` in Permissions-Policy.** The previous blanket
+   `microphone=()` denied dictation even for the app itself; limiting to
+   same origin keeps the mic out of reach of cross-origin frames while
+   letting the app's own page use it.
+5. **Known transit cost, documented like push (ADR-055 #8).** Chrome/Edge
+   route recognition audio through the browser vendor's speech service. No
+   vendor-relay claim is made about browser speech; local WASM Whisper is
+   the honest no-egress future path.
+6. **Deviation note.** The live picker previewed the dictation bar/strip
+   and hold-to-talk variants; the accepted variant (mic toggle in the
+   toolbar, pulsing listen state) shipped as-is with the real JS wiring.
+
+**Consequences.** Dictation works only in Chromium browsers; Firefox and
+Safari show the unsupported-browser dialog. Audio transits the browser
+vendor's service whenever the user toggles the mic — opt-in per session,
+off by default.
+
+## ADR-057 — Dev-only CSP allowance for local design-iteration tooling
+
+**Context.** In-browser live design iteration (impeccable live mode) needs
+`http://localhost:8400` — the local helper that injects the picker into
+pages and streams its work journal — allowed by the Control Server's CSP.
+The production CSP is deliberately same-origin-only (ADR-044's Turnstile
+carve-out aside), and the dev UI is served either embedded (ADR-048) or
+straight from disk via `DEVSTATIONONE_DEV_STATIC`.
+
+**Decisions.**
+1. **Allowance tied to the dev-static mode, not a flag of its own.**
+   `securityHeaders` now takes `devStatic` (`internal/api/server.go`
+   passes `staticDir != ""`); only servers started with
+   `DEVSTATIONONE_DEV_STATIC` allow `http://localhost:8400` in
+   `script-src`/`connect-src`. Embedded and production builds emit the CSP
+   byte-for-byte unchanged from before.
+2. **The helper is a local artifact, never a deployment concern.** No
+   production proxy, reverse route, or deployment doc carries the
+   allowance; `docs/DEPLOYMENT.md` need not mention it.
+3. **Live tooling config and sidecars are committed** (`.impeccable/`
+   artifacts, `web/static/.impeccable/live/config.json`); session
+   journals and runtime state stay gitignored per the generated
+   `web/static/.gitignore`.
+
+**Consequences.** Enabling design iteration against a real instance
+requires running a dev-static server locally; the CSP change cannot ship
+accidentally with an embedded release build. If live mode is later wanted
+against the HTTPS public host, that is a browser-side (extension/dev host
+override) question, not a server CSP change.

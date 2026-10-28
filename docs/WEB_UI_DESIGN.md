@@ -182,6 +182,13 @@ Terminal session tabs are a separate level:
 
 Do not confuse application tabs with terminal sessions.
 
+The terminal toolbar carries a **dictate-to-terminal** mic action
+(`#dictate-toggle`, `icon-btn ds-mic`): speech-to-text via the Web Speech
+API (ADR-056), pasting final transcripts into the active session's PTY.
+While listening the button carries the `ds-on` pulsing state and an interim
+caption chip may appear; see `web/static/help/terminal.md` for the user
+facing description.
+
 ## Terminal
 
 Terminal is the primary workspace. Use xterm.js or another mature terminal emulator. Terminal sessions are persistent server-side PTYs and survive browser disconnects.

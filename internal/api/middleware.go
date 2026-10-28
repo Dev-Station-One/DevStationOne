@@ -115,13 +115,22 @@ func requireAdmin(db *database.DB, next http.HandlerFunc) http.HandlerFunc {
 // narrow carve-out rather than a same-origin-everywhere policy, present
 // even when Turnstile is unconfigured since the allowance is inert without
 // the widget script being loaded.
-func securityHeaders(next http.Handler) http.Handler {
-	const csp = "default-src 'self'; " +
-		"script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; " +
+//
+// devStatic (the DEVSTATIONONE_DEV_STATIC edit-and-refresh mode) additionally
+// allows the impeccable live-mode helper (http://localhost:8400) in
+// script-src/connect-src; embedded and production builds never get it.
+func securityHeaders(next http.Handler, devStatic bool) http.Handler {
+	liveAllowance := ""
+	if devStatic {
+		liveAllowance = " http://localhost:8400"
+	}
+	csp := "default-src 'self'; " +
+		"script-src 'self' 'unsafe-inline'" + liveAllowance +
+		" https://challenges.cloudflare.com; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		"img-src 'self' data:; " +
 		"font-src 'self'; " +
-		"connect-src 'self' ws: wss:; " +
+		"connect-src 'self'" + liveAllowance + " ws: wss:; " +
 		"frame-src https://challenges.cloudflare.com; " +
 		"frame-ancestors 'none'"
 
@@ -130,7 +139,9 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "same-origin")
-		h.Set("Permissions-Policy", "geolocation=(), camera=(), microphone=()")
+		// microphone=(self): the same-origin app (terminal dictation,
+		// ADR-056) may use the mic; cross-origin frames never may.
+		h.Set("Permissions-Policy", "geolocation=(), camera=(), microphone=(self)")
 		h.Set("Content-Security-Policy", csp)
 		if requestIsSecure(r) {
 			h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

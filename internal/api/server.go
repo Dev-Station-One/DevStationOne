@@ -333,7 +333,7 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	var handler http.Handler = mux
 	handler = rateLimitAPI(apiRateLimit, handler)
 	handler = csrfProtect(handler)
-	handler = securityHeaders(handler)
+	handler = securityHeaders(handler, staticDir != "")
 	handler = withRequestLogging(logger, handler)
 	return handler, hub, bus, editorHub, registry
 }
