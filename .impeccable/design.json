@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-27",
+  "title": "Design System: DevStationOne",
+  "extensions": {
+    "colorMeta": {
+      "signal-teal":      { "role": "primary",   "displayName": "Signal Teal",     "canonical": "#00E5A8", "tonalRamp": ["oklch(15% 0.06 165)", "oklch(25% 0.10 165)", "oklch(35% 0.14 165)", "oklch(45% 0.16 165)", "oklch(53% 0.17 165)", "oklch(63% 0.16 165)", "oklch(75% 0.14 165)", "oklch(87% 0.10 165)"] },
+      "arc-cyan":         { "role": "primary",   "displayName": "Arc Cyan",        "canonical": "#00C2FF", "tonalRamp": ["oklch(15% 0.06 225)", "oklch(25% 0.09 225)", "oklch(35% 0.13 225)", "oklch(45% 0.15 225)", "oklch(55% 0.16 225)", "oklch(65% 0.15 225)", "oklch(78% 0.12 225)", "oklch(88% 0.08 225)"] },
+      "aux-violet":       { "role": "tertiary",  "displayName": "Aux Violet",      "canonical": "#855CF6", "tonalRamp": ["oklch(15% 0.05 295)", "oklch(25% 0.09 295)", "oklch(35% 0.12 295)", "oklch(45% 0.14 295)", "oklch(55% 0.15 295)", "oklch(65% 0.13 295)", "oklch(78% 0.10 295)", "oklch(88% 0.06 295)"] },
+      "confirm-green":    { "role": "tertiary",  "displayName": "Confirm Green",   "canonical": "#10B981", "tonalRamp": ["oklch(15% 0.05 155)", "oklch(25% 0.08 155)", "oklch(35% 0.11 155)", "oklch(45% 0.13 155)", "oklch(55% 0.14 155)", "oklch(65% 0.13 155)", "oklch(78% 0.10 155)", "oklch(88% 0.07 155)"] },
+      "instrument-blue":  { "role": "tertiary",  "displayName": "Instrument Blue", "canonical": "#3B82F6", "tonalRamp": ["oklch(15% 0.06 260)", "oklch(25% 0.09 260)", "oklch(35% 0.12 260)", "oklch(45% 0.14 260)", "oklch(55% 0.15 260)", "oklch(65% 0.14 260)", "oklch(78% 0.11 260)", "oklch(88% 0.07 260)"] },
+      "amber-beacon":     { "role": "tertiary",  "displayName": "Amber Beacon",    "canonical": "#F59E0B", "tonalRamp": ["oklch(15% 0.06 70)", "oklch(25% 0.09 70)", "oklch(35% 0.12 70)", "oklch(45% 0.13 70)", "oklch(58% 0.14 70)", "oklch(68% 0.14 70)", "oklch(80% 0.12 70)", "oklch(90% 0.08 70)"] },
+      "alarm-red":        { "role": "tertiary",  "displayName": "Alarm Red",       "canonical": "#EF4444", "tonalRamp": ["oklch(15% 0.06 25)", "oklch(25% 0.09 25)", "oklch(35% 0.12 25)", "oklch(45% 0.15 25)", "oklch(56% 0.17 25)", "oklch(66% 0.16 25)", "oklch(78% 0.13 25)", "oklch(89% 0.08 25)"] },
+      "void-navy":        { "role": "neutral",   "displayName": "Void Navy",       "canonical": "#0B1220", "tonalRamp": ["oklch(15% 0.03 255)", "oklch(22% 0.03 255)", "oklch(30% 0.03 255)", "oklch(38% 0.03 255)", "oklch(46% 0.025 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "console-slate":    { "role": "neutral",   "displayName": "Console Slate",   "canonical": "#1E293B", "tonalRamp": ["oklch(15% 0.03 255)", "oklch(22% 0.03 255)", "oklch(30% 0.03 255)", "oklch(38% 0.03 255)", "oklch(46% 0.025 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "raised-console":   { "role": "neutral",   "displayName": "Raised Console",  "canonical": "#243449", "tonalRamp": ["oklch(15% 0.03 255)", "oklch(22% 0.03 255)", "oklch(30% 0.03 255)", "oklch(38% 0.03 255)", "oklch(46% 0.025 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "deck-plate":       { "role": "neutral",   "displayName": "Deck Plate",      "canonical": "#64748B", "tonalRamp": ["oklch(15% 0.03 255)", "oklch(22% 0.03 255)", "oklch(30% 0.03 255)", "oklch(38% 0.03 255)", "oklch(46% 0.025 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "panel-seam":       { "role": "neutral",   "displayName": "Panel Seam",      "canonical": "#334155", "tonalRamp": ["oklch(15% 0.03 255)", "oklch(22% 0.03 255)", "oklch(30% 0.03 255)", "oklch(38% 0.03 255)", "oklch(46% 0.025 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "instrument-grey":  { "role": "neutral",   "displayName": "Instrument Grey", "canonical": "#94A3B8", "tonalRamp": ["oklch(15% 0.02 255)", "oklch(22% 0.02 255)", "oklch(30% 0.02 255)", "oklch(38% 0.02 255)", "oklch(46% 0.02 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "console-light":    { "role": "neutral",   "displayName": "Console Light",   "canonical": "#E2E8F0", "tonalRamp": ["oklch(15% 0.02 255)", "oklch(22% 0.02 255)", "oklch(30% 0.02 255)", "oklch(38% 0.02 255)", "oklch(46% 0.02 255)", "oklch(58% 0.02 255)", "oklch(72% 0.015 255)", "oklch(86% 0.01 255)"] },
+      "daylight-deck":    { "role": "neutral",   "displayName": "Daylight Deck",   "canonical": "#F8FAFC", "tonalRamp": ["oklch(15% 0.02 255)", "oklch(22% 0.02 255)", "oklch(30% 0.02 255)", "oklch(38% 0.02 255)", "oklch(46% 0.02 255)", "oklch(58% 0.02 255)", "oklch(72% 0.015 255)", "oklch(90% 0.01 255)"] },
+      "paper-panel":      { "role": "neutral",   "displayName": "Paper Panel",     "canonical": "#FFFFFF", "tonalRamp": ["oklch(15% 0.015 255)", "oklch(22% 0.015 255)", "oklch(30% 0.015 255)", "oklch(38% 0.015 255)", "oklch(46% 0.015 255)", "oklch(58% 0.015 255)", "oklch(72% 0.012 255)", "oklch(90% 0.005 255)"] },
+      "mist-plate":       { "role": "neutral",   "displayName": "Mist Plate",      "canonical": "#F1F5F9", "tonalRamp": ["oklch(15% 0.02 255)", "oklch(22% 0.02 255)", "oklch(30% 0.02 255)", "oklch(38% 0.02 255)", "oklch(46% 0.02 255)", "oklch(58% 0.02 255)", "oklch(72% 0.015 255)", "oklch(88% 0.01 255)"] },
+      "daylight-seam":    { "role": "neutral",   "displayName": "Daylight Seam",   "canonical": "#CBD5E1", "tonalRamp": ["oklch(15% 0.02 255)", "oklch(22% 0.02 255)", "oklch(30% 0.02 255)", "oklch(38% 0.02 255)", "oklch(46% 0.02 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(88% 0.015 255)"] },
+      "ink-navy":         { "role": "neutral",   "displayName": "Ink Navy",        "canonical": "#0F172A", "tonalRamp": ["oklch(15% 0.03 255)", "oklch(22% 0.03 255)", "oklch(30% 0.03 255)", "oklch(38% 0.03 255)", "oklch(46% 0.025 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] },
+      "fog-grey":         { "role": "neutral",   "displayName": "Fog Grey",        "canonical": "#475569", "tonalRamp": ["oklch(15% 0.02 255)", "oklch(22% 0.02 255)", "oklch(30% 0.02 255)", "oklch(38% 0.02 255)", "oklch(46% 0.02 255)", "oklch(58% 0.02 255)", "oklch(72% 0.02 255)", "oklch(86% 0.015 255)"] }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "Body", "purpose": "14px system-UI work text; dense tables, forms, cards." },
+      "mono": { "displayName": "Mono", "purpose": "Default mono stack; commands, diffs, SQL, backup codes. Four self-hosted coding faces (JetBrains Mono Nerd Mono, Fira Code, Cascadia Code, Source Code Pro) load only when a preference selects them." }
+    },
+    "shadows": [
+      { "name": "floating-chrome", "value": "var(--tblr-dropdown-box-shadow)", "purpose": "Dropdown flyouts, popovers, and modals only — nothing at rest casts a shadow." }
+    ],
+    "motion": [
+      { "name": "state-tint", "value": "background-color .15s ease, color .15s ease", "purpose": "Default transition for icon/ghost control hover tints." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "576px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "992px" },
+      { "name": "xl", "value": "1200px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Brand-teal fill, dark navy text, 6px radius — the only saturated action.",
+      "html": "<button class=\"ds-btn-primary\">Sign in</button>",
+      "css": ".ds-btn-primary { background: var(--ds-primary, #00E5A8); color: var(--ds-bg, #0B1220); border: 1px solid var(--ds-primary, #00E5A8); border-radius: var(--tblr-border-radius, 6px); padding: .5rem 1rem; font-size: .875rem; font-weight: 600; line-height: 1.5; cursor: pointer; transition: background-color .15s ease; } .ds-btn-primary:hover, .ds-btn-primary:focus-visible { background: #00CF95; border-color: #00CF95; color: var(--ds-bg, #0B1220); } .ds-btn-primary:active { background: #00B884; border-color: #00B884; } .ds-btn-primary:disabled { opacity: .65; cursor: not-allowed; }"
+    },
+    {
+      "name": "Icon Button",
+      "kind": "button",
+      "refersTo": "icon-btn",
+      "description": "Borderless 44px icon action; hover tint only, inset cyan focus ring; danger variant for destructive icons.",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Delete\" title=\"Delete\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 512 512\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M32 464a48 48 0 0 0 48 48h160a48 48 0 0 0 48-48V214H32zM480 64h-96a32 32 0 0 0-32-32H160a32 32 0 0 0-32 32H32a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h448a16 16 0 0 0 16-16V80a16 16 0 0 0-16-16z\"/></svg></button><button class=\"ds-icon-btn ds-icon-danger\" aria-label=\"Delete\" title=\"Delete\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 512 512\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M32 464a48 48 0 0 0 48 48h160a48 48 0 0 0 48-48V214H32zM480 64h-96a32 32 0 0 0-32-32H160a32 32 0 0 0-32 32H32a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h448a16 16 0 0 0 16-16V80a16 16 0 0 0-16-16z\"/></svg></button>",
+      "css": ".ds-icon-btn { border: none; background: transparent; color: var(--ds-text-muted, #94A3B8); border-radius: var(--tblr-border-radius, 6px); padding: 0 .5rem; min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color .15s ease, color .15s ease; } .ds-icon-btn:hover, .ds-icon-btn:focus-visible { background: var(--tblr-bg-surface-secondary, #2A3B54); color: var(--ds-text, #FFFFFF); } .ds-icon-btn:focus-visible { outline: 2px solid var(--ds-secondary, #00C2FF); outline-offset: -2px; } .ds-icon-btn:disabled { opacity: .45; cursor: not-allowed; background: transparent; } .ds-icon-danger { color: var(--ds-danger, #EF4444); } .ds-icon-danger:hover, .ds-icon-danger:focus-visible { color: var(--ds-danger, #EF4444); }"
+    },
+    {
+      "name": "Ghost Key Button",
+      "kind": "button",
+      "refersTo": "ghost-btn",
+      "description": "Borderless text button for terminal key sends (Ctrl+C, Tab, Esc) — labels a glyph cannot carry.",
+      "html": "<button class=\"ds-ghost-btn\">Ctrl+C</button>",
+      "css": ".ds-ghost-btn { border: none; background: transparent; color: var(--ds-text-muted, #94A3B8); padding: 0 .75rem; min-height: 44px; border-radius: var(--tblr-border-radius, 6px); cursor: pointer; font-size: .875rem; transition: background-color .15s ease, color .15s ease; } .ds-ghost-btn:hover, .ds-ghost-btn:focus-visible { color: var(--ds-text, #FFFFFF); background: var(--tblr-bg-surface-secondary, #2A3B54); } .ds-ghost-btn:focus-visible { outline: 2px solid var(--ds-secondary, #00C2FF); outline-offset: -2px; }"
+    },
+    {
+      "name": "Status Lamp Badge",
+      "kind": "chip",
+      "refersTo": "badge-lamp",
+      "description": "Low-tint status lamp (Tabler bg-*-lt family): state announced by tint plus text, never color alone.",
+      "html": "<span class=\"ds-badge ds-badge-green\">online</span> <span class=\"ds-badge ds-badge-yellow\">offline</span> <span class=\"ds-badge ds-badge-red\">exit 1</span> <span class=\"ds-badge ds-badge-grey\">0</span>",
+      "css": ".ds-badge { display: inline-block; padding: .175rem .5rem; border-radius: 4px; font-size: .72rem; font-weight: 600; line-height: 1.5; } .ds-badge-green { background: rgba(16,185,129,.16); color: #10B981; } .ds-badge-yellow { background: rgba(245,158,11,.16); color: #F59E0B; } .ds-badge-red { background: rgba(239,68,68,.15); color: #EF4444; } .ds-badge-grey { background: rgba(148,163,184,.15); color: #94A3B8; }"
+    },
+    {
+      "name": "Session Tab",
+      "kind": "custom",
+      "refersTo": "session-tab",
+      "description": "File-folder silhouette of a terminal session tab: top-rounded, bottom border dropped, flush on the toolbar.",
+      "html": "<div style=\"background:#0B1220;padding:8px;\"><button class=\"ds-session-tab ds-session-active\"><span class=\"ds-session-dot\" style=\"background:var(--ds-primary,#00E5A8)\"></span>bash</button><button class=\"ds-session-tab\"><span class=\"ds-session-dot\" style=\"background:#EF4444\"></span>Claude Code</button></div>",
+      "css": ".ds-session-tab { display: inline-flex; align-items: center; gap: .375rem; padding: 5px .75rem; border: 1px solid var(--tblr-border-color, #334155); border-bottom: none; border-radius: var(--tblr-border-radius, 6px) var(--tblr-border-radius, 6px) 0 0; background: var(--tblr-bg-surface-secondary, #2A3B54); color: var(--ds-text-muted, #94A3B8); cursor: pointer; min-height: 44px; font-size: .875rem; } .ds-session-active { color: var(--ds-text, #FFFFFF); background: transparent; } .ds-session-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }"
+    },
+    {
+      "name": "Workspace Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Flat surface panel with iconed title header; no shadow at rest.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 576 512\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M290.6 20.2a32.1 32.1 0 0 1 42.8 0L456 128h56a48 48 0 0 1 48 48v240a48 48 0 0 1-48 48H64a48 48 0 0 1-48-48V176a48 48 0 0 1 48-48h56L242.6 20.2zM288 64 183.4 156.7a32 32 0 0 1-21.4 8H64v240h448V164h-98a32 32 0 0 1-21.4-8L288 64z\"/></svg> Active Projects</div></div>",
+      "css": ".ds-card { background: var(--ds-surface, #1E293B); border: 1px solid rgba(100,116,139,.28); border-radius: var(--tblr-border-radius, 6px); color: var(--ds-text, #FFFFFF); font-size: .875rem; } .ds-card-header { display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem; border-bottom: 1px solid rgba(100,116,139,.28); font-weight: 600; }"
+    },
+    {
+      "name": "Input Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Surface-toned field, seam border, 6px radius; native focus ring.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Working directory\">",
+      "css": ".ds-input { background: var(--ds-surface, #1E293B); color: var(--ds-text, #FFFFFF); border: 1px solid var(--tblr-border-color, #334155); border-radius: var(--tblr-border-radius, 6px); padding: .5rem .75rem; font-size: .875rem; line-height: 1.5; } .ds-input::placeholder { color: var(--ds-text-muted, #94A3B8); } .ds-input:focus { outline: 0; border-color: var(--ds-primary, #00E5A8); box-shadow: 0 0 0 .25rem rgba(0,229,168,.18); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Signal Console",
+    "overview": "Precise, dense, quietly luminous. A dark operations deck that stays neutral until a signal needs your eye — then one lamp lights. The user is a developer operating their own machines; the interface is the instrument panel between them and every runtime, terminal, and database they own. It earns trust by being readable at a glance from across the room: deep navy surfaces, high-contrast instrument text, and a strict lamp discipline where teal means \"act here,\" cyan means \"go there,\" and status colors only ever announce states. Density is a feature, not a compromise. Tables are dense, chrome is compact, and workspace content — above all the terminal canvas — takes the majority of available space. Decoration has no lane: no decorative charts, no marketing gradients across page backgrounds, no chrome that competes with the PTY. Aesthetics come from discipline: 14px system type, 6px radii, borderless icon actions, and lamp badges doing all the emotional work. The dark theme is the default instrument (the app boots dark); light theme exists and flips surface/text tokens only, preserving the brand lamps. Light theme is a convenience for daylight, not a second identity.",
+    "keyCharacteristics": [
+      "Dark navy workstation surfaces (Void Navy #0B1220 on Console Slate #1E293B), 14px system UI type, 6px corners.",
+      "One strict accent pair: Signal Teal #00E5A8 for primary actions/active states, Arc Cyan #00C2FF for links and navigation.",
+      "Status is lamps: low-tint Tabler badges (bg-*-lt) always paired with text or an icon, never color alone.",
+      "Borderless icon actions with 44×44px effective targets and inset focus rings; primary CTAs keep text labels.",
+      "Terminal-first: a pure-black xterm.js canvas with 60vh (70vh desktop) of workspace height; the gradient never approaches it.",
+      "Brand gradient (#00E5A8 → #00CFEA → #00C2FF) appears only in the logo lockup and restrained brand accents."
+    ],
+    "rules": [
+      { "name": "The Gradient Lock Rule", "body": "The teal→cyan brand gradient belongs to the logo lockup and restrained brand accents only. Never as a page background, a card fill, or anything near terminal output.", "section": "colors" },
+      { "name": "The Lamp Rule", "body": "Status never depends on color alone: every state pairs its lamp color with text or an icon, in a low-tint badge — not a saturated fill.", "section": "colors" },
+      { "name": "The Neutral Glass Rule", "body": "Terminal output is visually neutral. Brand colors and the gradient never tint terminal text; the terminal is real instruments, not marketing surface.", "section": "colors" },
+      { "name": "The System Stack Rule", "body": "No UI webfont is shipped. The interface renders in the platform's system stack — self-hosted means self-efficient; identity lives in the lamps, not letterforms.", "section": "typography" },
+      { "name": "The Flat-At-Rest Rule", "body": "Panels, cards, and tables sit flat on their surface. If an element is flat at rest, it gets depth from a tone step or a border, not a shadow.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do theme through the --ds-*/--bs-* tokens in app.css — new components inherit light/dark for free.",
+      "Do render small/secondary actions as .icon-btn (or .ghost-btn for key labels) with aria-label + title.",
+      "Do express state with a low-tint badge plus text/icon, and keep every component's loading/empty/error/disabled state real.",
+      "Do keep 44×44px effective targets and visible inset focus rings on chrome-less controls.",
+      "Do hide unimplemented sidebar sections entirely — never ship disabled placeholders.",
+      "Do use SweetAlert2 helpers for every dialog and Tabler patterns for every list state."
+    ],
+    "donts": [
+      "Don't repaint primary actions white-on-teal, hand-roll button colors, or paint Tabler's default blue over the brand teal.",
+      "Don't use the brand gradient on page backgrounds, cards, or anywhere near terminal output.",
+      "Don't ship decorative charts or cards that don't help development work.",
+      "Don't use native window.alert/confirm/prompt or load a second Bootstrap copy alongside Tabler's.",
+      "Don't make essential behavior hover-only, color-only, or desktop-only.",
+      "Don't log or display credentials, tokens, terminal input/output, or file contents."
+    ]
+  }
+}
