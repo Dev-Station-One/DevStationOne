@@ -2268,3 +2268,27 @@ not caused by this change). `golangci-lint run` reports 52 findings
 (errcheck in tests, one ineffassign in `internal/backups/scheduler.go:112`,
 one staticcheck in `internal/devices/sig_test.go:55`), all pre-existing and
 not part of `make lint`.
+
+## ADR-061 — Web terminal moves to xterm.js 6.0.0 and addon-fit 0.11.0
+
+**Context.** The web client vendored an older `@xterm/xterm` (bundle with a
+`_core._renderService`-based fit addon) while the Android WebView terminal
+already ships 6.0.0 / addon-fit 0.11.0 (`android/app/src/main/assets/`,
+`xterm.sha256`). Two versions of the same terminal emulator were in use.
+
+**Decisions.**
+1. **Web vendors the same npm files as Android**: `lib/xterm.js`,
+   `css/xterm.css` (`@xterm/xterm` 6.0.0) and `lib/addon-fit.js`
+   (`@xterm/addon-fit` 0.11.0). SHA-256 values equal those recorded in
+   `android/app/src/main/assets/xterm.sha256`. Paths unchanged
+   (`web/static/vendor/xterm/`), so `project.html` and `go:embed` need no
+   edit.
+2. **No caller changes.** `project.html` uses `new Terminal(options)`,
+   `FitAddon.FitAddon`, `loadAddon`, `open`, `onData`, `onResize`, `write`,
+   all unchanged in 6.0.
+
+**Consequences.** Verified with the vendored files in a standalone page:
+`fit()` computes cols/rows, `onResize` fires on container resize, ANSI
+colors and UTF-8 render, `onData` receives typed and `term.input` data, no
+console errors. The authenticated terminal tab (WebSocket streaming,
+reconnect, cards mode) was not exercised in this slice.
