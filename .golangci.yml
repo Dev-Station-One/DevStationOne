@@ -1,0 +1,34 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      # Close/Rollback on a read path or after an earlier error: the original
+      # error is the one worth returning (a write-path Close is checked in code).
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*os.File).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*github.com/golang-migrate/migrate/v4.Migrate).Close
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+        - (*github.com/jackc/pgx/v5/pgxpool.Tx).Rollback
+        - (*github.com/coder/websocket.Conn).Close
+        - (*github.com/coder/websocket.Conn).CloseNow
+        - (*compress/gzip.Reader).Close
+        - (*os.Root).Close
+        - (*io.PipeWriter).Close
+        - (*devstationone/internal/filesystem.FS).Close
+        - (*github.com/moby/moby/client.Client).Close
+        - (*flag.FlagSet).Parse # ExitOnError exits itself
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    rules:
+      # Best-effort setup/teardown in tests (cleanup, Write/Mkdir fixtures).
+      - path: _test\.go
+        linters:
+          - errcheck

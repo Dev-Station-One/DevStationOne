@@ -67,6 +67,10 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	// each test's own router, gets an independent budget.
 	apiRateLimit := newIPLimiter(rate.Limit(20), 40)
 	loginRateLimit := newIPLimiter(rate.Every(6*time.Second), 5)
+	// Enrollment/begin steps of the 2FA flow: separate from loginRateLimit
+	// because one enrollment (login, setup, confirm, login, verify) already
+	// spends its whole burst of 5.
+	enrollRateLimit := newIPLimiter(rate.Every(2*time.Second), 10)
 
 	mux.HandleFunc("GET /healthz", healthHandler)
 	mux.HandleFunc("GET /readyz", readyHandler(db))
@@ -94,20 +98,20 @@ func NewRouter(db *database.DB, logger *slog.Logger, staticDir string, dbEncrypt
 	// mandatory-enrollment gate driven by /auth/login's challenge_token —
 	// see resolveTwoFactorSubject.
 	mux.HandleFunc("GET /api/v1/auth/2fa/methods", requireSession(db, twoFactorMethodsHandler(db)))
-	mux.HandleFunc("POST /api/v1/auth/2fa/totp/setup", totpSetupHandler(db, dbEncryptionKey))
-	mux.HandleFunc("POST /api/v1/auth/2fa/totp/confirm", totpConfirmHandler(db, dbEncryptionKey))
+	mux.HandleFunc("POST /api/v1/auth/2fa/totp/setup", rateLimit(enrollRateLimit, totpSetupHandler(db, dbEncryptionKey)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/totp/confirm", rateLimit(enrollRateLimit, totpConfirmHandler(db, dbEncryptionKey)))
 	mux.HandleFunc("DELETE /api/v1/auth/2fa/totp", requireSession(db, totpDeleteHandler(db)))
-	mux.HandleFunc("POST /api/v1/auth/2fa/email/enable", emailEnableHandler(db))
+	mux.HandleFunc("POST /api/v1/auth/2fa/email/enable", rateLimit(enrollRateLimit, emailEnableHandler(db)))
 	mux.HandleFunc("DELETE /api/v1/auth/2fa/email", requireSession(db, emailDisableHandler(db)))
 	mux.HandleFunc("POST /api/v1/auth/2fa/email/request-code", rateLimit(loginRateLimit, emailRequestCodeHandler(db, twoFactorCfg.SMTP)))
 	mux.HandleFunc("POST /api/v1/auth/2fa/backup-codes/regenerate", requireSession(db, backupCodesRegenerateHandler(db)))
 	mux.HandleFunc("POST /api/v1/auth/2fa/verify", rateLimit(loginRateLimit, twoFactorVerifyHandler(db, dbEncryptionKey)))
-	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/register/begin", webauthnRegisterBeginHandler(db, wa))
-	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/register/finish", webauthnRegisterFinishHandler(db, wa))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/register/begin", rateLimit(enrollRateLimit, webauthnRegisterBeginHandler(db, wa)))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/register/finish", rateLimit(enrollRateLimit, webauthnRegisterFinishHandler(db, wa)))
 	mux.HandleFunc("DELETE /api/v1/auth/2fa/webauthn/{credentialID}", requireSession(db, webauthnCredentialDeleteHandler(db)))
-	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/login/begin", webauthnLoginBeginHandler(db, wa))
+	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/login/begin", rateLimit(enrollRateLimit, webauthnLoginBeginHandler(db, wa)))
 	mux.HandleFunc("POST /api/v1/auth/2fa/webauthn/login/finish", rateLimit(loginRateLimit, webauthnLoginFinishHandler(db, wa)))
-	mux.HandleFunc("POST /api/v1/auth/webauthn/passwordless/begin", webauthnPasswordlessBeginHandler(wa))
+	mux.HandleFunc("POST /api/v1/auth/webauthn/passwordless/begin", rateLimit(enrollRateLimit, webauthnPasswordlessBeginHandler(wa)))
 	mux.HandleFunc("POST /api/v1/auth/webauthn/passwordless/finish", rateLimit(loginRateLimit, webauthnPasswordlessFinishHandler(db, wa)))
 	mux.HandleFunc("GET /api/v1/auth/trusted-devices", requireSession(db, trustedDevicesListHandler(db)))
 	mux.HandleFunc("DELETE /api/v1/auth/trusted-devices/{deviceID}", requireSession(db, trustedDeviceDeleteHandler(db)))

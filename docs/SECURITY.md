@@ -191,6 +191,11 @@ Per-client-IP token buckets (`internal/api/middleware.go` `ipLimiter`),
 one instance per Control Server process:
 - `POST /api/v1/auth/login` specifically: ~10/minute after a small burst,
   to blunt password guessing.
+- The 2FA/passkey routes that run before a session exists (`totp/setup`,
+  `totp/confirm`, `email/enable`, `webauthn/register/{begin,finish}`,
+  `webauthn/login/begin`, `webauthn/passwordless/begin`): their own bucket,
+  1 per 2 seconds after a burst of 10 (ADR-064). Separate from the login
+  bucket because one enrollment already spends the login burst of 5.
 - Every other mutating (`POST`/`PUT`/`PATCH`/`DELETE`) `/api/v1/...`
   request: a much larger general budget. Read (`GET`) requests are
   exempt — the UI polls read endpoints by design (runtime/session/service

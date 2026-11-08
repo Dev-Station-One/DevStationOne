@@ -2337,3 +2337,40 @@ theme with the folded rail and brand colors. Not reviewed: the light theme
 (a manual `data-bs-theme` flip did not re-theme the page, so it was not
 judged), pages needing a runtime (project workspace, terminal tab, files,
 databases), and the Android WebView pages.
+
+## ADR-064 — Lint and vulnerability gate, 2FA route rate limits
+
+**Context.** An analysis pass found: `golangci-lint` was not part of
+`make lint` (52 findings shown, capped by the default per-linter limit; 23
+real after counting uncapped), no `govulncheck`, and the pre-session 2FA
+routes (`totp/setup|confirm`, `email/enable`, `webauthn/register/*`,
+`webauthn/login/begin`, `passwordless/begin`) were limited only by the
+general API bucket.
+
+**Decisions.**
+1. `make lint` now also runs `golangci-lint run` with `.golangci.yml`
+   (v2): errcheck excludes `Close`/`Rollback` on reads and best-effort
+   cleanup, `fmt.Fprint*`, and `flag.Parse` (ExitOnError); errcheck is off
+   for `_test.go` (best-effort fixtures). Real findings were fixed:
+   scheduler status writes (`internal/backups/scheduler.go`) now log a
+   failed write instead of dropping it, an ineffectual assignment removed,
+   a self-comparison test fixed, `Sscanf` result explicitly ignored.
+2. `make vulncheck` runs `govulncheck ./...`. Current result: 0 reachable
+   vulnerabilities; GO-2026-5932 (`x/crypto/openpgp`) is in a required
+   module but not called, and no release containing the fix is tagged —
+   re-run after the next `x/crypto` release.
+3. The seven pre-session 2FA routes share one `enrollRateLimit` (1 per 2 s,
+   burst 10 per IP), separate from `loginRateLimit` (burst 5), which one
+   enrollment flow already exhausts. Challenge tokens still die after 5
+   failed verifications (ADR-047); this is defense in depth.
+4. E2E fix (pre-existing, found because the e2e tests run with
+   `DEVSTATIONONE_TEST_DATABASE_URL` set): `e2eLoginWithEnrollment` waited
+   on `#dash-runtimes-empty`, hidden since the dashboard moved to a
+   Projects/Runtimes tab layout, so all three browser E2E tests failed at
+   the baseline commit. It now waits for the Projects tab to render.
+
+**Consequences.** `make test` is green except the known host-dependent
+`internal/pty` `TestStart_WithCommand` (ADR-060). The browser E2E tests now
+pass against the jQuery 4 / Tabler 1.7.3 pages (login, enrollment, dashboard,
+help modal, About modal), which also closes part of the verification gap
+noted in ADR-058 and ADR-063.

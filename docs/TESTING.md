@@ -15,7 +15,8 @@ real logged-in session (ADR-031):
 make dbtest-postgres-up
 export DEVSTATIONONE_TEST_DATABASE_URL='postgres://devstation:devstation@localhost:55433/devstation_test?sslmode=disable'
 make test        # go test -p 1 ./... — -p 1 is required: packages share one Postgres
-make lint        # gofmt + go vet
+make lint        # gofmt + go vet + golangci-lint (.golangci.yml)
+make vulncheck   # govulncheck; needs network
 make openapi-lint
 ```
 

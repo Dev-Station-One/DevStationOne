@@ -20,6 +20,11 @@ fmt:
 	gofmt -l .
 
 lint: fmt vet
+	golangci-lint run ./...
+
+# Needs network (vuln DB); `go install golang.org/x/vuln/cmd/govulncheck@latest`.
+vulncheck:
+	govulncheck ./...
 
 openapi-lint:
 	npx -y @redocly/cli lint docs/openapi.yaml

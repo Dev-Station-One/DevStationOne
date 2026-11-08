@@ -62,26 +62,26 @@ func runScheduledBackup(ctx context.Context, pool *pgxpool.Pool, registry *runti
 	if s.Kind == "db" {
 		c, err := dbconnections.Get(ctx, pool, *s.ConnectionID)
 		if err != nil {
-			SetScheduleResult(ctx, pool, s.ID, "failed", "connection not found: "+err.Error())
+			setResult(ctx, pool, logger, s.ID, "failed", "connection not found: "+err.Error())
 			return
 		}
 		p, err := projects.Get(ctx, pool, c.ProjectID)
 		if err != nil {
-			SetScheduleResult(ctx, pool, s.ID, "failed", "connection's project not found")
+			setResult(ctx, pool, logger, s.ID, "failed", "connection's project not found")
 			return
 		}
 		runtimeID, kindDir = p.RuntimeID, "db"
 	} else {
 		p, err := projects.Get(ctx, pool, *s.ProjectID)
 		if err != nil {
-			SetScheduleResult(ctx, pool, s.ID, "failed", "project not found")
+			setResult(ctx, pool, logger, s.ID, "failed", "project not found")
 			return
 		}
 		runtimeID, kindDir = p.RuntimeID, "projects"
 	}
 	conn, online = registry.Get(runtimeID)
 	if !online {
-		SetScheduleResult(ctx, pool, s.ID, "skipped_offline", "")
+		setResult(ctx, pool, logger, s.ID, "skipped_offline", "")
 		return
 	}
 
@@ -96,29 +96,43 @@ func runScheduledBackup(ctx context.Context, pool *pgxpool.Pool, registry *runti
 	createdBy := s.CreatedBy
 	row, err := Create(ctx, pool, rowKind, runtimeID, fileName, "schedule", createdBy, s.ConnectionID, s.ProjectID)
 	if err != nil {
-		SetScheduleResult(ctx, pool, s.ID, "failed", "failed to record backup row")
+		setResult(ctx, pool, logger, s.ID, "failed", "failed to record backup row")
 		return
 	}
 
 	jobID, err := startBackup(ctx, conn, s, dbKey, pool, backupID, fileName)
 	if err != nil {
-		SetState(ctx, pool, row.ID, "failed", 0, err.Error())
-		SetScheduleResult(ctx, pool, s.ID, "failed", err.Error())
+		setState(ctx, pool, logger, row.ID, "failed", 0, err.Error())
+		setResult(ctx, pool, logger, s.ID, "failed", err.Error())
 		return
 	}
 	state, size, jobErr := AwaitJob(ctx, conn, jobID)
 	if state != "done" {
 		if state == "" {
-			state, jobErr = "failed", "runtime disconnected during backup"
+			jobErr = "runtime disconnected during backup"
 		}
-		SetState(ctx, pool, row.ID, "failed", 0, jobErr)
-		SetScheduleResult(ctx, pool, s.ID, "failed", jobErr)
+		setState(ctx, pool, logger, row.ID, "failed", 0, jobErr)
+		setResult(ctx, pool, logger, s.ID, "failed", jobErr)
 		logger.Warn("scheduled backup failed", "schedule_id", s.ID, "error", jobErr)
 		return
 	}
-	SetState(ctx, pool, row.ID, "done", size, "")
-	SetScheduleResult(ctx, pool, s.ID, "success", "")
+	setState(ctx, pool, logger, row.ID, "done", size, "")
+	setResult(ctx, pool, logger, s.ID, "success", "")
 	applyRetention(ctx, pool, conn, s.Kind, refIDOf(s), s.Retention)
+}
+
+// setResult and setState record an outcome from the scheduler goroutine,
+// which has no caller to return an error to: a failed write is logged.
+func setResult(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger, id, result, errMsg string) {
+	if err := SetScheduleResult(ctx, pool, id, result, errMsg); err != nil {
+		logger.Error("record schedule result failed", "schedule_id", id, "error", err)
+	}
+}
+
+func setState(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logger, id, state string, size int64, errMsg string) {
+	if err := SetState(ctx, pool, id, state, size, errMsg); err != nil {
+		logger.Error("record backup state failed", "backup_id", id, "error", err)
+	}
 }
 
 func refIDOf(s Schedule) string {

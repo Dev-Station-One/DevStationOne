@@ -52,8 +52,10 @@ func TestParseSigHeaderRejects(t *testing.T) {
 
 func TestNonceCacheMarkAndFresh(t *testing.T) {
 	var c nonceCache
-	if !c.fresh("n1") || !c.fresh("n1") {
-		t.Fatal("fresh before mark should always be true")
+	for i := 0; i < 2; i++ {
+		if !c.fresh("n1") {
+			t.Fatal("fresh before mark should always be true")
+		}
 	}
 	c.mark("n1", time.Now().Add(time.Hour))
 	if c.fresh("n1") {

@@ -409,3 +409,39 @@ func TestLogin_TurnstileEnabled(t *testing.T) {
 		t.Fatalf("valid token: expected requires_enrollment for a fresh account")
 	}
 }
+
+// The unauthenticated enrollment/begin routes of the 2FA flow share a
+// per-IP limiter (one challenge_token can otherwise be used to guess codes
+// at the global API rate).
+func TestTwoFactorEnrollmentRoutesAreRateLimited(t *testing.T) {
+	db := testDB(t)
+	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+
+	for _, path := range []string{
+		"/api/v1/auth/2fa/totp/setup",
+		"/api/v1/auth/2fa/totp/confirm",
+		"/api/v1/auth/2fa/email/enable",
+		"/api/v1/auth/2fa/webauthn/register/begin",
+		"/api/v1/auth/2fa/webauthn/register/finish",
+		"/api/v1/auth/2fa/webauthn/login/begin",
+		"/api/v1/auth/webauthn/passwordless/begin",
+	} {
+		// Fresh router per route: independent budgets, so the global API
+		// limiter does not mask the route's own limiter.
+		router, _, _, _, _ := NewRouter(db, logger, t.TempDir(), testDBEncryptionKey, "", "", TwoFactorConfig{})
+		var limited, other int
+		for i := 0; i < 25; i++ {
+			req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(`{}`)))
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			if rec.Code == http.StatusTooManyRequests {
+				limited++
+			} else {
+				other++
+			}
+		}
+		if limited == 0 || other == 0 {
+			t.Errorf("%s: %d limited, %d served of 25; want a burst served then 429s", path, limited, other)
+		}
+	}
+}

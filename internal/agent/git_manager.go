@@ -477,7 +477,8 @@ func parseGitBranch(out string) protocol.GitBranchStatus {
 		case strings.HasPrefix(tok, "# branch.upstream "):
 			b.Upstream = strings.TrimPrefix(tok, "# branch.upstream ")
 		case strings.HasPrefix(tok, "# branch.ab "):
-			fmt.Sscanf(strings.TrimPrefix(tok, "# branch.ab "), "+%d -%d", &b.Ahead, &b.Behind)
+			// A malformed line leaves ahead/behind at zero.
+			_, _ = fmt.Sscanf(strings.TrimPrefix(tok, "# branch.ab "), "+%d -%d", &b.Ahead, &b.Behind)
 		}
 	}
 	return b

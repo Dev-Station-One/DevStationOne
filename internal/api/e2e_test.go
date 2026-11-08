@@ -57,7 +57,9 @@ func e2eLoginWithEnrollment(t *testing.T, ctx context.Context, serverURL, email,
 		chromedp.Click(`#enroll-totp-confirm`, chromedp.ByID),
 		chromedp.WaitVisible(`#backup-codes-panel`, chromedp.ByID),
 		chromedp.Click(`#backup-codes-continue`, chromedp.ByID),
-		chromedp.WaitVisible(`#dash-runtimes-empty`, chromedp.ByID),
+		chromedp.WaitVisible(`#dash-tabs`, chromedp.ByID),
+		// Projects tab has rendered: the empty state or at least one row.
+		chromedp.Poll(`!document.getElementById('dash-projects-empty').hidden || document.querySelector('#dash-projects-body tr') !== null`, nil),
 	); err != nil {
 		t.Fatalf("confirm totp enrollment: %v", err)
 	}
@@ -121,9 +123,9 @@ func TestE2E_LoginAndActivityPage(t *testing.T) {
 	defer cancelTimeout()
 
 	// Login lands on the dashboard (index.html), not account.html. Wait on
-	// #dash-runtimes-empty instead of a generic element: it only becomes
+	// #dash-projects-empty instead of a generic element: it only becomes
 	// visible once the dashboard's own JS has actually fetched
-	// /api/v1/runtimes and found none (this test registers no runtime),
+	// /api/v1/projects and found none (this test registers no project),
 	// concrete proof the dashboard rendered and ran, not just that some
 	// navigation happened.
 	e2eLoginWithEnrollment(t, ctx, server.URL, "e2e-admin@example.com", "password123")
