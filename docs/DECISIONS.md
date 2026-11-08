@@ -2330,7 +2330,10 @@ and `dist/js/tabler.min.js` over the same paths in
 pages reference still exists in 1.7.3.
 
 **Consequences.** Verified: server rebuilt, login page renders with brand
-colors, no new console errors. Authenticated pages (folded sidebar, tables,
-modals, terminal tab, dark/light toggle) were NOT visually reviewed —
-neutral grays and the new focus ring may shift contrast; review those pages
-and patch brand overrides if needed.
+colors, no new console errors. Authenticated review on an isolated server
+(separate database, TOTP-enrolled test admin): dashboard, projects list,
+New project modal and the mobile Account page render correctly in the dark
+theme with the folded rail and brand colors. Not reviewed: the light theme
+(a manual `data-bs-theme` flip did not re-theme the page, so it was not
+judged), pages needing a runtime (project workspace, terminal tab, files,
+databases), and the Android WebView pages.
