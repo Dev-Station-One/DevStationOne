@@ -2178,3 +2178,38 @@ requires running a dev-static server locally; the CSP change cannot ship
 accidentally with an embedded release build. If live mode is later wanted
 against the HTTPS public host, that is a browser-side (extension/dev host
 override) question, not a server CSP change.
+
+## ADR-058 — jQuery 4.0.0 with Migrate 4.0.2; Summernote 0.9.1 patched in place
+
+**Context.** Vendored jQuery was 3.7.1 and Summernote 0.8.20. jQuery 4.0.0
+removes `$.now`, `$.type`, `$.trim`, `.push/.sort/.splice` on jQuery objects
+and others, and `.attr(name, false)` now removes the attribute instead of
+setting `"false"`. Summernote 0.9.1 (latest, Oct 2024) predates jQuery 4:
+editor init fails (`$.now`) and `disable()` / `spellCheck: false` /
+`disableGrammar` misbehave (upstream issue #4787, fix PR #4822, unmerged).
+Project code (`web/static/js`, inline page scripts) uses none of the removed
+APIs.
+
+**Decisions.**
+1. **jQuery 4.0.0 + jQuery Migrate 4.0.2 (production build) on every page**
+   that loads jQuery, `jquery-migrate.min.js` directly after `jquery.min.js`.
+   Migrate restores the removed APIs for third-party code; its production
+   build is silent.
+2. **Summernote 0.9.1 vendored with seven in-place patches** in
+   `summernote-lite.min.js` (marker comment on line 2): two `$.now()` →
+   `Date.now()`, remove the dead `.siblings().push(n)`, and `.attr()` calls
+   passing booleans (`contenteditable`, `spellcheck`, `autocorrect`,
+   `data-gramm`) now pass strings. Migrate cannot shim the `.attr(false)`
+   behaviour change, hence the patch. Same changes as upstream PR #4822.
+3. **Light theme fonts/CSS updated** to the 0.9.1 dist alongside the script.
+
+**Consequences.** Dropping the patch and Migrate requires upstream Summernote
+to ship jQuery 4 support; re-vendor from a release that includes #4822 and
+remove `jquery-migrate.min.js` plus its script tags once Migrate's dev build
+logs no warnings on the journal editor and other pages. Known remaining
+Migrate warnings (dev build): Summernote's boolean `disabled` attribute and
+`.click()` shorthand. Smoke verified: isolated Summernote harness (init,
+code get/set, insertNode, disable/enable, destroy, spellcheck/gramm attrs)
+and login page. The authenticated Journal editor flow on `project.html`
+(save, attachments, DOMPurify viewer) was not exercised end to end in this
+slice.
