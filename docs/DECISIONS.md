@@ -2314,3 +2314,23 @@ signed `assembleRelease` (same release key; `apksigner verify` OK) build
 clean. Not exercised: on-device run (pairing, terminal, editor) on the
 Pixel — install and smoke-test before shipping. New compiler warnings
 (OkHttp 5 non-null `body`, deprecated `LocalLifecycleOwner`) left as is.
+
+## ADR-063 — Tabler 1.5.1 → 1.7.3
+
+**Context.** User decision to move off the 1.5.x pin. 1.6 switched colors
+to oklch and the gray scale to neutral; 1.7 added components. The docs that
+pinned "Tabler 1.5.x" (CLAUDE.md, PRODUCT.md, DESIGN.md, ARCHITECTURE.md,
+DESIGN_BACKUPS_SERVICES.md) now say 1.7.x; the UI design specs are otherwise
+unchanged and brand tokens (BRAND_ASSETS / BOOTSTRAP_COLORS) remain
+authoritative over Tabler defaults.
+
+**Decisions.** Vendor npm `@tabler/core` 1.7.3 `dist/css/tabler.min.css`
+and `dist/js/tabler.min.js` over the same paths in
+`web/static/vendor/tabler/`; no HTML changes. Every `--tblr-*` token the
+pages reference still exists in 1.7.3.
+
+**Consequences.** Verified: server rebuilt, login page renders with brand
+colors, no new console errors. Authenticated pages (folded sidebar, tables,
+modals, terminal tab, dark/light toggle) were NOT visually reviewed —
+neutral grays and the new focus ring may shift contrast; review those pages
+and patch brand overrides if needed.

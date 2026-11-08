@@ -301,7 +301,7 @@ The restore handler, before issuing `restore` with overwrite mode:
   `running` (poll every 2 s while any row is `running` — no push channel to
   the browser in MVP).
 - All per `docs/WEB_UI_DESIGN.md` + `docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md`
-  (Tabler 1.5.x patterns, mobile-first; confirmation dialogs follow the
+  (Tabler 1.7.x patterns, mobile-first; confirmation dialogs follow the
   existing destructive-action pattern).
 
 ---

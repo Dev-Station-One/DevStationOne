@@ -398,7 +398,7 @@ Sensitive credentials require protected storage.
 
 ## Web UI
 
-Tabler 1.5.x folded layout.
+Tabler 1.7.x folded layout.
 
 Tab components (workspace tabs, Code tab file strip) use the vendored
 Bootstrap 5.3 `bootstrap.Tab` JS API directly, not `tabler.min.js`'s

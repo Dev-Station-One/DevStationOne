@@ -309,7 +309,7 @@ Before any frontend implementation or modification, read:
 
 Brand assets and Bootstrap color tokens are authoritative for DevStationOne visual branding. Do not substitute unrelated colors or logo treatments.
 
-Use current Tabler 1.5.x and Bootstrap 5.3-compatible patterns.
+Use current Tabler 1.7.x and Bootstrap 5.3-compatible patterns.
 
 Reference:
 https://preview.tabler.io/layout-folded.html

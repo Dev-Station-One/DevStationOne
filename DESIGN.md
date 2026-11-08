@@ -1,6 +1,6 @@
 ---
 name: DevStationOne
-description: Self-hosted remote development workstation platform — a dark signal-console UI on Tabler 1.5.1/Bootstrap 5.3.
+description: Self-hosted remote development workstation platform — a dark signal-console UI on Tabler 1.7.3/Bootstrap 5.3.
 colors:
   signal-teal: "#00E5A8"
   arc-cyan: "#00C2FF"
@@ -147,7 +147,7 @@ Light theme (`[data-bs-theme="light"]`, same lamps, swapped neutrals): **Dayligh
 
 ## Layout
 
-A Tabler 1.5.1 folded-sidebar layout: a single left rail (`navbar-vertical` + `navbar-expand-lg`) is the app's only global chrome. On ≥992px the rail is foldable and pinnable (`folded-hover`); pages carry no `<header>` element — fold toggle, theme toggle, notifications bell, account, log out, and about live in a bottom-pinned cluster of the same rail. Below 992px the vertical rail becomes a horizontal top navbar with the cluster behind the hamburger as offcanvas.
+A Tabler 1.7.3 folded-sidebar layout: a single left rail (`navbar-vertical` + `navbar-expand-lg`) is the app's only global chrome. On ≥992px the rail is foldable and pinnable (`folded-hover`); pages carry no `<header>` element — fold toggle, theme toggle, notifications bell, account, log out, and about live in a bottom-pinned cluster of the same rail. Below 992px the vertical rail becomes a horizontal top navbar with the cluster behind the hamburger as offcanvas.
 
 - Pages are `container-fluid` with a `page-body` wrapper; page rhythm is `mb-3` (16px) between title row, toolbars, and content.
 - Content is dense Tabler patterns: `row row-cards` grids of `card` blocks, `table card-table table-vcenter` data tables (`min-width: 640px` with horizontal scroll on mobile), single-card datatables for list pages (projects, users).

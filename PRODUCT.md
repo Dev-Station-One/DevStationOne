@@ -48,7 +48,7 @@ Neighboring products (SSH stacks, hosted dev-clouds, vendor-relay tools) cannot 
 
 ## Brand Commitments
 
-- Tabler 1.5.x is the UI framework, using the folded-sidebar layout pattern (`https://preview.tabler.io/layout-folded.html`); patterns must be Tabler 1.5.x / Bootstrap 5.3 compatible.
+- Tabler 1.7.x is the UI framework, using the folded-sidebar layout pattern (`https://preview.tabler.io/layout-folded.html`); patterns must be Tabler 1.7.x / Bootstrap 5.3 compatible.
 - `docs/BRAND_ASSETS.md` (logo/lockup assets) and `docs/BOOTSTRAP_COLORS.md` (color tokens) are authoritative for visual branding — no substitute treatments.
 - `docs/WEB_UI_DESIGN.md` and `docs/VISUAL_COMPONENT_AND_STATE_SPECIFICATION.md` are authoritative for visual hierarchy, workspace layout, component anatomy, responsive behavior, and UI states; deviations must be documented, never silently simplified.
 - The terminal is xterm.js — no custom terminal renderer.
