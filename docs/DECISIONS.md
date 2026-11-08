@@ -2213,3 +2213,30 @@ code get/set, insertNode, disable/enable, destroy, spellcheck/gramm attrs)
 and login page. The authenticated Journal editor flow on `project.html`
 (save, attachments, DOMPurify viewer) was not exercised end to end in this
 slice.
+
+## ADR-059 — DOMPurify 3.4.17 and marked 18.1.3 (web and Android copies)
+
+**Context.** Vendored DOMPurify was 3.1.6 (the HTML sanitizer for Markdown
+preview, help pages and journal bodies) and marked 12.0.2. DOMPurify is
+security-critical and was 11 minors behind. marked's majors 13–18 changed
+only custom renderer/tokenizer/extension APIs, the removal of
+`marked.min.js` in favour of `lib/marked.umd.js` (16), and trailing-blank-line
+trimming on block tokens (18). The code only calls `marked.parse(str)` with
+default options and passes the result through `DOMPurify.sanitize`.
+
+**Decisions.**
+1. **Vendor `dompurify/dist/purify.min.js` 3.4.17 and
+   `marked/lib/marked.umd.js` 18.1.3** at the existing paths
+   (`vendor/dompurify/purify.min.js`, `vendor/marked/marked.min.js`) so no
+   page or `go:embed` change is needed.
+2. **Android assets carry the identical files**, as before
+   (`android/app/src/main/assets/vendor/…`, `VENDOR.md` updated).
+3. **No caller changes.** No custom renderers or extensions exist.
+
+**Consequences.** Verified in a browser harness with the vendored files:
+headings, task lists, tables, fenced code and links render; `<script>`,
+`onerror`, `javascript:` hrefs, `<iframe>` and SVG script are stripped.
+Rendering of trailing blank lines in tables/headings differs slightly from
+12.x (marked 18 trims them); not visible in output. The authenticated
+Markdown preview, help page and Android preview/note pages were not
+exercised on a device in this slice.

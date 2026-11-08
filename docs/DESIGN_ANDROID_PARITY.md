@@ -252,7 +252,7 @@ Round 1 implementation:
   hidden tabs keep their WebViews, PTY streams and list state. Notes open
   as a full-screen overlay (`JournalScreen.kt`'s `NoteScreen`) — the
   workspace never unmounts. Rendering is `ui/HtmlPanel.kt` + the new
-  `assets/note.html` (DOMPurify 3.1.6 vendored from the web client's file,
+  `assets/note.html` (DOMPurify 3.4.17 vendored from the web client's file,
   VENDOR.md updated); server-URL subresource loads ride `shouldInterceptRequest`
   → OkHttp Sig header. `net/Api.kt` gained journal models + `journal`,
   `note`, `deleteNote`. `assembleDebug` + `testDebugUnitTest` green
@@ -354,7 +354,7 @@ Round 1 implementation:
   View/Edit toggle** for markdown and HTML files in the editor top bar:
   preview floats over (never replaces) the editor so edit state,
   undo history and scroll survive the round trip; markdown renders via
-  the web client's own `marked` 12.0.2 (vendored, MIT) and everything
+  the web client's own `marked` 18.1.3 (vendored, MIT) and everything
   sanitizes through the note view's DOMPurify; HTML files render
   scripts-stripped through DOMPurify whole-document mode; relative
   image/stylesheet refs are rewritten to `files/content` URLs served by

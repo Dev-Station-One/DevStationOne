@@ -6,8 +6,8 @@
 | `addon-fit.js` | npm `@xterm/addon-fit` (`lib/addon-fit.js`) | 0.11.0 |
 | `addon-web-links.js` | npm `@xterm/addon-web-links` (`lib/addon-web-links.js`) | 0.12.0 |
 | `addon-unicode11.js` | npm `@xterm/addon-unicode11` (`lib/addon-unicode11.js`) | 0.9.0 |
-| `vendor/dompurify/purify.min.js` | npm `dompurify` — the exact file the web client vendors (`web/static/vendor/dompurify/`), Apache-2.0 / MPL-2.0 dual license | 3.1.6 |
-| `vendor/marked/marked.min.js` | npm `marked` — the exact file the web client vendors (`web/static/vendor/marked/`), MIT (header notice shipped in the file) | 12.0.2 |
+| `vendor/dompurify/purify.min.js` | npm `dompurify` — the exact file the web client vendors (`web/static/vendor/dompurify/`), Apache-2.0 / MPL-2.0 dual license | 3.4.17 |
+| `vendor/marked/marked.min.js` | npm `marked` — the exact file the web client vendors (`web/static/vendor/marked/`), MIT (header notice shipped in the file; `lib/marked.umd.js`) | 18.1.3 |
 | `preview.html` | authored in-repo — rendered md/html preview page gluing the two libraries above together | — |
 | `textmate/grammars/*.json` (20 languages) | npm `tm-grammars` — `grammars/<name>.json`, unmodified | 1.32.22 |
 | `textmate/darcula.json` | sora-editor sample assets (`app/src/main/assets/textmate/darcula.json`) — unmodified | sora-editor main, 2026-10-10 |

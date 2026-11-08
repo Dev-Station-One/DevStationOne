@@ -1590,7 +1590,7 @@ server routes changed — a prod deploy):
    Same-day follow-ups from the user: word-wrap + font-size pills
    in the editor header (persisted via AppSettings, applied live; the
    interim Settings-screen rows were removed), and a sanitized View/Edit
-   preview for markdown/HTML files (marked 12.0.2 vendored from the web
+   preview for markdown/HTML files (marked 18.1.3 vendored from the web
    client, DOMPurify whole-document mode for HTML, relative refs
    rewritten to `files/content` URLs through the now-shared
    `bridgeServerResponse`; the interceptor was extracted from HtmlPanel).
