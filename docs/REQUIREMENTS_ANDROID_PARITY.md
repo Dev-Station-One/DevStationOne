@@ -108,7 +108,7 @@ docs/DESIGN_ANDROID_PARITY.md §1.
 ## Open questions (for the design pass, resolved there — not silently)
 
 - **OQ-1 — Editor engine**: **resolved** (user directive + verification
-  2026-10-10): sora-editor (`io.github.rosemoe:editor` 0.24.6,
+  2026-10-10): sora-editor (`io.github.rosemoe:editor` 0.24.7,
   `language-textmate`) as an unmodified dependency; license
   **LGPL-2.1-or-later** (verified — not Apache), minSdk 21. Markor's GPL
   source stays out.

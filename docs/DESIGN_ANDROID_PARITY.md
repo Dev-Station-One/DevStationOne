@@ -6,8 +6,8 @@ with the existing device-key Sig auth (ADR-053).
 
 ## 1. Verified dependency decisions (OQ-1/OQ-2 resolved 2026-10-10)
 
-- **sora-editor** — `io.github.rosemoe:editor:0.24.6` (BOM
-  `io.github.rosemoe:editor-bom:0.24.6`), + `io.github.rosemoe:language-textmate:0.24.6`.
+- **sora-editor** — `io.github.rosemoe:editor:0.24.7` (BOM
+  `io.github.rosemoe:editor-bom:0.24.7`), + `io.github.rosemoe:language-textmate:0.24.7`.
   License **LGPL-2.1-or-later** (verified on repo + Maven Central; my
   earlier Apache assumption was wrong). minSdk 21 (fine at 26; only the
   LSP module needs 26+). JDK 17 — matches our build. Requires **core
@@ -174,9 +174,9 @@ shape the browser would produce.
 ## 7. Dependencies + build deltas (all verified current)
 
 ```kotlin
-implementation(platform("io.github.rosemoe:editor-bom:0.24.6"))
-implementation("io.github.rosemoe:editor")                     // 0.24.6
-implementation("io.github.rosemoe:language-textmate")          // 0.24.6
+implementation(platform("io.github.rosemoe:editor-bom:0.24.7"))
+implementation("io.github.rosemoe:editor")                     // 0.24.7
+implementation("io.github.rosemoe:language-textmate")          // 0.24.7
 coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 compileOptions { isCoreLibraryDesugaringEnabled = true }
 ```
@@ -304,7 +304,7 @@ Round 1 implementation:
   flagging: notes deleted from `NoteScreen` still linger in the list
   until the tab is reloaded — wire a list refresh when that bites.
 - **Stage 5 (code editor) — complete** (2026-10-10, pending on-device E2E):
-  `ui/CodeScreen.kt` hosts a sora-editor `CodeEditor` (0.24.6 via BOM +
+  `ui/CodeScreen.kt` hosts a sora-editor `CodeEditor` (0.24.7 via BOM +
   `language-textmate`) in `AndroidView`, released on dispose, wired to
   `Api.statFile`/`readFile`/`writeFile` (raw-byte GET/PUT). TextMate
   highlighting: 20 grammars vendored from npm `tm-grammars` 1.32.22 (MIT;
@@ -322,7 +322,7 @@ Round 1 implementation:
   `FileDraftStore` (`cacheDir/editor-store/{server}/{project}/`,
   path-hashed) on back-nav and ON_STOP, cleared on successful save,
   restored over the fetched copy on open. Dependency delta beyond §7:
-  the project's Kotlin toolchain moved 2.0.21 → 2.3.10 (sora-editor 0.24.6
+  the project's Kotlin toolchain moved 2.0.21 → 2.3.10 (sora-editor 0.24.7
   ships 2.3-metadata modules; `kotlinOptions` DSL migrated as required) —
   a build-compat change, not a design change. Server: stat/content
   GET+PUT switched to `requireIdentity` (openapi `deviceSig` entries;

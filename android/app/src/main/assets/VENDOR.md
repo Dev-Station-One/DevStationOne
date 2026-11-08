@@ -15,7 +15,7 @@
 
 ### Licenses
 
-- **sora-editor** dependency (`io.github.rosemoe:editor`, `language-textmate`, BOM 0.24.6):
+- **sora-editor** dependency (`io.github.rosemoe:editor`, `language-textmate`, BOM 0.24.7):
   **LGPL-2.1-or-later** — kept as unmodified Maven AARs (standard relink path);
   no source vendoring. `VENDORED? no` — see also DESIGN_ANDROID_PARITY.md §1.
 - **tm-grammars** (VSCode TextMate grammar JSONs): **MIT** — copies of the

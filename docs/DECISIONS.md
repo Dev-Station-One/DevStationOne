@@ -2292,3 +2292,25 @@ already ships 6.0.0 / addon-fit 0.11.0 (`android/app/src/main/assets/`,
 colors and UTF-8 render, `onData` receives typed and `term.input` data, no
 console errors. The authenticated terminal tab (WebSocket streaming,
 reconnect, cards mode) was not exercised in this slice.
+
+## ADR-062 — Android toolchain: AGP 9.5.1, Gradle 9.9.0, compileSdk 37
+
+**Context.** Current Compose (BOM 2026.09.00 → 1.12.1) and core-ktx 1.19.1
+require AGP 9.1+; OkHttp 5.5.1, sora-editor 0.24.7 and those libraries
+require compileSdk 37. AGP 8.7.2 / compileSdk 36 could not resolve them.
+
+**Decisions.**
+1. AGP 8.7.2 → 9.5.1, Gradle 8.14.3 → 9.9.0 (unzipped to
+   `~/.gradle/dl990/`), SDK platform 37.0 + build-tools 37.0.0, targetSdk 37.
+2. Built-in Kotlin: `org.jetbrains.kotlin.android` removed; Kotlin stays
+   2.3.10 (compose + serialization compiler plugins kept). No `kapt`/KSP
+   in the project, so no further plugin migration.
+3. Libraries: Compose BOM 2024.10.01 → 2026.09.00, activity-compose 1.13.0,
+   core-ktx 1.19.1, OkHttp 4.12.0 → 5.5.1, serialization-json 1.12.0,
+   coroutines-android 1.11.0, sora-editor BOM 0.24.7.
+
+**Consequences.** `assembleDebug`, `testDebugUnitTest` and a minified,
+signed `assembleRelease` (same release key; `apksigner verify` OK) build
+clean. Not exercised: on-device run (pairing, terminal, editor) on the
+Pixel — install and smoke-test before shipping. New compiler warnings
+(OkHttp 5 non-null `body`, deprecated `LocalLifecycleOwner`) left as is.

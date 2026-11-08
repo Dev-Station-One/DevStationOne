@@ -142,7 +142,7 @@ For runtime:
 ### Android client builds
 
 - System gradle is 4.4.1 (unusable). Build with the cached dist:
-  `cd android && ANDROID_HOME=$ANDROID_SDK_ROOT ~/.gradle/wrapper/dists/gradle-8.14.3-bin/*/gradle-8.14.3/bin/gradle assembleDebug`
+  `cd android && ANDROID_HOME=$ANDROID_SDK_ROOT ~/.gradle/dl990/gradle-9.9.0/bin/gradle assembleDebug`
 - Only one SDK location may be set: use `ANDROID_SDK_ROOT=/home/btafoya/android_sdk` —
   setting ANDROID_HOME to `/home/btafoya/Android/Sdk` at the same time fails the build.
 

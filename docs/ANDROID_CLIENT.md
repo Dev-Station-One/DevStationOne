@@ -74,12 +74,11 @@ for the dev instance).
 
 ## Build
 
-Gradle + AGP 8.7.2, Kotlin 2.0.21, compileSdk 36, minSdk 26 (same proven
-pair as muxalot). From the repo root:
+Gradle 9.9.0 + AGP 9.5.1 (built-in Kotlin), Kotlin 2.3.10, compileSdk 37, minSdk 26. From the repo root:
 
 ```sh
 cd android
-ANDROID_HOME=<sdk> gradle assembleDebug   # gradle 8.14+; a wrapper dist is cached for 8.14.3
+ANDROID_HOME=<sdk> gradle assembleDebug   # gradle 9.9.0+ (AGP 9.5 needs Gradle 9); cached at ~/.gradle/dl990/gradle-9.9.0
 ```
 
 The unsigned debug APK lands at `android/app/build/outputs/apk/debug/`.
