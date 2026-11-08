@@ -2240,3 +2240,31 @@ Rendering of trailing blank lines in tables/headings differs slightly from
 12.x (marked 18 trims them); not visible in output. The authenticated
 Markdown preview, help page and Android preview/note pages were not
 exercised on a device in this slice.
+
+## ADR-060 — Go 1.27.3 and dependency refresh; chromedp pinned at 0.16.0
+
+**Context.** `go.mod` was `go 1.26.0`. Go 1.27.3 is current; direct and
+indirect dependencies were behind (pgx 5.11, modernc sqlite 1.58, x/crypto
+0.57, moby client 0.6.0, go-mssqldb 1.11.0, webauthn 0.18.1, otel 1.44).
+
+**Decisions.**
+1. **`go 1.27.3`** in `go.mod`; `GOTOOLCHAIN=auto` fetches it per user, no
+   system install. `.github/workflows/release.yml` reads `go.mod`, so CI
+   follows.
+2. **`go get -u ./...` + `go mod tidy`**: pgx 5.12.0, sqlite 1.62.0,
+   x/crypto 0.58.0, moby api 1.56.1 / client 0.6.2, go-mssqldb 1.11.2,
+   webauthn 0.18.2, otel 1.47.0, and the indirect set they pull in.
+   `webpush-go` and `go-qrcode` are now listed as direct, as tidy found them
+   imported.
+3. **chromedp stays at 0.16.0 (with its cdproto pin).** 0.23.0 replaced the
+   API (generic actions, typed selectors, no `ByID`/`ByQuery`; see its
+   `docs/MIGRATION.md`) and needs a rewrite of `internal/api/e2e_test.go`
+   (72 call sites). It is test-only, so it is deferred to its own slice.
+
+**Consequences.** `make fmt vet` clean; `make test` passes except
+`internal/pty` `TestStart_WithCommand`, which fails identically on the
+previous `go.mod` (it depends on the host's `~/.bashrc`/shell flags and is
+not caused by this change). `golangci-lint run` reports 52 findings
+(errcheck in tests, one ineffassign in `internal/backups/scheduler.go:112`,
+one staticcheck in `internal/devices/sig_test.go:55`), all pre-existing and
+not part of `make lint`.
